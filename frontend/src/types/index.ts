@@ -1,0 +1,40 @@
+// 前端全局类型定义
+export interface UserInfo {
+  id: string
+  username: string
+  email: string | null
+  phone: string | null
+  role: string
+  status: string
+  created_at: string
+}
+
+export interface LoginRequest {
+  username: string
+  password: string
+}
+
+export interface RegisterRequest {
+  username: string
+  password: string
+  password_confirm: string
+}
+
+export interface TokenResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface RefreshResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface ApiResponse<T = unknown> {
+  code: number
+  message: string
+  data: T
+}
