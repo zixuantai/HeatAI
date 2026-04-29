@@ -1,5 +1,6 @@
 import asyncio
 from dashscope import Generation
+from dashscope.aigc.generation import AioGeneration
 from app.core.config import settings
 
 SYSTEM_PROMPT = """你是一个专业的供热服务助手，请严格遵守以下规则来组织你的回答：
@@ -46,6 +47,31 @@ class ChatService:
             "answer": answer,
             "model": settings.DASHSCOPE_MODEL
         }
+
+    @staticmethod
+    async def stream_ask(message: str):
+        if not settings.DASHSCOPE_API_KEY:
+            raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
+
+        responses = await AioGeneration.call(
+            model=settings.DASHSCOPE_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message}
+            ],
+            result_format="message",
+            stream=True,
+            incremental_output=True,
+            api_key=settings.DASHSCOPE_API_KEY
+        )
+
+        async for response in responses:
+            if response.status_code == 200:
+                content = response.output.choices[0].message.content
+                yield content
+            else:
+                error_msg = response.message or "大模型调用失败"
+                raise RuntimeError(f"模型调用失败: {error_msg}")
 
 
 chat_service = ChatService()

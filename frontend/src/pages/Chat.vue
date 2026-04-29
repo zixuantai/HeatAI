@@ -40,7 +40,7 @@
         </div>
       </div>
 
-      <div v-if="loading" class="message-row assistant">
+      <div v-if="loading && streamingContent === ''" class="message-row assistant">
         <div class="message-avatar">
           <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
         </div>
@@ -61,13 +61,21 @@
         @keydown.enter.exact="handleSend"
       />
       <el-button
+        v-if="!loading"
         type="primary"
-        :disabled="!inputMessage.trim() || loading"
-        :loading="loading"
+        :disabled="!inputMessage.trim()"
         class="send-btn"
         @click="handleSend"
       >
         发送
+      </el-button>
+      <el-button
+        v-else
+        type="danger"
+        class="stop-btn"
+        @click="handleStop"
+      >
+        停止
       </el-button>
     </div>
   </div>
@@ -76,7 +84,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { askApi } from '@/api/chat'
+import { askStreamApi, stopStream } from '@/api/chat'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
@@ -103,10 +111,12 @@ function renderMarkdown(text: string): string {
 
 const inputMessage = ref('')
 const loading = ref(false)
+const streamingContent = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
 
 let msgIdCounter = 0
+let streamMsgId = ''
 
 const quickQuestions = [
   '暖气不热怎么办？',
@@ -132,6 +142,24 @@ function handleQuickQuestion(question: string) {
   handleSend()
 }
 
+function handleStop() {
+  stopStream()
+  finishStream()
+}
+
+function finishStream() {
+  if (streamingContent.value) {
+    const lastMsg = messages.value.find(m => m.id === streamMsgId)
+    if (lastMsg) {
+      lastMsg.content = streamingContent.value
+    }
+  }
+  streamingContent.value = ''
+  streamMsgId = ''
+  loading.value = false
+  scrollToBottom()
+}
+
 async function handleSend() {
   const content = inputMessage.value.trim()
   if (!content || loading.value) return
@@ -146,22 +174,50 @@ async function handleSend() {
   inputMessage.value = ''
   scrollToBottom()
   loading.value = true
+  streamingContent.value = ''
 
-  try {
-    const res = await askApi(content)
-    const botMsg: ChatMessage = {
-      id: genId(),
-      role: 'assistant',
-      content: res.answer,
-      timestamp: Date.now()
+  streamMsgId = genId()
+  let placeholderPushed = false
+
+  askStreamApi(content, {
+    onChunk(text: string) {
+      streamingContent.value += text
+      if (!placeholderPushed) {
+        placeholderPushed = true
+        messages.value.push({
+          id: streamMsgId,
+          role: 'assistant',
+          content: streamingContent.value,
+          timestamp: Date.now()
+        })
+      } else {
+        const msg = messages.value.find(m => m.id === streamMsgId)
+        if (msg) {
+          msg.content = streamingContent.value
+        }
+      }
+      scrollToBottom()
+    },
+    onDone() {
+      finishStream()
+    },
+    onError(error: string) {
+      if (!placeholderPushed) {
+        loading.value = false
+        ElMessage.error(error || '请求失败，请稍后重试')
+        return
+      }
+      const msg = messages.value.find(m => m.id === streamMsgId)
+      if (msg) {
+        msg.content = streamingContent.value
+      }
+      streamingContent.value = ''
+      streamMsgId = ''
+      loading.value = false
+      ElMessage.error(error || '请求失败，请稍后重试')
+      scrollToBottom()
     }
-    messages.value.push(botMsg)
-  } catch {
-    ElMessage.error('请求失败，请稍后重试')
-  } finally {
-    loading.value = false
-    scrollToBottom()
-  }
+  })
 }
 </script>
 
@@ -330,6 +386,19 @@ async function handleSend() {
 
 .send-btn:hover {
   background: linear-gradient(135deg, #e55d2b, #e6840e);
+}
+
+.stop-btn {
+  height: 40px;
+  background: #f56c6c;
+  border: none;
+  border-radius: 8px;
+  padding: 0 24px;
+  font-size: 14px;
+}
+
+.stop-btn:hover {
+  background: #e04040;
 }
 
 /* ========== Markdown 渲染样式 ========== */
