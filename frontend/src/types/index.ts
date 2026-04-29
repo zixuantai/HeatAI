@@ -4,9 +4,17 @@ export interface UserInfo {
   username: string
   email: string | null
   phone: string | null
+  nickname: string | null
   role: string
   status: string
   created_at: string
+}
+
+export interface UpdateUserRequest {
+  username?: string | null
+  email?: string | null
+  phone?: string | null
+  nickname?: string | null
 }
 
 export interface LoginRequest {
@@ -37,4 +45,16 @@ export interface ApiResponse<T = unknown> {
   code: number
   message: string
   data: T
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+}
+
+export interface ChatResponseData {
+  answer: string
+  model: string
 }

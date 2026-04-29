@@ -114,5 +114,42 @@ class AuthService:
         result = await db.execute(select(TokenBlacklist).where(TokenBlacklist.token == token))
         return result.scalar_one_or_none() is not None
 
+    @staticmethod
+    async def update_user_profile(db: AsyncSession, user: User, username: str | None, email: str | None, phone: str | None, nickname: str | None) -> User:
+        if username is not None and username != user.username:
+            result = await db.execute(select(User).where(User.username == username))
+            existing = result.scalar_one_or_none()
+            if existing and existing.id != user.id:
+                raise ValueError("用户名已被占用")
+
+            import re
+            if not re.match(r'^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$', username):
+                raise ValueError("用户名支持字母、数字、下划线和中文，3-20位")
+
+            user.username = username
+
+        if email is not None and email != user.email:
+            if email:
+                result = await db.execute(select(User).where(User.email == email))
+                existing = result.scalar_one_or_none()
+                if existing and existing.id != user.id:
+                    raise ValueError("邮箱已被占用")
+            user.email = email
+
+        if phone is not None and phone != user.phone:
+            if phone:
+                result = await db.execute(select(User).where(User.phone == phone))
+                existing = result.scalar_one_or_none()
+                if existing and existing.id != user.id:
+                    raise ValueError("手机号已被占用")
+            user.phone = phone
+
+        if nickname is not None:
+            user.nickname = nickname
+
+        await db.commit()
+        await db.refresh(user)
+        return user
+
 
 auth_service = AuthService()

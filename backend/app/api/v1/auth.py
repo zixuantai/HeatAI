@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_refresh_token, CurrentUser
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshResponse, UserInfo
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshResponse, UserInfo, UserUpdateRequest
 from app.services.auth_service import auth_service
 from app.models.user import User
 
@@ -88,3 +88,32 @@ async def get_me(current_user: CurrentUser):
             "created_at": user.created_at.isoformat() if user.created_at else ""
         }
     }
+
+
+@router.put("/me")
+async def update_me(
+    req: UserUpdateRequest,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    try:
+        user = await auth_service.update_user_profile(
+            db, current_user,
+            req.username, req.email, req.phone, req.nickname
+        )
+        return {
+            "code": 0,
+            "message": "更新成功",
+            "data": {
+                "id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "phone": user.phone,
+                "nickname": user.nickname,
+                "role": user.role,
+                "status": user.status,
+                "created_at": user.created_at.isoformat() if user.created_at else ""
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

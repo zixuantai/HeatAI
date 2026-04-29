@@ -1,6 +1,6 @@
 <template>
   <div class="chat-container">
-    <div class="chat-welcome">
+    <div v-if="messages.length === 0" class="chat-welcome">
       <div class="welcome-icon">🔥</div>
       <h2>欢迎使用 HeatAI 供热智能客服</h2>
       <p>我是您的供热服务助手，可以帮您解答供暖相关问题</p>
@@ -16,18 +16,49 @@
         </el-tag>
       </div>
     </div>
+
+    <div v-else class="chat-messages" ref="messagesContainer">
+      <div
+        v-for="msg in messages"
+        :key="msg.id"
+        class="message-row"
+        :class="msg.role"
+      >
+        <div v-if="msg.role === 'assistant'" class="message-avatar">
+          <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
+        </div>
+        <div class="message-bubble" :class="msg.role">
+          <div class="message-text">{{ msg.content }}</div>
+        </div>
+        <div v-if="msg.role === 'user'" class="message-avatar">
+          <el-avatar :size="32" icon="UserFilled" class="user-avatar" />
+        </div>
+      </div>
+
+      <div v-if="loading" class="message-row assistant">
+        <div class="message-avatar">
+          <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
+        </div>
+        <div class="message-bubble assistant thinking">
+          <span class="dot-pulse"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="chat-input-area">
       <el-input
         v-model="inputMessage"
         type="textarea"
-        :rows="3"
-        placeholder="请输入您的问题..."
+        :rows="2"
+        placeholder="请输入您的问题，Enter 发送，Shift+Enter 换行..."
         resize="none"
+        :disabled="loading"
         @keydown.enter.exact="handleSend"
       />
       <el-button
         type="primary"
-        :disabled="!inputMessage.trim()"
+        :disabled="!inputMessage.trim() || loading"
+        :loading="loading"
         class="send-btn"
         @click="handleSend"
       >
@@ -38,10 +69,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { askApi } from '@/api/chat'
+import type { ChatMessage } from '@/types'
 
 const inputMessage = ref('')
+const loading = ref(false)
+const messages = ref<ChatMessage[]>([])
+const messagesContainer = ref<HTMLElement>()
+
+let msgIdCounter = 0
 
 const quickQuestions = [
   '暖气不热怎么办？',
@@ -50,14 +88,53 @@ const quickQuestions = [
   '报修流程是怎样的？'
 ]
 
-function handleQuickQuestion(question: string) {
-  inputMessage.value = question
+function genId() {
+  return `msg_${Date.now()}_${++msgIdCounter}`
 }
 
-function handleSend() {
-  if (!inputMessage.value.trim()) return
-  ElMessage.info('聊天功能将在后续版本中实现')
+function scrollToBottom() {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+function handleQuickQuestion(question: string) {
+  inputMessage.value = question
+  handleSend()
+}
+
+async function handleSend() {
+  const content = inputMessage.value.trim()
+  if (!content || loading.value) return
+
+  const userMsg: ChatMessage = {
+    id: genId(),
+    role: 'user',
+    content,
+    timestamp: Date.now()
+  }
+  messages.value.push(userMsg)
   inputMessage.value = ''
+  scrollToBottom()
+  loading.value = true
+
+  try {
+    const res = await askApi(content)
+    const botMsg: ChatMessage = {
+      id: genId(),
+      role: 'assistant',
+      content: res.answer,
+      timestamp: Date.now()
+    }
+    messages.value.push(botMsg)
+  } catch {
+    ElMessage.error('请求失败，请稍后重试')
+  } finally {
+    loading.value = false
+    scrollToBottom()
+  }
 }
 </script>
 
@@ -66,7 +143,7 @@ function handleSend() {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #fff;
+  background: #fafbfc;
 }
 
 .chat-welcome {
@@ -121,12 +198,97 @@ function handleSend() {
   border-color: #ff6b35;
 }
 
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.message-row {
+  display: flex;
+  gap: 10px;
+  max-width: 85%;
+}
+
+.message-row.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.message-row.assistant {
+  align-self: flex-start;
+}
+
+.message-avatar {
+  flex-shrink: 0;
+}
+
+.bot-avatar {
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-avatar {
+  background: #1a1a2e;
+}
+
+.message-bubble {
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.message-bubble.user {
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.message-bubble.assistant {
+  background: #fff;
+  color: #303133;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.message-bubble.thinking {
+  display: flex;
+  align-items: center;
+  padding: 14px 20px;
+}
+
+.dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff6b35;
+  animation: dotPulse 1.2s infinite ease-in-out;
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 .chat-input-area {
   display: flex;
   gap: 12px;
-  padding: 20px 24px;
-  border-top: 1px solid #f0f0f0;
-  background: #fafafa;
+  padding: 16px 20px;
+  border-top: 1px solid #ececec;
+  background: #fff;
   align-items: flex-end;
 }
 

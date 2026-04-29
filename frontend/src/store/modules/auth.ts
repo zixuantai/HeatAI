@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserInfo } from '@/types'
-import { loginApi, registerApi, refreshTokenApi, getCurrentUserApi, logoutApi } from '@/api/auth'
+import { loginApi, registerApi, refreshTokenApi, getCurrentUserApi, updateCurrentUserApi, logoutApi } from '@/api/auth'
+import type { UpdateUserRequest } from '@/types'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserInfo | null>(null)
@@ -65,6 +66,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function updateProfile(data: UpdateUserRequest) {
+    const updatedUser = await updateCurrentUserApi(data)
+    user.value = updatedUser
+  }
+
   async function initAuth() {
     if (accessToken.value) {
       await fetchCurrentUser()
@@ -84,6 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
     fetchCurrentUser,
     refreshAccessToken,
     logout,
+    updateProfile,
     initAuth
   }
 })

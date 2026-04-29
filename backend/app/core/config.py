@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    DASHSCOPE_API_KEY: str = ""
+    DASHSCOPE_MODEL: str = "qwen3-max"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

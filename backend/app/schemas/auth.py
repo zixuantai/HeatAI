@@ -37,3 +37,10 @@ class UserInfo(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UserUpdateRequest(BaseModel):
+    username: str | None = Field(None, min_length=3, max_length=20, description="用户名")
+    email: str | None = Field(None, max_length=100, description="邮箱")
+    phone: str | None = Field(None, max_length=20, description="手机号")
+    nickname: str | None = Field(None, max_length=50, description="昵称")
