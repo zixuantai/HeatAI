@@ -49,7 +49,7 @@ export interface ApiResponse<T = unknown> {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
 }
@@ -57,4 +57,24 @@ export interface ChatMessage {
 export interface ChatResponseData {
   answer: string
   model: string
+  session_id: string
+}
+
+export interface SessionInfo {
+  id: string
+  title: string
+  message_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface SessionDetail extends SessionInfo {
+  messages: MessageRecord[]
+}
+
+export interface MessageRecord {
+  id: string
+  role: string
+  content: string
+  created_at: string
 }

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     status          VARCHAR(20) DEFAULT 'active',
     last_login_at   TIMESTAMP,
     last_login_ip   VARCHAR(45),
+    preferences     TEXT,
     created_at      TIMESTAMP DEFAULT NOW(),
     updated_at      TIMESTAMP DEFAULT NOW()
 );
@@ -50,3 +51,26 @@ CREATE TABLE IF NOT EXISTS token_blacklist (
 
 CREATE INDEX IF NOT EXISTS idx_token_blacklist_token ON token_blacklist(token);
 CREATE INDEX IF NOT EXISTS idx_token_blacklist_expires ON token_blacklist(expires_at);
+
+-- 对话会话表
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL,
+    title           VARCHAR(200) DEFAULT '新对话',
+    message_count   INTEGER DEFAULT 0,
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_conv_sessions_user ON conversation_sessions(user_id);
+
+-- 对话消息表
+CREATE TABLE IF NOT EXISTS messages (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id      UUID NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+    role            VARCHAR(20) NOT NULL,
+    content         TEXT NOT NULL,
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);

@@ -1,11 +1,11 @@
 import { request } from '@/utils/request'
-import type { ChatResponseData } from '@/types'
+import type { ChatResponseData, SessionInfo, SessionDetail } from '@/types'
 
-export function askApi(message: string): Promise<ChatResponseData> {
+export function askApi(message: string, sessionId?: string): Promise<ChatResponseData> {
   return request<ChatResponseData>({
     method: 'POST',
     url: '/chat/ask',
-    data: { message },
+    data: { message, session_id: sessionId || null },
     timeout: 120000
   })
 }
@@ -14,6 +14,7 @@ export interface StreamCallbacks {
   onChunk: (text: string) => void
   onDone: () => void
   onError: (error: string) => void
+  onSessionId?: (sessionId: string) => void
 }
 
 let abortController: AbortController | null = null
@@ -25,12 +26,12 @@ export function stopStream() {
   }
 }
 
-export function askStreamApi(message: string, callbacks: StreamCallbacks): AbortController {
+export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks): AbortController {
   stopStream()
 
   const controller = new AbortController()
   abortController = controller
-  const { onChunk, onDone, onError } = callbacks
+  const { onChunk, onDone, onError, onSessionId } = callbacks
 
   const token = localStorage.getItem('access_token')
 
@@ -40,7 +41,7 @@ export function askStreamApi(message: string, callbacks: StreamCallbacks): Abort
       'Content-Type': 'application/json',
       'Authorization': token ? `Bearer ${token}` : ''
     },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, session_id: sessionId }),
     signal: controller.signal
   }).then(async (response) => {
     if (!response.ok) {
@@ -85,6 +86,9 @@ export function askStreamApi(message: string, callbacks: StreamCallbacks): Abort
             onError(parsed.error)
             return
           }
+          if (parsed.session_id && onSessionId) {
+            onSessionId(parsed.session_id)
+          }
           if (parsed.c != null) {
             onChunk(parsed.c)
           }
@@ -101,4 +105,34 @@ export function askStreamApi(message: string, callbacks: StreamCallbacks): Abort
   })
 
   return controller
+}
+
+export function getSessionsApi(limit = 50, offset = 0): Promise<{ data: SessionInfo[] }> {
+  return request<{ data: SessionInfo[] }>({
+    method: 'GET',
+    url: '/chat/sessions',
+    params: { limit, offset }
+  })
+}
+
+export function getSessionDetailApi(sessionId: string): Promise<{ data: SessionDetail }> {
+  return request<{ data: SessionDetail }>({
+    method: 'GET',
+    url: `/chat/sessions/${sessionId}`
+  })
+}
+
+export function deleteSessionApi(sessionId: string): Promise<unknown> {
+  return request({
+    method: 'DELETE',
+    url: `/chat/sessions/${sessionId}`
+  })
+}
+
+export function updateSessionTitleApi(sessionId: string, title: string): Promise<{ data: SessionInfo }> {
+  return request<{ data: SessionInfo }>({
+    method: 'PATCH',
+    url: `/chat/sessions/${sessionId}`,
+    data: { title }
+  })
 }

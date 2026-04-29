@@ -19,7 +19,27 @@
         <span v-show="!collapsed">新建对话</span>
       </el-button>
       <div v-show="!collapsed" class="session-list">
-        <div class="session-empty">暂无历史对话</div>
+        <div v-if="sessions.length === 0" class="session-empty">暂无历史对话</div>
+        <div
+          v-for="sess in sessions"
+          :key="sess.id"
+          class="session-item"
+          :class="{ active: activeSessionId === sess.id }"
+          @click="handleSelectSession(sess.id)"
+        >
+          <div class="session-item-title">{{ sess.title }}</div>
+          <div class="session-item-meta">{{ sess.message_count }} 条消息</div>
+          <el-popconfirm
+            title="确定删除该对话？"
+            confirm-button-text="删除"
+            cancel-button-text="取消"
+            @confirm.stop="handleDeleteSession(sess.id)"
+          >
+            <template #reference>
+              <el-icon class="session-delete" @click.stop><Delete /></el-icon>
+            </template>
+          </el-popconfirm>
+        </div>
       </div>
 
       <div class="aside-spacer"></div>
@@ -87,18 +107,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
-import { Plus, SwitchButton, Edit, ArrowRight } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { Plus, SwitchButton, Edit, ArrowRight, Delete } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { getSessionsApi, deleteSessionApi } from '@/api/chat'
+import type { SessionInfo } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const popoverVisible = ref(false)
 const collapsed = ref(false)
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
+const sessions = ref<SessionInfo[]>([])
+
+const activeSessionId = computed(() => {
+  return (route.params.sessionId as string) || null
+})
 
 const editForm = reactive({
   username: '',
@@ -164,9 +192,44 @@ async function handleSaveProfile() {
   }
 }
 
-function handleNewChat() {
-  // 后续实现
+async function loadSessions() {
+  try {
+    const res = await getSessionsApi(50, 0)
+    sessions.value = res.data || []
+  } catch {
+    // 静默失败
+  }
 }
+
+function handleNewChat() {
+  router.push('/chat')
+}
+
+function handleSelectSession(sessionId: string) {
+  router.push(`/chat/${sessionId}`)
+}
+
+async function handleDeleteSession(sessionId: string) {
+  try {
+    await deleteSessionApi(sessionId)
+    sessions.value = sessions.value.filter(s => s.id !== sessionId)
+    if (activeSessionId.value === sessionId) {
+      router.push('/chat')
+    }
+    ElMessage.success('对话已删除')
+  } catch (e: unknown) {
+    const msg = (e as { message?: string })?.message || '删除失败'
+    ElMessage.error(msg)
+  }
+}
+
+onMounted(() => {
+  loadSessions()
+})
+
+watch(() => route.path, () => {
+  loadSessions()
+})
 </script>
 
 <style scoped>
@@ -277,6 +340,60 @@ function handleNewChat() {
   color: #909399;
   font-size: 13px;
   padding: 40px 0;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 4px;
+}
+
+.session-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.session-item.active {
+  background: rgba(255, 107, 53, 0.2);
+}
+
+.session-item-title {
+  flex: 1;
+  font-size: 13px;
+  color: #e0e0e0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item.active .session-item-title {
+  color: #ff6b35;
+}
+
+.session-item-meta {
+  font-size: 11px;
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.session-delete {
+  font-size: 14px;
+  color: #909399;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.session-item:hover .session-delete {
+  opacity: 1;
+}
+
+.session-delete:hover {
+  color: #f56c6c;
 }
 
 .aside-spacer {

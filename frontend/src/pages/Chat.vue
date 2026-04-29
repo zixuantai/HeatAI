@@ -82,12 +82,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { askStreamApi, stopStream } from '@/api/chat'
+import { askStreamApi, stopStream, getSessionDetailApi } from '@/api/chat'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+
+const props = defineProps<{
+  sessionId?: string
+}>()
+
+const router = useRouter()
 
 marked.setOptions({
   breaks: true,
@@ -138,6 +145,7 @@ const loading = ref(false)
 const streamingContent = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
+const currentSessionId = ref<string | null>(null)
 
 let msgIdCounter = 0
 let streamMsgId = ''
@@ -161,10 +169,44 @@ function scrollToBottom() {
   })
 }
 
+async function loadSessionMessages(sessionId: string) {
+  try {
+    const res = await getSessionDetailApi(sessionId)
+    const detail = res.data
+    if (detail && detail.messages) {
+      messages.value = detail.messages.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        timestamp: new Date(m.created_at).getTime()
+      }))
+      currentSessionId.value = sessionId
+      nextTick(() => scrollToBottom())
+    }
+  } catch {
+    ElMessage.error('加载对话记录失败')
+  }
+}
+
 function handleQuickQuestion(question: string) {
   inputMessage.value = question
   handleSend()
 }
+
+onMounted(() => {
+  if (props.sessionId) {
+    loadSessionMessages(props.sessionId)
+  }
+})
+
+watch(() => props.sessionId, (newId) => {
+  if (newId) {
+    loadSessionMessages(newId)
+  } else {
+    messages.value = []
+    currentSessionId.value = null
+  }
+})
 
 function handleStop() {
   stopStream()
@@ -203,7 +245,7 @@ async function handleSend() {
   streamMsgId = genId()
   let placeholderPushed = false
 
-  askStreamApi(content, {
+  askStreamApi(content, currentSessionId.value, {
     onChunk(text: string) {
       streamingContent.value += text
       if (!placeholderPushed) {
@@ -221,6 +263,12 @@ async function handleSend() {
         }
       }
       scrollToBottom()
+    },
+    onSessionId(sessionId: string) {
+      if (!currentSessionId.value) {
+        currentSessionId.value = sessionId
+        router.replace(`/chat/${sessionId}`)
+      }
     },
     onDone() {
       finishStream()
