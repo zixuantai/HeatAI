@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 
@@ -22,8 +22,6 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    sessions: Mapped[list["UserSession"]] = relationship(back_populates="user", lazy="selectin")
-
 
 class UserSession(Base):
     __tablename__ = "user_sessions"
@@ -36,8 +34,6 @@ class UserSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_used_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-    user: Mapped["User"] = relationship(back_populates="sessions")
 
 
 class TokenBlacklist(Base):

@@ -101,20 +101,30 @@ const rules: FormRules = {
 
 async function handleLogin() {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    loading.value = true
-    try {
-      await authStore.login(form.username, form.password)
-      ElMessage.success('登录成功')
-      const redirect = route.query.redirect as string
-      router.push(redirect || '/chat')
-    } catch {
-      // 错误已在请求拦截器中处理
-    } finally {
-      loading.value = false
-    }
-  })
+
+  try {
+    await formRef.value.validateField('username')
+  } catch {
+    return
+  }
+
+  try {
+    await formRef.value.validateField('password')
+  } catch {
+    return
+  }
+
+  loading.value = true
+  try {
+    await authStore.login(form.username, form.password)
+    ElMessage.success('登录成功')
+    const redirect = route.query.redirect as string
+    router.push(redirect || '/chat')
+  } catch {
+    // 错误已在请求拦截器中处理
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

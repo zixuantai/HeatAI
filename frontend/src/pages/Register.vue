@@ -46,7 +46,7 @@
             :prefix-icon="Lock"
             size="large"
             show-password
-            @focus="isPasswordFocused = true; hasAnyFocus = true"
+            @focus="isPasswordFocused = false; hasAnyFocus = true"
             @blur="handleBlur"
           />
         </el-form-item>
@@ -168,24 +168,40 @@ const passwordStrength = computed(() => {
 
 async function handleRegister() {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    loading.value = true
-    try {
-      await registerApi({
-        username: form.username,
-        password: form.password,
-        password_confirm: form.password_confirm
-      })
-      ElMessage.success('注册成功，正在为您跳转...')
-      await authStore.login(form.username, form.password)
-      router.push('/chat')
-    } catch {
-      // 错误已在请求拦截器中处理
-    } finally {
-      loading.value = false
-    }
-  })
+
+  try {
+    await formRef.value.validateField('username')
+  } catch {
+    return
+  }
+
+  try {
+    await formRef.value.validateField('password')
+  } catch {
+    return
+  }
+
+  try {
+    await formRef.value.validateField('password_confirm')
+  } catch {
+    return
+  }
+
+  loading.value = true
+  try {
+    await registerApi({
+      username: form.username,
+      password: form.password,
+      password_confirm: form.password_confirm
+    })
+    ElMessage.success('注册成功，正在为您跳转...')
+    await authStore.login(form.username, form.password)
+    router.push('/chat')
+  } catch {
+    // 错误已在请求拦截器中处理
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

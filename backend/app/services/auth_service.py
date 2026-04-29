@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserSession, TokenBlacklist
@@ -35,7 +35,7 @@ class AuthService:
             raise ValueError("账户已被禁用，请联系管理员")
 
         now = datetime.now(timezone.utc)
-        user.last_login_at = now
+        user.last_login_at = now.replace(tzinfo=None)
         user.last_login_ip = ip_address
 
         access_token = create_access_token(user.id, user.username, user.role)
@@ -45,7 +45,7 @@ class AuthService:
             user_id=user.id,
             refresh_token_hash=hash_password(refresh_token),
             ip_address=ip_address,
-            expires_at=now.replace(tzinfo=None).isoformat()
+            expires_at=(now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)).replace(tzinfo=None)
         )
         db.add(session)
         await db.commit()
@@ -83,7 +83,7 @@ class AuthService:
     async def logout(db: AsyncSession, token: str, refresh_token_str: str | None = None) -> None:
         payload = decode_token(token)
         if payload:
-            expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+            expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=None)
             blacklist = TokenBlacklist(
                 token=token,
                 token_type="access",
@@ -94,7 +94,7 @@ class AuthService:
         if refresh_token_str:
             payload_refresh = decode_token(refresh_token_str)
             if payload_refresh:
-                expires_at = datetime.fromtimestamp(payload_refresh.get("exp", 0), tz=timezone.utc)
+                expires_at = datetime.fromtimestamp(payload_refresh.get("exp", 0), tz=None)
                 blacklist_refresh = TokenBlacklist(
                     token=refresh_token_str,
                     token_type="refresh",

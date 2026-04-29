@@ -29,7 +29,9 @@ instance.interceptors.response.use(
     return response
   },
   async (error) => {
-    if (error.response?.status === 401) {
+    const isAuthRequest = error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/refresh')
+
+    if (error.response?.status === 401 && !isAuthRequest) {
       const refreshToken = localStorage.getItem('refresh_token')
       if (refreshToken && !error.config._retry) {
         error.config._retry = true
@@ -46,14 +48,16 @@ instance.interceptors.response.use(
           localStorage.removeItem('refresh_token')
           window.location.href = '/login'
         }
+        return Promise.reject(error)
       } else {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
         window.location.href = '/login'
+        return Promise.reject(error)
       }
     }
 
-    const message = error.response?.data?.message || '请求失败，请稍后重试'
+    const message = error.response?.data?.detail || error.response?.data?.message || '请求失败，请稍后重试'
     ElMessage.error(message)
     return Promise.reject(error)
   }
