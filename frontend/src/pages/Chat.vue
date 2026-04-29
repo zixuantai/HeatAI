@@ -28,7 +28,12 @@
           <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
         </div>
         <div class="message-bubble" :class="msg.role">
-          <div class="message-text">{{ msg.content }}</div>
+          <div
+            v-if="msg.role === 'assistant'"
+            class="message-text markdown-body"
+            v-html="renderMarkdown(msg.content)"
+          ></div>
+          <div v-else class="message-text">{{ msg.content }}</div>
         </div>
         <div v-if="msg.role === 'user'" class="message-avatar">
           <el-avatar :size="32" icon="UserFilled" class="user-avatar" />
@@ -73,6 +78,28 @@ import { ref, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { askApi } from '@/api/chat'
 import type { ChatMessage } from '@/types'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
+
+const renderer = new marked.Renderer()
+renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+  const validLang = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+  const highlighted = hljs.highlight(text, { language: validLang }).value
+  return `<pre><code class="hljs language-${validLang}">${highlighted}</code></pre>`
+}
+renderer.codespan = function ({ text }: { text: string }) {
+  return `<code class="inline-code">${text}</code>`
+}
+marked.setOptions({ renderer })
+
+function renderMarkdown(text: string): string {
+  return marked.parse(text) as string
+}
 
 const inputMessage = ref('')
 const loading = ref(false)
@@ -303,5 +330,137 @@ async function handleSend() {
 
 .send-btn:hover {
   background: linear-gradient(135deg, #e55d2b, #e6840e);
+}
+
+/* ========== Markdown 渲染样式 ========== */
+.markdown-body :deep(h1) {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 16px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.markdown-body :deep(h2) {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 14px 0 8px;
+}
+
+.markdown-body :deep(h3) {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 12px 0 6px;
+}
+
+.markdown-body :deep(h4),
+.markdown-body :deep(h5),
+.markdown-body :deep(h6) {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+
+.markdown-body :deep(h1:first-child),
+.markdown-body :deep(h2:first-child),
+.markdown-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.markdown-body :deep(p) {
+  margin: 6px 0;
+}
+
+.markdown-body :deep(ul),
+.markdown-body :deep(ol) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.markdown-body :deep(li) {
+  margin: 3px 0;
+}
+
+.markdown-body :deep(strong) {
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.markdown-body :deep(em) {
+  font-style: italic;
+}
+
+.markdown-body :deep(blockquote) {
+  margin: 10px 0;
+  padding: 8px 14px;
+  border-left: 3px solid #ff6b35;
+  background: #fff7f0;
+  color: #666;
+}
+
+.markdown-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.markdown-body :deep(th),
+.markdown-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.markdown-body :deep(th) {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.markdown-body :deep(tr:nth-child(even)) {
+  background: #fafafa;
+}
+
+.markdown-body :deep(a) {
+  color: #ff6b35;
+  text-decoration: underline;
+}
+
+.markdown-body :deep(a:hover) {
+  color: #e55d2b;
+}
+
+.markdown-body :deep(hr) {
+  margin: 16px 0;
+  border: none;
+  border-top: 1px solid #e8e8e8;
+}
+
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.markdown-body :deep(pre) {
+  margin: 10px 0;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.markdown-body :deep(pre code) {
+  display: block;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+
+.inline-code {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  color: #e55d2b;
+  font-size: 13px;
+  font-family: 'Consolas', 'Courier New', monospace;
 }
 </style>

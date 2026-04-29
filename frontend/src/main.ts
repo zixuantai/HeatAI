@@ -4,6 +4,7 @@ import ElementPlus from 'element-plus'
 import type { Language } from 'element-plus/es/locale'
 import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+import 'highlight.js/styles/github.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'

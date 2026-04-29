@@ -6,20 +6,34 @@ __pycache__/
 *.egg-info/
 dist/
 *.egg
-backend/.venv/
+.venv/
+venv/
+env/
 *.log
 
 # ===================
-# 环境变量
+# 环境变量 & 敏感文件
 # ===================
 .env
 .env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# ===================
+# 数据库
+# ===================
+*.db
+*.sqlite
+*.sqlite3
 
 # ===================
 # Node.js / Vue
 # ===================
 node_modules/
 frontend/dist/
+*.tsbuildinfo
 
 # ===================
 # IDE
@@ -28,14 +42,18 @@ frontend/dist/
 .vscode/
 *.swp
 *.swo
+*.swn
 
 # ===================
 # OS
 # ===================
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # ===================
 # 其他
 # ===================
 .trae/
+*.tmp
+*.bak
