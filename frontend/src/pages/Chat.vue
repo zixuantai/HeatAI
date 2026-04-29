@@ -294,7 +294,7 @@ async function handleSend() {
   margin: 4px 6px;
   cursor: pointer;
   transition: all 0.2s;
-  border-radius: 16px;
+  border-radius: 20px;
   padding: 6px 16px;
   font-size: 13px;
 }
@@ -322,7 +322,7 @@ async function handleSend() {
 
 .message-row.user {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  flex-direction: row;
 }
 
 .message-row.assistant {
@@ -396,14 +396,14 @@ async function handleSend() {
   padding: 16px 20px;
   border-top: 1px solid #ececec;
   background: #fff;
-  align-items: flex-end;
+  align-items: center;
 }
 
 .send-btn {
   height: 40px;
   background: linear-gradient(135deg, #ff6b35, #f7931e);
   border: none;
-  border-radius: 8px;
+  border-radius: 20px;
   padding: 0 24px;
   font-size: 14px;
 }
@@ -416,7 +416,7 @@ async function handleSend() {
   height: 40px;
   background: #f56c6c;
   border: none;
-  border-radius: 8px;
+  border-radius: 20px;
   padding: 0 24px;
   font-size: 14px;
 }
@@ -564,7 +564,7 @@ async function handleSend() {
   font-size: 12px;
   padding: 3px 10px;
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: 8px;
   background: #fafafa;
   color: #666;
   cursor: pointer;

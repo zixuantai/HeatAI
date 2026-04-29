@@ -1,19 +1,28 @@
 <template>
   <el-container class="layout-container">
-    <el-aside width="280px" class="layout-aside">
+    <el-aside :width="collapsed ? '60px' : '320px'" class="layout-aside" :class="{ collapsed }">
       <div class="aside-header">
-        <div class="aside-logo">
+        <div class="collapse-btn" @click="collapsed = !collapsed">
+          <span class="hamburger" :class="{ open: !collapsed }">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </div>
+        <div v-show="!collapsed" class="aside-logo">
           <span class="logo-icon">🔥</span>
           <span class="logo-text">HeatAI</span>
         </div>
       </div>
       <el-button type="primary" class="new-chat-btn" @click="handleNewChat">
         <el-icon><Plus /></el-icon>
-        新建对话
+        <span v-show="!collapsed">新建对话</span>
       </el-button>
-      <div class="session-list">
+      <div v-show="!collapsed" class="session-list">
         <div class="session-empty">暂无历史对话</div>
       </div>
+
+      <div class="aside-spacer"></div>
 
       <el-popover
         v-model:visible="popoverVisible"
@@ -21,15 +30,16 @@
         trigger="click"
         placement="right-start"
         popper-class="user-menu-popover"
+        :disabled="collapsed"
       >
         <template #reference>
           <div class="aside-user" :class="{ 'is-active': popoverVisible }">
             <el-avatar :size="36" icon="UserFilled" />
-            <div class="user-info">
+            <div v-show="!collapsed" class="user-info">
               <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
               <span class="user-role">{{ authStore.isAdmin ? '管理员' : '普通用户' }}</span>
             </div>
-            <el-icon class="user-arrow"><ArrowRight /></el-icon>
+            <el-icon v-show="!collapsed" class="user-arrow"><ArrowRight /></el-icon>
           </div>
         </template>
         <div class="user-menu">
@@ -86,6 +96,7 @@ import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'elem
 const router = useRouter()
 const authStore = useAuthStore()
 const popoverVisible = ref(false)
+const collapsed = ref(false)
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
 
@@ -169,11 +180,57 @@ function handleNewChat() {
   display: flex;
   flex-direction: column;
   border-right: 1px solid #2a2a4a;
+  transition: width 0.25s ease;
+  overflow: hidden;
 }
 
 .aside-header {
-  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
   border-bottom: 1px solid #2a2a4a;
+}
+
+.collapsed .aside-header {
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.collapse-btn {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.collapse-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hamburger {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 20px;
+}
+
+.hamburger span {
+  display: block;
+  height: 2px;
+  background: #ccc;
+  border-radius: 1px;
+  transition: all 0.25s ease;
+  transform-origin: center;
+}
+
+.collapse-btn:hover .hamburger span {
+  background: #fff;
 }
 
 .aside-logo {
@@ -197,6 +254,16 @@ function handleNewChat() {
   background: linear-gradient(135deg, #ff6b35, #f7931e);
   border: none;
   border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.collapsed .new-chat-btn {
+  margin: 16px 10px;
+  padding: 0;
+  min-width: 40px;
+  justify-content: center;
+  height: 40px;
 }
 
 .session-list {
@@ -212,6 +279,10 @@ function handleNewChat() {
   padding: 40px 0;
 }
 
+.aside-spacer {
+  flex: 1;
+}
+
 .aside-user {
   display: flex;
   align-items: center;
@@ -221,6 +292,11 @@ function handleNewChat() {
   cursor: pointer;
   transition: background 0.2s;
   user-select: none;
+}
+
+.collapsed .aside-user {
+  justify-content: center;
+  padding: 12px 0;
 }
 
 .aside-user:hover,
