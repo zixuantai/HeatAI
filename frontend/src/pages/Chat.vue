@@ -149,6 +149,7 @@ const currentSessionId = ref<string | null>(null)
 
 let msgIdCounter = 0
 let streamMsgId = ''
+let sessionLoadedFromStream = false
 
 const quickQuestions = [
   '暖气不热怎么办？',
@@ -201,6 +202,10 @@ onMounted(() => {
 
 watch(() => props.sessionId, (newId) => {
   if (newId) {
+    if (sessionLoadedFromStream) {
+      sessionLoadedFromStream = false
+      return
+    }
     loadSessionMessages(newId)
   } else {
     messages.value = []
@@ -267,6 +272,7 @@ async function handleSend() {
     onSessionId(sessionId: string) {
       if (!currentSessionId.value) {
         currentSessionId.value = sessionId
+        sessionLoadedFromStream = true
         router.replace(`/chat/${sessionId}`)
       }
     },

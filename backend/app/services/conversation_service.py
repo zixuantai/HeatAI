@@ -1,5 +1,6 @@
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app.models.user import User
 from app.models.conversation import ConversationSession, Message
 from app.services.memory.short_term import short_term_memory
@@ -30,7 +31,9 @@ class ConversationService:
     @staticmethod
     async def get_session_with_messages(db: AsyncSession, session_id: str, user_id: str) -> ConversationSession | None:
         result = await db.execute(
-            select(ConversationSession).where(
+            select(ConversationSession)
+            .options(selectinload(ConversationSession.messages))
+            .where(
                 ConversationSession.id == session_id,
                 ConversationSession.user_id == user_id
             )

@@ -21,17 +21,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/chat',
-    name: 'Chat',
     component: () => import('@/layouts/DefaultLayout.vue'),
     meta: { requiresAuth: true },
     children: [
       {
-        path: '',
-        name: 'ChatHome',
-        component: () => import('@/pages/Chat.vue')
-      },
-      {
-        path: ':sessionId',
+        path: ':sessionId?',
         name: 'ChatSession',
         component: () => import('@/pages/Chat.vue'),
         props: true
@@ -54,7 +48,7 @@ router.beforeEach((to, _from, next) => {
   }
 
   if (to.meta.guest && authStore.isAuthenticated) {
-    next({ name: 'Chat' })
+    next({ name: 'ChatSession' })
     return
   }
 
