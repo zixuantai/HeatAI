@@ -94,11 +94,35 @@ marked.setOptions({
   gfm: true
 })
 
+const langLabel: Record<string, string> = {
+  plaintext: '文本', python: 'Python', py: 'Python',
+  cpp: 'C++', cc: 'C++', cxx: 'C++', c: 'C',
+  javascript: 'JavaScript', js: 'JavaScript', typescript: 'TypeScript', ts: 'TypeScript',
+  java: 'Java', go: 'Go', rust: 'Rust', rs: 'Rust',
+  html: 'HTML', css: 'CSS', sql: 'SQL',
+  bash: 'Bash', shell: 'Shell', sh: 'Shell', zsh: 'Shell',
+  json: 'JSON', xml: 'XML', yaml: 'YAML', yml: 'YAML',
+  markdown: 'Markdown', md: 'Markdown', php: 'PHP',
+  ruby: 'Ruby', rb: 'Ruby', swift: 'Swift', kotlin: 'Kotlin',
+}
+
+function getLangLabel(lang: string): string {
+  return langLabel[lang] || lang
+}
+
 const renderer = new marked.Renderer()
 renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   const validLang = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
   const highlighted = hljs.highlight(text, { language: validLang }).value
-  return `<pre><code class="hljs language-${validLang}">${highlighted}</code></pre>`
+  const displayName = getLangLabel(validLang)
+  return `
+    <div class="code-block-wrapper">
+      <div class="code-block-header">
+        <span class="code-lang-label">${displayName}</span>
+        <button class="code-copy-btn" onclick="(function(btn){var p=btn.parentElement.nextElementSibling;var t=p.innerText;navigator.clipboard.writeText(t).then(function(){btn.textContent='已复制';setTimeout(function(){btn.textContent='复制'},2000)})})(this)">复制</button>
+      </div>
+      <pre><code class="hljs language-${validLang}">${highlighted}</code></pre>
+    </div>`
 }
 renderer.codespan = function ({ text }: { text: string }) {
   return `<code class="inline-code">${text}</code>`
@@ -510,10 +534,54 @@ async function handleSend() {
   border-radius: 6px;
 }
 
-.markdown-body :deep(pre) {
-  margin: 10px 0;
+/* ========== 代码块容器 ========== */
+.markdown-body :deep(.code-block-wrapper) {
+  margin: 12px 0;
+  border: 1.5px solid #d0d0d0;
   border-radius: 8px;
+  overflow: hidden;
+  background: #f8f8f8;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.markdown-body :deep(.code-block-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #ececec;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.markdown-body :deep(.code-lang-label) {
+  font-size: 12px;
+  font-weight: 600;
+  color: #777;
+  text-transform: uppercase;
+}
+
+.markdown-body :deep(.code-copy-btn) {
+  font-size: 12px;
+  padding: 3px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.markdown-body :deep(.code-copy-btn:hover) {
+  background: #ff6b35;
+  color: #fff;
+  border-color: #ff6b35;
+}
+
+.markdown-body :deep(pre) {
+  margin: 0;
+  border-radius: 0;
   overflow-x: auto;
+  background: #f8f8f8;
 }
 
 .markdown-body :deep(pre code) {
@@ -524,7 +592,7 @@ async function handleSend() {
   font-family: 'Consolas', 'Courier New', monospace;
 }
 
-.inline-code {
+.markdown-body :deep(.inline-code) {
   padding: 2px 6px;
   border-radius: 4px;
   background: #f0f0f0;
