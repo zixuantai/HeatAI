@@ -14,11 +14,29 @@
           <span class="logo-text">HeatAI</span>
         </div>
       </div>
-      <el-button type="primary" class="new-chat-btn" @click="handleNewChat">
+      <div class="nav-section">
+        <div
+          class="nav-item"
+          :class="{ active: isChatRoute }"
+          @click="handleNavToChat"
+        >
+          <el-icon :size="20"><ChatDotRound /></el-icon>
+          <span v-show="!collapsed">对话</span>
+        </div>
+        <div
+          class="nav-item"
+          :class="{ active: isDocumentsRoute }"
+          @click="handleNavToDocuments"
+        >
+          <el-icon :size="20"><FolderOpened /></el-icon>
+          <span v-show="!collapsed">知识库</span>
+        </div>
+      </div>
+      <el-button v-if="isChatRoute" type="primary" class="new-chat-btn" @click="handleNewChat">
         <el-icon><Plus /></el-icon>
         <span v-show="!collapsed">新建对话</span>
       </el-button>
-      <div v-show="!collapsed" class="session-list">
+      <div v-show="!collapsed && isChatRoute" class="session-list">
         <div v-if="sessions.length === 0" class="session-empty">暂无历史对话</div>
         <div
           v-for="sess in sessions"
@@ -109,7 +127,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Plus, SwitchButton, Edit, ArrowRight, Delete } from '@element-plus/icons-vue'
+import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi } from '@/api/chat'
@@ -126,6 +144,14 @@ const sessions = ref<SessionInfo[]>([])
 
 const activeSessionId = computed(() => {
   return (route.params.sessionId as string) || null
+})
+
+const isChatRoute = computed(() => {
+  return route.path.startsWith('/chat')
+})
+
+const isDocumentsRoute = computed(() => {
+  return route.path.startsWith('/documents')
 })
 
 const editForm = reactive({
@@ -204,6 +230,14 @@ function handleNewChat() {
   router.push('/chat')
 }
 
+function handleNavToChat() {
+  router.push('/chat')
+}
+
+function handleNavToDocuments() {
+  router.push('/documents')
+}
+
 function handleSelectSession(sessionId: string) {
   router.push(`/chat/${sessionId}`)
 }
@@ -223,11 +257,15 @@ async function handleDeleteSession(sessionId: string) {
 }
 
 onMounted(() => {
-  loadSessions()
+  if (isChatRoute.value) {
+    loadSessions()
+  }
 })
 
 watch(() => route.path, () => {
-  loadSessions()
+  if (isChatRoute.value) {
+    loadSessions()
+  }
 })
 </script>
 
@@ -326,6 +364,43 @@ watch(() => route.path, () => {
   min-width: 40px;
   justify-content: center;
   height: 40px;
+}
+
+.nav-section {
+  padding: 12px 12px 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #b0b0b0;
+  margin-bottom: 2px;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e0e0e0;
+}
+
+.nav-item.active {
+  background: rgba(255, 107, 53, 0.2);
+  color: #ff6b35;
+  font-weight: 500;
+}
+
+.collapsed .nav-section {
+  padding: 12px 8px 0;
+}
+
+.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  gap: 0;
 }
 
 .session-list {

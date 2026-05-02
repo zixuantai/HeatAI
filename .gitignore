@@ -57,3 +57,10 @@ desktop.ini
 .trae/
 *.tmp
 *.bak
+
+# ===================
+# HeatAI - 运行时数据
+# ===================
+models/
+milvus_data/
+uploads/

@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen3-max"
 
-    MILVUS_DB_PATH: str = "./milvus_data"
+    MILVUS_URI: str = ""
+    MILVUS_TOKEN: str = ""
     MILVUS_COLLECTION_NAME: str = "knowledge_base"
 
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"

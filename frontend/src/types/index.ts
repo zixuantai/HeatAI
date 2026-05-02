@@ -78,3 +78,53 @@ export interface MessageRecord {
   content: string
   created_at: string
 }
+
+export interface DocumentInfo {
+  id: string
+  filename: string
+  original_filename: string
+  file_type: string
+  file_size: number
+  chunk_count: number
+  status: string
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentListResponse {
+  total: number
+  items: DocumentInfo[]
+}
+
+export interface ChunkInfo {
+  id: string
+  content: string
+  chunk_index: number
+  title: string
+  source: string
+}
+
+export interface DocumentChunksResponse {
+  document: DocumentInfo
+  chunks: ChunkInfo[]
+}
+
+export interface SearchRequest {
+  query: string
+  top_k: number
+}
+
+export interface SearchResult {
+  content: string
+  source: string
+  title: string
+  document_id: string
+  chunk_index: number
+  score: number
+}
+
+export interface SearchResponse {
+  query: string
+  results: SearchResult[]
+}
