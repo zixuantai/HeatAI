@@ -62,6 +62,14 @@ class ConversationService:
         )
         await db.commit()
         await db.refresh(message)
+
+        if role == "user":
+            session = await db.get(ConversationSession, session_id)
+            if session and session.title == "新对话":
+                title = content[:30] + ("..." if len(content) > 30 else "")
+                session.title = title
+                await db.commit()
+
         short_term_memory.add_turn(session_id, role, content)
         return message
 

@@ -107,30 +107,30 @@ export function askStreamApi(message: string, sessionId: string | null, callback
   return controller
 }
 
-export function getSessionsApi(limit = 50, offset = 0): Promise<{ data: SessionInfo[] }> {
-  return request<{ data: SessionInfo[] }>({
+export function getSessionsApi(limit = 50, offset = 0): Promise<SessionInfo[]> {
+  return request<SessionInfo[]>({
     method: 'GET',
     url: '/chat/sessions',
     params: { limit, offset }
   })
 }
 
-export function getSessionDetailApi(sessionId: string): Promise<{ data: SessionDetail }> {
-  return request<{ data: SessionDetail }>({
+export function getSessionDetailApi(sessionId: string): Promise<SessionDetail> {
+  return request<SessionDetail>({
     method: 'GET',
     url: `/chat/sessions/${sessionId}`
   })
 }
 
-export function deleteSessionApi(sessionId: string): Promise<unknown> {
-  return request({
+export function deleteSessionApi(sessionId: string): Promise<void> {
+  return request<void>({
     method: 'DELETE',
     url: `/chat/sessions/${sessionId}`
   })
 }
 
-export function updateSessionTitleApi(sessionId: string, title: string): Promise<{ data: SessionInfo }> {
-  return request<{ data: SessionInfo }>({
+export function updateSessionTitleApi(sessionId: string, title: string): Promise<SessionInfo> {
+  return request<SessionInfo>({
     method: 'PATCH',
     url: `/chat/sessions/${sessionId}`,
     data: { title }

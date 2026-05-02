@@ -172,8 +172,7 @@ function scrollToBottom() {
 
 async function loadSessionMessages(sessionId: string) {
   try {
-    const res = await getSessionDetailApi(sessionId)
-    const detail = res.data
+    const detail = await getSessionDetailApi(sessionId)
     if (detail && detail.messages) {
       messages.value = detail.messages.map(m => ({
         id: m.id,

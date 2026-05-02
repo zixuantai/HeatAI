@@ -194,8 +194,7 @@ async function handleSaveProfile() {
 
 async function loadSessions() {
   try {
-    const res = await getSessionsApi(50, 0)
-    sessions.value = res.data || []
+    sessions.value = await getSessionsApi(50, 0)
   } catch {
     // 静默失败
   }

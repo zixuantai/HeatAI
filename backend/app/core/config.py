@@ -22,6 +22,18 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen3-max"
 
+    MILVUS_DB_PATH: str = "./milvus_data"
+    MILVUS_COLLECTION_NAME: str = "knowledge_base"
+
+    EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
+    EMBEDDING_DEVICE: str = "cpu"
+    EMBEDDING_DIM: int = 1024
+
+    CHUNK_SIZE: int = 600
+    CHUNK_OVERLAP: int = 100
+
+    UPLOAD_DIR: str = "./uploads"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
