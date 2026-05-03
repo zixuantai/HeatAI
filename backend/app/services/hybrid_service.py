@@ -44,8 +44,9 @@ class HybridRetrievalService:
         bm25_results = bm25_service.search(query, top_k=retrieval_top_k)
         logger.info(f"[混合检索] BM25 路召回: {len(bm25_results)} 条, 耗时: {time.time() - bm25_start:.4f}s")
 
+        BGE_QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关文章："
         embed_start = time.time()
-        query_embedding = embedding_service.encode_single(query)
+        query_embedding = embedding_service.encode_single(BGE_QUERY_INSTRUCTION + query)
         embed_time = time.time() - embed_start
         logger.info(f"[混合检索] Query 向量化: dim={len(query_embedding)}, 耗时={embed_time:.4f}s")
 

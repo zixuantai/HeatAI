@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     UPLOAD_DIR: str = "./uploads"
 
+    LOG_LEVEL: str = "INFO"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

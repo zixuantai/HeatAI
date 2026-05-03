@@ -30,12 +30,15 @@ class TextCleaner:
     def _remove_empty_lines(text: str) -> str:
         lines = text.split("\n")
         result = []
+        has_content = False
         for line in lines:
             stripped = line.strip()
             if stripped:
                 result.append(stripped)
-            elif result and result[-1] != "":
+                has_content = True
+            elif has_content:
                 result.append("")
+                has_content = False
         while result and result[-1] == "":
             result.pop()
         return "\n".join(result)
