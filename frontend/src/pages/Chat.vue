@@ -45,6 +45,7 @@
           <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
         </div>
         <div class="message-bubble assistant thinking">
+          <span class="thinking-text">{{ statusMessage }}</span>
           <span class="dot-pulse"></span>
         </div>
       </div>
@@ -143,9 +144,16 @@ function renderMarkdown(text: string): string {
 const inputMessage = ref('')
 const loading = ref(false)
 const streamingContent = ref('')
+const statusMessage = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
 const currentSessionId = ref<string | null>(null)
+
+const statusTextMap: Record<string, string> = {
+  analyzing: '正在分析您的问题...',
+  retrieving: '正在检索相关知识...',
+  generating: '正在生成回答...',
+}
 
 let msgIdCounter = 0
 let streamMsgId = ''
@@ -226,6 +234,7 @@ function finishStream() {
   }
   streamingContent.value = ''
   streamMsgId = ''
+  statusMessage.value = ''
   loading.value = false
   scrollToBottom()
 }
@@ -274,6 +283,9 @@ async function handleSend() {
         sessionLoadedFromStream = true
         router.replace(`/chat/${sessionId}`)
       }
+    },
+    onStatus(status: string) {
+      statusMessage.value = statusTextMap[status] || status
     },
     onDone() {
       finishStream()
@@ -421,12 +433,19 @@ async function handleSend() {
 .message-bubble.thinking {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
+  gap: 8px;
+  padding: 12px 20px;
+}
+
+.thinking-text {
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
 }
 
 .dot-pulse {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #ff6b35;
   animation: dotPulse 1.2s infinite ease-in-out;

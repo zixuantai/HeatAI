@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def _preload_model():
     from app.services.embedding import embedding_service
-    logger.info("正在预加载 Embedding 模型，首次下载可能需要几分钟...")
+    logger.info("正在加载 Embedding 模型到内存...")
     embedding_service.ensure_loaded()
 
 

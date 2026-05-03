@@ -1,5 +1,6 @@
 import logging
 import time
+import threading
 from typing import List, Dict, Any, Optional
 
 from app.core.config import settings
@@ -11,6 +12,7 @@ class MilvusService:
     _instance = None
     _client = None
     _initialized = False
+    _lock = threading.Lock()
 
     def __new__(cls):
         if cls._instance is None:
@@ -21,34 +23,38 @@ class MilvusService:
         if self._initialized:
             return
 
-        from pymilvus import MilvusClient
+        with self._lock:
+            if self._initialized:
+                return
 
-        uri = settings.MILVUS_URI
-        token = settings.MILVUS_TOKEN
-        import os
-        _backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-        local_path = os.path.join(_backend_dir, "milvus_data", "milvus.db")
+            from pymilvus import MilvusClient
 
-        if uri:
-            logger.info(f"连接远程 Milvus: {uri}")
-            if token:
-                self._client = MilvusClient(uri=uri, token=token, timeout=30)
+            uri = settings.MILVUS_URI
+            token = settings.MILVUS_TOKEN
+            import os
+            _backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            local_path = os.path.join(_backend_dir, "milvus_data", "milvus.db")
+
+            if uri:
+                logger.info(f"连接远程 Milvus: {uri}")
+                if token:
+                    self._client = MilvusClient(uri=uri, token=token, timeout=30)
+                else:
+                    self._client = MilvusClient(uri=uri, timeout=30)
             else:
-                self._client = MilvusClient(uri=uri, timeout=30)
-        else:
-            logger.info(f"使用本地 Milvus: {local_path}")
-            try:
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                self._client = MilvusClient(local_path)
-            except Exception as e:
-                raise RuntimeError(
-                    "本地 Milvus 不可用，请在 .env 中配置 MILVUS_URI 连接远程 Milvus "
-                    "(Zilliz Cloud 免费注册: https://cloud.zilliz.com)\n"
-                    f"原始错误: {e}"
-                )
+                logger.info(f"使用本地 Milvus: {local_path}")
+                try:
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    self._client = MilvusClient(local_path)
+                except Exception as e:
+                    raise RuntimeError(
+                        "本地 Milvus 不可用，请在 .env 中配置 MILVUS_URI 连接远程 Milvus "
+                        "(Zilliz Cloud 免费注册: https://cloud.zilliz.com)\n"
+                        f"原始错误: {e}"
+                    )
 
-        self._create_collection_if_not_exists()
-        self._initialized = True
+            self._create_collection_if_not_exists()
+            self._initialized = True
 
     def _create_collection_if_not_exists(self):
         from pymilvus import CollectionSchema, FieldSchema, DataType
@@ -60,13 +66,14 @@ class MilvusService:
             try:
                 desc = self._client.describe_collection(collection_name)
                 id_field = next((f for f in desc.get("fields", []) if f.get("name") == "id"), None)
-                if id_field and id_field.get("type") == "VARCHAR":
-                    logger.info(f"Collection '{collection_name}' 已存在且 schema 正确，加载中...")
+                if id_field and id_field.get("type") in (DataType.VARCHAR, 21):
+                    logger.info(f"Collection '{collection_name}' 已存在且 schema 正确 (id type={id_field.get('type')})，加载中...")
                     self._client.load_collection(collection_name)
                     return
                 else:
+                    actual_type = id_field.get("type") if id_field else "N/A"
                     logger.warning(
-                        f"Collection '{collection_name}' 的 id 字段类型不兼容 (当前为 {id_field.get('type') if id_field else 'N/A'}，需要 VARCHAR)。"
+                        f"Collection '{collection_name}' 的 id 字段类型不兼容 (当前为 {actual_type}，需要 VARCHAR/21)。"
                         f"正在删除旧 Collection 并重新创建..."
                     )
                     self._client.drop_collection(collection_name)

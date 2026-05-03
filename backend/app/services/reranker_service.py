@@ -63,6 +63,7 @@ class RerankerService:
         top_k: int = 5,
         bm25_weight: float | None = None,
         bge_weight: float | None = None,
+        query_embedding: List[float] | None = None,
     ) -> List[Dict[str, Any]]:
         if not candidates:
             return []
@@ -77,10 +78,13 @@ class RerankerService:
         logger.info(f"[重排序] 查询: {query}, 候选数={len(candidates)}, top_k={top_k}")
         logger.info(f"[重排序] 权重: BM25={bm25_weight}, BGE={bge_weight}")
 
-        embed_start = time.time()
-        query_text = f"{BGE_QUERY_INSTRUCTION}{query}"
-        query_embedding = embedding_service.encode_single(query_text)
-        logger.info(f"[重排序] 查询向量化 耗时: {time.time() - embed_start:.4f}s")
+        if query_embedding is not None:
+            logger.info(f"[重排序] 复用传入的查询向量 (dim={len(query_embedding)})，跳过重复编码")
+        else:
+            embed_start = time.time()
+            query_text = f"{BGE_QUERY_INSTRUCTION}{query}"
+            query_embedding = embedding_service.encode_single(query_text)
+            logger.info(f"[重排序] 查询向量化 耗时: {time.time() - embed_start:.4f}s")
 
         candidate_texts = [self._format_candidate_text(c) for c in candidates]
         doc_embed_start = time.time()
@@ -191,6 +195,7 @@ class RerankerService:
             top_k=top_k,
             bm25_weight=bm25_weight,
             bge_weight=bge_weight,
+            query_embedding=query_embedding,
         )
 
         total_elapsed = time.time() - total_start

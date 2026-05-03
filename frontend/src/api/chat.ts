@@ -15,6 +15,7 @@ export interface StreamCallbacks {
   onDone: () => void
   onError: (error: string) => void
   onSessionId?: (sessionId: string) => void
+  onStatus?: (status: string) => void
 }
 
 let abortController: AbortController | null = null
@@ -31,7 +32,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
 
   const controller = new AbortController()
   abortController = controller
-  const { onChunk, onDone, onError, onSessionId } = callbacks
+  const { onChunk, onDone, onError, onSessionId, onStatus } = callbacks
 
   const token = localStorage.getItem('access_token')
 
@@ -88,6 +89,9 @@ export function askStreamApi(message: string, sessionId: string | null, callback
           }
           if (parsed.session_id && onSessionId) {
             onSessionId(parsed.session_id)
+          }
+          if (parsed.s && onStatus) {
+            onStatus(parsed.s)
           }
           if (parsed.c != null) {
             onChunk(parsed.c)

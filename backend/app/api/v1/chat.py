@@ -13,10 +13,59 @@ from app.services.chat_service import chat_service
 from app.services.conversation_service import conversation_service
 from app.services.memory.context_builder import context_builder
 from app.services.reranker_service import reranker_service
+from app.services.query_rewriter import query_rewriter
+from app.services.bm25_service import bm25_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["对话"])
+
+
+def _log_rewrite_result(rewrite_result: dict):
+    logger.info("=" * 60)
+    logger.info(f"[Query改写] 原始查询: {rewrite_result['original_query']}")
+    logger.info(f"[Query改写] 改写查询: {rewrite_result['rewritten_query']}")
+    expanded = rewrite_result.get("expanded_queries", [])
+    if expanded:
+        for i, eq in enumerate(expanded):
+            logger.info(f"[Query改写] 扩展查询{i + 1}: {eq}")
+    else:
+        logger.info("[Query改写] 无扩展查询")
+    logger.info("=" * 60)
+
+
+async def _merge_expanded_results(main_results: list, rewrite_result: dict) -> list:
+    expanded_queries = rewrite_result.get("expanded_queries", [])
+    if not expanded_queries:
+        return main_results
+
+    seen_keys = set()
+    for r in main_results:
+        key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
+        seen_keys.add(key)
+
+    async def _bm25_search_one(eq: str):
+        try:
+            return await asyncio.to_thread(bm25_service.search, eq, 5)
+        except Exception as e:
+            logger.warning(f"[Query改写] 扩展查询 '{eq}' BM25检索失败: {e}")
+            return []
+
+    all_expanded_results = await asyncio.gather(*[_bm25_search_one(eq) for eq in expanded_queries])
+
+    merged = list(main_results)
+    for bm25_results in all_expanded_results:
+        for r in bm25_results:
+            key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
+            if key not in seen_keys:
+                seen_keys.add(key)
+                r["retriever"] = "bm25_expanded"
+                merged.append(r)
+
+    if len(merged) > len(main_results):
+        logger.info(f"[Query改写] 扩展查询新增 {len(merged) - len(main_results)} 条召回结果，合并后共 {len(merged)} 条")
+
+    return merged
 
 
 @router.post("/ask")
@@ -37,9 +86,24 @@ async def ask(
 
         await conversation_service.save_message(db, session_id, "user", req.message)
 
+        if query_rewriter.should_skip_rewrite(req.message):
+            logger.info(f"[Query改写] 检测到追问/简短问题，跳过 LLM 改写: {req.message}")
+            rewrite_result = {
+                "original_query": req.message,
+                "rewritten_query": req.message,
+                "expanded_queries": []
+            }
+        else:
+            rewrite_result = await query_rewriter.rewrite(req.message)
+        _log_rewrite_result(rewrite_result)
+
+        search_query = rewrite_result["rewritten_query"]
         search_results = await asyncio.to_thread(
-            reranker_service.search_and_rerank, req.message
+            reranker_service.search_and_rerank, search_query
         )
+
+        search_results = await _merge_expanded_results(search_results, rewrite_result)
+
         if search_results:
             logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
 
@@ -79,17 +143,41 @@ async def stream_chat(
 
     await conversation_service.save_message(db, session_id, "user", req.message)
 
-    search_results = await asyncio.to_thread(
-        reranker_service.search_and_rerank, req.message
-    )
-    if search_results:
-        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
-
-    ctx = await context_builder.build(db, session_id, current_user.id, req.message)
-
     async def event_generator():
         collected_content = []
         try:
+            yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
+
+            ctx_task = asyncio.create_task(
+                context_builder.build(db, session_id, current_user.id, req.message)
+            )
+
+            if query_rewriter.should_skip_rewrite(req.message):
+                logger.info(f"[Query改写] 检测到追问/简短问题，跳过 LLM 改写: {req.message}")
+                rewrite_result = {
+                    "original_query": req.message,
+                    "rewritten_query": req.message,
+                    "expanded_queries": []
+                }
+            else:
+                rewrite_result = await query_rewriter.rewrite(req.message)
+            _log_rewrite_result(rewrite_result)
+
+            yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
+
+            search_query = rewrite_result["rewritten_query"]
+            search_results = await asyncio.to_thread(
+                reranker_service.search_and_rerank, search_query
+            )
+            search_results = await _merge_expanded_results(search_results, rewrite_result)
+
+            if search_results:
+                logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+
+            yield f"data: {json.dumps({'s': 'generating'})}\n\n"
+
+            ctx = await ctx_task
+
             yield f"data: {json.dumps({'session_id': session_id})}\n\n"
             async for content in chat_service.stream_ask(req.message, ctx.messages, search_results):
                 collected_content.append(content)
