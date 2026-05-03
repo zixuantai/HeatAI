@@ -9,6 +9,8 @@ class Context:
     messages: list[dict] = field(default_factory=list)
     has_long_term: bool = False
     has_short_term: bool = False
+    has_emotion_trend: bool = False
+    is_decayed: bool = False
 
 
 class ContextBuilder:
@@ -25,9 +27,12 @@ class ContextBuilder:
 
         long_term_text = await long_term_memory.get_context_text(db, user_id)
         if long_term_text:
+            prefs = await long_term_memory.load(db, user_id)
+            if prefs.get("emotion_summary"):
+                context.has_emotion_trend = True
             context.messages.append({
                 "role": "system",
-                "content": f"[用户长期记忆]\n{long_term_text}"
+                "content": long_term_text
             })
             context.has_long_term = True
 

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     MEMORY_EXTRACT_TRIGGER_ROUNDS: int = 5
     MEMORY_COMPRESS_THRESHOLD_CHARS: int = 5000
     MEMORY_MAX_CONTEXT_CHARS: int = 3000
+    MEMORY_DECAY_HALF_LIFE_DAYS: int = 30
+    MEMORY_EMOTION_MAX_ENTRIES: int = 20
+    MEMORY_SESSION_SNAPSHOT_MAX: int = 10
 
     class Config:
         env_file = ".env"

@@ -1,3 +1,4 @@
+import asyncio
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,6 +17,9 @@ class ConversationService:
         await db.commit()
         await db.refresh(session)
         short_term_memory.create_session(session.id)
+
+        asyncio.ensure_future(long_term_memory.merge_sessions(db, user_id))
+
         return session
 
     @staticmethod
@@ -118,6 +122,13 @@ class ConversationService:
         await long_term_memory.extract_and_save(
             db=db,
             user_id=user_id,
+            user_messages=user_messages,
+            assistant_messages=assistant_messages,
+        )
+        await long_term_memory.finalize_session(
+            db=db,
+            user_id=user_id,
+            session_id=session_id,
             user_messages=user_messages,
             assistant_messages=assistant_messages,
         )
