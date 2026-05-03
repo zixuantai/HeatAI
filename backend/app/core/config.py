@@ -46,6 +46,11 @@ class Settings(BaseSettings):
 
     LOG_LEVEL: str = "INFO"
 
+    MEMORY_LLM_MODEL: str = "qwen-turbo"
+    MEMORY_EXTRACT_TRIGGER_ROUNDS: int = 5
+    MEMORY_COMPRESS_THRESHOLD_CHARS: int = 5000
+    MEMORY_MAX_CONTEXT_CHARS: int = 3000
+
     class Config:
         env_file = ".env"
         case_sensitive = True

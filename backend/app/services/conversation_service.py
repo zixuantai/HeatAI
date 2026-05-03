@@ -110,15 +110,17 @@ class ConversationService:
 
     @staticmethod
     async def extract_and_save_long_term(db: AsyncSession, user_id: str, session_id: str) -> None:
-        user_messages = [
-            t.content for t in short_term_memory.get_recent_turns(session_id)
-            if t.role == "user"
-        ]
+        turns = short_term_memory.get_recent_turns(session_id)
+        user_messages = [t.content for t in turns if t.role == "user"]
+        assistant_messages = [t.content for t in turns if t.role == "assistant"]
         if not user_messages:
             return
-        existing = await long_term_memory.load(db, user_id)
-        new_prefs = long_term_memory.extract_from_messages(user_messages, existing)
-        await long_term_memory.save(db, user_id, new_prefs)
+        await long_term_memory.extract_and_save(
+            db=db,
+            user_id=user_id,
+            user_messages=user_messages,
+            assistant_messages=assistant_messages,
+        )
 
 
 conversation_service = ConversationService()
