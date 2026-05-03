@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 600
     CHUNK_OVERLAP: int = 100
 
+    BM25_RETRIEVAL_TOP_K: int = 50
+    HYBRID_BM25_WEIGHT: float = 0.4
+    HYBRID_VECTOR_WEIGHT: float = 0.6
+
     UPLOAD_DIR: str = "./uploads"
 
     class Config:

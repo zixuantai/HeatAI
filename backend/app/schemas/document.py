@@ -48,6 +48,7 @@ class SearchResult(BaseModel):
     document_id: str
     chunk_index: int
     score: float
+    retriever: str = "hybrid"
 
 
 class SearchResponse(BaseModel):

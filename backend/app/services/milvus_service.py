@@ -156,15 +156,21 @@ class MilvusService:
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
         self._ensure_initialized()
+        search_start = time.time()
 
-        results = self._client.search(
-            collection_name=settings.MILVUS_COLLECTION_NAME,
-            data=[query_embedding],
-            limit=top_k,
-            output_fields=["content", "source", "title", "document_id", "chunk_index"],
-        )
+        try:
+            results = self._client.search(
+                collection_name=settings.MILVUS_COLLECTION_NAME,
+                data=[query_embedding],
+                limit=top_k,
+                output_fields=["content", "source", "title", "document_id", "chunk_index"],
+            )
+        except Exception as e:
+            logger.error(f"[Milvus 检索] ❌ 检索失败: {type(e).__name__}: {e}")
+            return []
 
         if not results or not results[0]:
+            logger.info(f"[Milvus 检索] 无结果返回, 耗时: {time.time() - search_start:.4f}s")
             return []
 
         formatted: List[Dict[str, Any]] = []
@@ -178,6 +184,18 @@ class MilvusService:
                 "chunk_index": entity.get("chunk_index", 0),
                 "score": hit.get("distance", 0),
             })
+
+        elapsed = time.time() - search_start
+        logger.info(f"[Milvus 检索] 召回数={len(formatted)}, top_k={top_k}, 耗时={elapsed:.4f}s")
+        if formatted:
+            logger.info(f"[Milvus 检索] 相似度详情 (COSINE distance, 越小越相似):")
+            for i, r in enumerate(formatted[:10]):
+                similarity = 1.0 - r['score'] / 2.0
+                logger.info(f"  #{i+1}: doc_id={r['document_id']}, chunk_index={r['chunk_index']}, "
+                           f"distance={r['score']:.6f}, ~similarity={similarity:.4f}, "
+                           f"title={r.get('title', 'N/A')[:40]}")
+        else:
+            logger.info(f"[Milvus 检索] 无相关结果")
 
         return formatted
 

@@ -1,9 +1,19 @@
+import logging
+import sys
+
+from app.core.config import settings
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+
 from contextlib import asynccontextmanager
 import threading
-import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
