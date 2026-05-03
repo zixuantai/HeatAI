@@ -1,7 +1,11 @@
 import asyncio
+import logging
+from typing import List, Dict, Any
 from dashscope import Generation
 from dashscope.aigc.generation import AioGeneration
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """你是一个专业的供热服务助手，请严格遵守以下规则来组织你的回答：
 
@@ -19,14 +23,49 @@ SYSTEM_PROMPT = """你是一个专业的供热服务助手，请严格遵守以�
 5. 语言简洁专业，避免冗余"""
 
 
+def build_rag_system_prompt(search_results: List[Dict[str, Any]]) -> str:
+    if not search_results:
+        return SYSTEM_PROMPT
+
+    docs_text_parts: List[str] = []
+    for i, r in enumerate(search_results):
+        title = r.get("title", "未知标题")
+        content = r.get("content", "")
+        score = r.get("score", 0)
+        docs_text_parts.append(
+            f"### 参考资料 {i + 1}：{title}（相关性得分：{score:.4f}）\n{content}"
+        )
+
+    docs_context = "\n\n---\n\n".join(docs_text_parts)
+
+    return f"""{SYSTEM_PROMPT}
+
+## 参考资料
+以下是来自知识库的相关文档内容，请优先基于这些资料回答问题。如果资料中没有相关信息，请诚实说明。
+
+{docs_context}
+
+---
+请基于以上参考资料回答用户问题。引用资料内容时，请注明来源于哪份参考资料。"""
+
+
 class ChatService:
 
     @staticmethod
-    async def ask(message: str, history: list[dict] | None = None) -> dict:
+    async def ask(
+        message: str,
+        history: list[dict] | None = None,
+        search_results: list[dict] | None = None,
+    ) -> dict:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if search_results:
+            logger.info(f"[RAG 对话] 使用 {len(search_results)} 条搜索结果作为上下文")
+
+        system_content = build_rag_system_prompt(search_results or [])
+
+        messages = [{"role": "system", "content": system_content}]
         if history:
             messages.extend(history)
         else:
@@ -52,11 +91,20 @@ class ChatService:
         }
 
     @staticmethod
-    async def stream_ask(message: str, history: list[dict] | None = None):
+    async def stream_ask(
+        message: str,
+        history: list[dict] | None = None,
+        search_results: list[dict] | None = None,
+    ):
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        if search_results:
+            logger.info(f"[RAG 对话] 使用 {len(search_results)} 条搜索结果作为上下文")
+
+        system_content = build_rag_system_prompt(search_results or [])
+
+        messages = [{"role": "system", "content": system_content}]
         if history:
             messages.extend(history)
         else:

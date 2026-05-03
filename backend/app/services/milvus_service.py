@@ -25,7 +25,9 @@ class MilvusService:
 
         uri = settings.MILVUS_URI
         token = settings.MILVUS_TOKEN
-        local_path = "./milvus_data/milvus.db"
+        import os
+        _backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        local_path = os.path.join(_backend_dir, "milvus_data", "milvus.db")
 
         if uri:
             logger.info(f"连接远程 Milvus: {uri}")
@@ -36,7 +38,6 @@ class MilvusService:
         else:
             logger.info(f"使用本地 Milvus: {local_path}")
             try:
-                import os
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 self._client = MilvusClient(local_path)
             except Exception as e:
@@ -128,6 +129,7 @@ class MilvusService:
             })
 
         self._client.insert(collection_name=settings.MILVUS_COLLECTION_NAME, data=data)
+        self._client.flush(collection_name=settings.MILVUS_COLLECTION_NAME)
         logger.info(f"成功插入 {len(data)} 条向量到 Milvus")
         return chunk_ids
 
@@ -211,6 +213,38 @@ class MilvusService:
         )
 
         return sorted(res, key=lambda x: x.get("chunk_index", 0)) if res else []
+
+    def get_all_chunks(self) -> List[Dict[str, Any]]:
+        self._ensure_initialized()
+
+        all_chunks: List[Dict[str, Any]] = []
+        offset = 0
+        batch_size = 1000
+
+        while True:
+            res = self._client.query(
+                collection_name=settings.MILVUS_COLLECTION_NAME,
+                filter="id != ''",
+                output_fields=["id", "content", "chunk_index", "title", "source", "document_id"],
+                limit=batch_size,
+                offset=offset,
+            )
+            if not res:
+                break
+            all_chunks.extend(res)
+            offset += batch_size
+
+        return all_chunks
+
+    def get_total_count(self) -> int:
+        self._ensure_initialized()
+
+        try:
+            stats = self._client.get_collection_stats(settings.MILVUS_COLLECTION_NAME)
+            return stats.get("row_count", 0)
+        except Exception:
+            all_chunks = self.get_all_chunks()
+            return len(all_chunks)
 
 
 milvus_service = MilvusService()

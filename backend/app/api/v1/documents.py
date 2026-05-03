@@ -8,6 +8,8 @@ from app.schemas.document import (
     DocumentInfo,
     SearchRequest,
     SearchResult,
+    RerankRequest,
+    RerankResult,
     ChunkInfo,
 )
 from app.services.document_service import document_service
@@ -151,4 +153,23 @@ async def search_documents(
         "code": 0,
         "message": "success",
         "data": {"query": body.query, "results": search_results},
+    }
+
+
+@router.post("/rerank", response_model=dict)
+async def rerank_documents(
+    body: RerankRequest,
+    current_user: CurrentUser,
+):
+    results = await document_service.rerank_search(
+        query=body.query,
+        top_k=body.top_k,
+        bm25_weight=body.bm25_weight,
+        bge_weight=body.bge_weight,
+    )
+    rerank_results = [RerankResult(**r).model_dump(mode="json") for r in results]
+    return {
+        "code": 0,
+        "message": "success",
+        "data": {"query": body.query, "results": rerank_results},
     }

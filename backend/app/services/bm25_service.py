@@ -53,6 +53,32 @@ class BM25Service:
         self._rebuild_index()
         logger.info(f"BM25 索引已更新，当前共 {len(self._chunks)} 条 chunk")
 
+    def rebuild_from_milvus_chunks(self, milvus_chunks: List[Dict[str, Any]]):
+        self._chunks.clear()
+        self._corpus_texts.clear()
+        self._tokenized_corpus.clear()
+
+        if not milvus_chunks:
+            self._bm25 = None
+            logger.info("BM25 索引已清空（Milvus 中无数据）")
+            return
+
+        for chunk in milvus_chunks:
+            content = chunk.get("content", "")
+            self._chunks.append({
+                "id": chunk.get("id", ""),
+                "content": content,
+                "document_id": chunk.get("document_id", ""),
+                "source": chunk.get("source", ""),
+                "title": chunk.get("title", ""),
+                "chunk_index": chunk.get("chunk_index", 0),
+            })
+            self._corpus_texts.append(content)
+            self._tokenized_corpus.append(self._tokenize(content))
+
+        self._rebuild_index()
+        logger.info(f"BM25 索引已从 Milvus 重建完成，共 {len(self._chunks)} 条 chunk")
+
     def remove_by_document_id(self, document_id: str):
         indices_to_keep = [
             i for i, c in enumerate(self._chunks)

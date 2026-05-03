@@ -54,3 +54,22 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: list[SearchResult]
+
+
+class RerankRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    top_k: int = Field(default=5, ge=1, le=20)
+    bm25_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    bge_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class RerankResult(BaseModel):
+    content: str
+    source: str
+    title: str
+    document_id: str
+    chunk_index: int
+    score: float
+    bge_similarity: float
+    bm25_raw_score: float
+    retriever: str = "rerank"

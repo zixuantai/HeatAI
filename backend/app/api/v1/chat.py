@@ -1,4 +1,6 @@
+import asyncio
 import json
+import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
@@ -10,6 +12,9 @@ from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate
 from app.services.chat_service import chat_service
 from app.services.conversation_service import conversation_service
 from app.services.memory.context_builder import context_builder
+from app.services.reranker_service import reranker_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["对话"])
 
@@ -32,9 +37,15 @@ async def ask(
 
         await conversation_service.save_message(db, session_id, "user", req.message)
 
+        search_results = await asyncio.to_thread(
+            reranker_service.search_and_rerank, req.message
+        )
+        if search_results:
+            logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+
         ctx = await context_builder.build(db, session_id, current_user.id, req.message)
 
-        result = await chat_service.ask(req.message, ctx.messages)
+        result = await chat_service.ask(req.message, ctx.messages, search_results)
 
         await conversation_service.save_message(db, session_id, "assistant", result["answer"])
 
@@ -68,13 +79,19 @@ async def stream_chat(
 
     await conversation_service.save_message(db, session_id, "user", req.message)
 
+    search_results = await asyncio.to_thread(
+        reranker_service.search_and_rerank, req.message
+    )
+    if search_results:
+        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+
     ctx = await context_builder.build(db, session_id, current_user.id, req.message)
 
     async def event_generator():
         collected_content = []
         try:
             yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            async for content in chat_service.stream_ask(req.message, ctx.messages):
+            async for content in chat_service.stream_ask(req.message, ctx.messages, search_results):
                 collected_content.append(content)
                 yield f"data: {json.dumps({'c': content})}\n\n"
 

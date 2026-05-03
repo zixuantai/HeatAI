@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     HYBRID_BM25_WEIGHT: float = 0.4
     HYBRID_VECTOR_WEIGHT: float = 0.6
 
+    RERANK_RECALL_TOP_K: int = 50
+    RERANK_FINAL_TOP_K: int = 5
+    RERANK_BM25_WEIGHT: float = 0.3
+    RERANK_BGE_WEIGHT: float = 0.7
+
     UPLOAD_DIR: str = "./uploads"
 
     class Config:

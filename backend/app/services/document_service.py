@@ -16,6 +16,7 @@ from app.services.chunker import text_chunker
 from app.services.bm25_service import bm25_service
 from app.services.embedding import embedding_service
 from app.services.hybrid_service import hybrid_service
+from app.services.reranker_service import reranker_service
 from app.services.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,20 @@ class DocumentService:
     @staticmethod
     async def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         return hybrid_service.search(query, top_k=top_k)
+
+    @staticmethod
+    async def rerank_search(
+        query: str,
+        top_k: int = 5,
+        bm25_weight: float | None = None,
+        bge_weight: float | None = None,
+    ) -> List[Dict[str, Any]]:
+        return reranker_service.search_and_rerank(
+            query=query,
+            top_k=top_k,
+            bm25_weight=bm25_weight,
+            bge_weight=bge_weight,
+        )
 
 
 document_service = DocumentService()
