@@ -62,12 +62,14 @@ async def list_documents(
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=200),
 ):
     documents, total = await document_service.list_documents(
         db=db,
         user_id=str(current_user.id),
         limit=limit,
         offset=offset,
+        search=search,
     )
     items = []
     for doc in documents:

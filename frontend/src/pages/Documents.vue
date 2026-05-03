@@ -12,38 +12,20 @@
       <div class="search-bar">
         <el-input
           v-model="searchQuery"
-          placeholder="输入关键词搜索知识库内容..."
+          placeholder="输入文档名搜索..."
           clearable
           size="large"
           @keyup.enter="handleSearch"
-          @clear="searchResults = []"
+          @clear="handleClearSearch"
         >
           <template #prefix>
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button class="search-btn" size="large" :loading="searchLoading" @click="handleSearch">
+        <el-button class="search-btn" size="large" @click="handleSearch">
           搜索
         </el-button>
       </div>
-      <div v-if="searchResults.length > 0" class="search-results">
-        <div class="search-results-header">
-          <span>找到 {{ searchResults.length }} 条相关结果</span>
-          <el-button text size="small" @click="searchResults = []; searchQuery = ''">清除</el-button>
-        </div>
-        <div v-for="(item, idx) in searchResults" :key="idx" class="search-result-item">
-          <div class="search-result-header">
-            <span class="search-result-title">{{ item.title }}</span>
-            <el-tag size="small" type="info">相似度 {{ (item.score * 100).toFixed(0) }}%</el-tag>
-          </div>
-          <p class="search-result-source">
-            <el-icon :size="14"><Document /></el-icon>
-            {{ item.source }}
-          </p>
-          <p class="search-result-content">{{ item.content.slice(0, 300) }}{{ item.content.length > 300 ? '...' : '' }}</p>
-        </div>
-      </div>
-      <el-empty v-if="searched && searchResults.length === 0 && !searchLoading" description="未找到相关内容" />
     </div>
 
     <div class="upload-zone"
@@ -85,7 +67,10 @@
 
     <div class="documents-section">
       <div class="section-header">
-        <h3>文档列表（{{ total }}）</h3>
+        <h3>
+          <template v-if="isSearching">搜索结果：{{ total }} 个文档</template>
+          <template v-else>文档列表（{{ total }}）</template>
+        </h3>
         <el-button text :loading="loading" @click="loadDocuments">
           <el-icon><Refresh /></el-icon>
           刷新
@@ -167,19 +152,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search
 } from '@element-plus/icons-vue'
-import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi, searchDocumentsApi } from '@/api/documents'
-import type { DocumentInfo, ChunkInfo, SearchResult } from '@/types'
+import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
+import type { DocumentInfo, ChunkInfo } from '@/types'
 
 const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)
 const loading = ref(false)
 const chunkLoading = ref(false)
-const searchLoading = ref(false)
 const documents = ref<DocumentInfo[]>([])
 const total = ref(0)
 const chunks = ref<ChunkInfo[]>([])
@@ -187,8 +171,7 @@ const chunkDialogVisible = ref(false)
 const chunkDialogTitle = ref('')
 
 const searchQuery = ref('')
-const searchResults = ref<SearchResult[]>([])
-const searched = ref(false)
+const isSearching = ref(false)
 
 interface UploadingFile {
   name: string
@@ -211,10 +194,10 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-async function loadDocuments() {
+async function loadDocuments(search?: string) {
   loading.value = true
   try {
-    const res = await getDocumentsApi(200, 0)
+    const res = await getDocumentsApi(200, 0, search)
     documents.value = res.items
     total.value = res.total
   } catch {
@@ -292,17 +275,16 @@ async function handleRowClick(row: DocumentInfo) {
 
 async function handleSearch() {
   const q = searchQuery.value.trim()
-  if (!q) return
-  searchLoading.value = true
-  searched.value = true
-  try {
-    const res = await searchDocumentsApi(q, 10)
-    searchResults.value = res.results
-  } catch {
-    searchResults.value = []
-  } finally {
-    searchLoading.value = false
+  if (q) {
+    isSearching.value = true
+    await loadDocuments(q)
   }
+}
+
+async function handleClearSearch() {
+  searchQuery.value = ''
+  isSearching.value = false
+  await loadDocuments()
 }
 
 onMounted(() => {
@@ -454,6 +436,23 @@ onMounted(() => {
   margin: 0;
 }
 
+.documents-section :deep(.el-table__body-wrapper) {
+  border-radius: 0 0 8px 8px;
+}
+
+.documents-section :deep(.el-table__body tr) {
+  cursor: pointer;
+  transition: box-shadow 0.25s ease, background-color 0.25s ease;
+}
+
+.documents-section :deep(.el-table__body tr:hover) {
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.12);
+}
+
+.documents-section :deep(.el-table__body tr:hover > td) {
+  background-color: rgba(255, 107, 53, 0.04) !important;
+}
+
 .chunk-list {
   max-height: 500px;
   overflow-y: auto;
@@ -516,64 +515,10 @@ onMounted(() => {
   font-weight: 500;
   border-radius: 8px;
   transition: opacity 0.2s;
+  min-width: 72px;
 }
 
 .search-btn:hover {
   opacity: 0.9;
-}
-
-.search-results {
-  margin-top: 20px;
-}
-
-.search-results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  font-size: 14px;
-  color: #606266;
-}
-
-.search-result-item {
-  border: 1px solid #ebeef5;
-  border-radius: 10px;
-  padding: 16px 20px;
-  margin-bottom: 12px;
-  transition: border-color 0.2s;
-}
-
-.search-result-item:hover {
-  border-color: #ff6b35;
-}
-
-.search-result-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.search-result-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.search-result-source {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #909399;
-  margin: 0 0 8px;
-}
-
-.search-result-content {
-  font-size: 13px;
-  color: #606266;
-  line-height: 1.7;
-  margin: 0;
-  white-space: pre-wrap;
 }
 </style>

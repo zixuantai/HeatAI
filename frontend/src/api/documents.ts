@@ -1,11 +1,11 @@
 import { request } from '@/utils/request'
 import type { DocumentInfo, DocumentListResponse, DocumentChunksResponse, SearchResponse } from '@/types'
 
-export function getDocumentsApi(limit = 50, offset = 0): Promise<DocumentListResponse> {
+export function getDocumentsApi(limit = 50, offset = 0, search?: string): Promise<DocumentListResponse> {
   return request<DocumentListResponse>({
     method: 'GET',
     url: '/documents',
-    params: { limit, offset }
+    params: search ? { limit, offset, search } : { limit, offset }
   })
 }
 

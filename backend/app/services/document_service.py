@@ -168,15 +168,20 @@ class DocumentService:
         user_id: str,
         limit: int = 50,
         offset: int = 0,
+        search: str | None = None,
     ) -> tuple[list[Document], int]:
+        conditions = [Document.user_id == user_id]
+        if search:
+            conditions.append(Document.original_filename.ilike(f"%{search}%"))
+
         result = await db.execute(
-            select(func.count(Document.id)).where(Document.user_id == user_id)
+            select(func.count(Document.id)).where(*conditions)
         )
         total = result.scalar() or 0
 
         result = await db.execute(
             select(Document)
-            .where(Document.user_id == user_id)
+            .where(*conditions)
             .order_by(Document.created_at.desc())
             .limit(limit)
             .offset(offset)
