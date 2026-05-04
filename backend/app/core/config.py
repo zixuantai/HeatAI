@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     EMBEDDING_DEVICE: str = "cpu"
     EMBEDDING_DIM: int = 1024
 
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RERANKER_DEVICE: str = "cpu"
+
     CHUNK_SIZE: int = 600
     CHUNK_OVERLAP: int = 100
 
@@ -38,6 +41,7 @@ class Settings(BaseSettings):
     HYBRID_VECTOR_WEIGHT: float = 0.6
 
     RERANK_RECALL_TOP_K: int = 50
+    RERANK_COARSE_TOP_K: int = 20
     RERANK_FINAL_TOP_K: int = 8
     RERANK_BM25_WEIGHT: float = 0.3
     RERANK_BGE_WEIGHT: float = 0.7

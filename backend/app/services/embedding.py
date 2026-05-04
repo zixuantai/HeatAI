@@ -6,7 +6,7 @@ import numpy as np
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 _MODELS_DIR = os.path.join(_PROJECT_ROOT, "models")
-os.environ.setdefault("HF_HOME", _MODELS_DIR)
+os.environ.setdefault("HF_HUB_CACHE", _MODELS_DIR)
 os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", _MODELS_DIR)
 os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(_MODELS_DIR, "transformers"))
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")

@@ -33,6 +33,10 @@ def _preload_model():
     logger.info("正在加载 Embedding 模型到内存...")
     embedding_service.ensure_loaded()
 
+    from app.services.cross_reranker_service import cross_reranker_service
+    logger.info("正在加载 Cross-Encoder Reranker 模型到内存...")
+    cross_reranker_service.ensure_loaded()
+
 
 def _rebuild_bm25_from_milvus():
     from app.services.milvus_service import milvus_service

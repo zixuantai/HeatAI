@@ -10,10 +10,46 @@ from app.core.utils import min_max_normalize
 from app.services.bm25_service import bm25_service
 from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
 from app.services.milvus_service import milvus_service
+from app.services.cross_reranker_service import cross_reranker_service
 
 logger = logging.getLogger(__name__)
 
 CST = timezone(timedelta(hours=8))
+
+
+def _fmt_time(seconds: float) -> str:
+    if seconds < 0.001:
+        return f"{seconds*1000000:.0f}us"
+    elif seconds < 1:
+        return f"{seconds*1000:.0f}ms"
+    else:
+        return f"{seconds:.3f}s"
+
+
+def _log_header(title: str) -> None:
+    logger.info("")
+    logger.info("  \033[1;36m┌── %s\033[0m", title)
+    logger.info("  \033[1;36m│\033[0m")
+
+
+def _log_row(key: str, value: str) -> None:
+    logger.info("  \033[1;36m│\033[0m  \033[33m%-10s\033[0m %s", key, value)
+
+
+def _log_foot(total: float, count: int) -> None:
+    logger.info("  \033[1;36m│\033[0m")
+    logger.info("  \033[1;36m└──\033[0m total \033[1;32m%s\033[0m  |  \033[1;32m%d results\033[0m", _fmt_time(total), count)
+    logger.info("")
+
+
+def _log_stage(label: str, detail: str) -> None:
+    logger.info("  \033[1;36m│\033[0m  \033[1;37m[%s]\033[0m %s", label, detail)
+
+
+def _log_result_item(rank: int, doc_id: str, title: str, score: float) -> None:
+    short_id = doc_id[:8] if len(doc_id) > 8 else doc_id
+    short_title = title[:40] if len(title) > 40 else title
+    logger.info("  \033[1;36m│\033[0m  \033[1;32m#%-2d\033[0m id=%-10s score=\033[1;33m%.4f\033[0m  %s", rank, short_id, score, short_title)
 
 
 class RerankerService:
@@ -33,8 +69,8 @@ class RerankerService:
         title = candidate.get("title", "")
         content = candidate.get("content", "")
         if title:
-            return f"文档标题：{title}\n文档摘要：{content}"
-        return f"文档摘要：{content}"
+            return f"{title}\n{content}"
+        return content
 
     @staticmethod
     def _cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
@@ -73,7 +109,8 @@ class RerankerService:
                 removed_count += 1
 
         if removed_count > 0:
-            logger.info(f"[阈值过滤] 移除 {removed_count} 条低相关度结果 (阈值={threshold}), 保留 {len(filtered)} 条")
+            logger.info("  \033[90m[filter] dropped %d below threshold %.2f, kept %d\033[0m",
+                       removed_count, threshold, len(filtered))
         return filtered
 
     @staticmethod
@@ -94,7 +131,7 @@ class RerankerService:
                 doc_date = datetime.fromisoformat(dt_str)
                 if doc_date < one_year_ago:
                     c["is_outdated"] = True
-                    c["outdated_warning"] = "⚠️ 该资料入库超过1年，信息可能已过时"
+                    c["outdated_warning"] = "该资料入库超过1年，信息可能已过时"
                 elif doc_date < six_months_ago:
                     c["is_outdated"] = False
                     c["outdated_warning"] = "该资料入库超过6个月，建议核实最新信息"
@@ -104,6 +141,66 @@ class RerankerService:
             except (ValueError, TypeError):
                 c["is_outdated"] = False
                 c["outdated_warning"] = ""
+
+    def _coarse_rank(
+        self,
+        query: str,
+        candidates: List[Dict[str, Any]],
+        bm25_weight: float,
+        bge_weight: float,
+        query_embedding: List[float],
+        coarse_top_k: int,
+    ) -> Tuple[List[Dict[str, Any]], List[float], List[float], float]:
+        t0 = time.time()
+
+        candidate_texts = [self._format_candidate_text(c) for c in candidates]
+        doc_embeddings = embedding_service.encode(candidate_texts)
+
+        bge_similarities = []
+        for doc_emb in doc_embeddings:
+            sim = self._cosine_similarity(query_embedding, doc_emb)
+            bge_similarities.append(sim)
+
+        bge_norm = min_max_normalize(bge_similarities)
+        bm25_raw_scores = [c.get("bm25_raw_score", c.get("score", 0.0)) for c in candidates]
+        bm25_norm = min_max_normalize(bm25_raw_scores)
+
+        scored: List[Tuple[int, float]] = []
+        for i in range(len(candidates)):
+            final_score = bm25_weight * bm25_norm[i] + bge_weight * bge_norm[i]
+            scored.append((i, final_score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        top_n = min(coarse_top_k, len(scored))
+        coarse_results = [candidates[scored[j][0]] for j in range(top_n)]
+
+        elapsed = time.time() - t0
+        return coarse_results, bge_similarities, bm25_raw_scores, elapsed
+
+    def _fine_rank(
+        self,
+        query: str,
+        coarse_results: List[Dict[str, Any]],
+    ) -> Tuple[List[Tuple[int, float]], float]:
+        t0 = time.time()
+
+        pairs: List[Tuple[str, str]] = []
+        for c in coarse_results:
+            title = c.get("title", "")
+            content = c.get("content", "")
+            text = f"{title}\n{content}" if title else content
+            pairs.append((title, text))
+
+        scores = cross_reranker_service.compute_scores(query, pairs, normalize=True)
+
+        indexed: List[Tuple[int, float]] = []
+        for i, s in enumerate(scores):
+            indexed.append((i, float(s)))
+
+        indexed.sort(key=lambda x: x[1], reverse=True)
+
+        elapsed = time.time() - t0
+        return indexed, elapsed
 
     def rerank(
         self,
@@ -123,71 +220,68 @@ class RerankerService:
             bge_weight = settings.RERANK_BGE_WEIGHT
 
         total_start = time.time()
-        logger.info("=" * 60)
-        logger.info(f"[重排序] 查询: {query}, 候选数={len(candidates)}, top_k={top_k}")
-        logger.info(f"[重排序] 权重: BM25={bm25_weight}, BGE={bge_weight}")
+        coarse_top_k = settings.RERANK_COARSE_TOP_K
+        effective_top_k = min(top_k, coarse_top_k)
+
+        _log_header(f"Rerank  |  candidates={len(candidates)}  coarse_top={coarse_top_k}  final_top={effective_top_k}")
+        _log_row("query", query[:80])
+        _log_row("method", f"coarse: BM25x{bm25_weight} + BGEx{bge_weight}  ->  fine: Cross-Encoder")
 
         self._mark_temporal_info(candidates)
+
+        before_filter = len(candidates)
         candidates = self.filter_by_threshold(candidates)
         if not candidates:
-            logger.info(f"[重排序] 所有候选均未达到相似度阈值，无结果返回")
-            logger.info("=" * 60)
+            logger.info("  \033[1;36m│\033[0m  \033[1;31mALL DROPPED\033[0m - no candidate passed threshold")
+            logger.info("")
             return []
+        if len(candidates) < before_filter:
+            _log_stage("filter", f"{before_filter} -> {len(candidates)} candidates")
 
-        if query_embedding is not None:
-            logger.info(f"[重排序] 复用传入的查询向量 (dim={len(query_embedding)})，跳过重复编码")
-        else:
-            embed_start = time.time()
+        coarse_top_k = min(coarse_top_k, len(candidates))
+
+        if query_embedding is None:
+            t_q = time.time()
             query_text = f"{BGE_QUERY_INSTRUCTION}{query}"
             query_embedding = embedding_service.encode_single(query_text)
-            logger.info(f"[重排序] 查询向量化 耗时: {time.time() - embed_start:.4f}s")
+            _log_stage("embed", f"query vectorized  |  {_fmt_time(time.time() - t_q)}")
+        else:
+            _log_stage("embed", f"reusing query vector (dim={len(query_embedding)})")
 
-        candidate_texts = [self._format_candidate_text(c) for c in candidates]
-        doc_embed_start = time.time()
-        doc_embeddings = embedding_service.encode(candidate_texts)
-        logger.info(f"[重排序] 文档向量化 ({len(candidate_texts)}条) 耗时: {time.time() - doc_embed_start:.4f}s")
+        coarse_results, bge_sims, bm25_scores, coarse_elapsed = self._coarse_rank(
+            query=query,
+            candidates=candidates,
+            bm25_weight=bm25_weight,
+            bge_weight=bge_weight,
+            query_embedding=query_embedding,
+            coarse_top_k=coarse_top_k,
+        )
 
-        sim_start = time.time()
-        bge_similarities = []
-        for doc_emb in doc_embeddings:
-            sim = self._cosine_similarity(query_embedding, doc_emb)
-            bge_similarities.append(sim)
-        logger.info(f"[重排序] 余弦相似度计算 耗时: {time.time() - sim_start:.4f}s")
+        if bge_sims:
+            _log_stage("coarse", f"BGE [{min(bge_sims):.3f}, {max(bge_sims):.3f}]  BM25 [{min(bm25_scores):.3f}, {max(bm25_scores):.3f}]  |  {_fmt_time(coarse_elapsed)}")
+        else:
+            _log_stage("coarse", f"done  |  {_fmt_time(coarse_elapsed)}")
 
-        bge_norm = min_max_normalize(bge_similarities)
-        bm25_raw_scores = [c.get("bm25_raw_score", c.get("score", 0.0)) for c in candidates]
-        bm25_norm = min_max_normalize(bm25_raw_scores)
+        _log_stage("coarse", f"top-{len(coarse_results)} selected")
 
-        if bge_similarities:
-            logger.info(f"[重排序] BGE 相似度范围: [{min(bge_similarities):.4f}, {max(bge_similarities):.4f}]")
-        if bm25_raw_scores:
-            logger.info(f"[重排序] BM25 原始得分范围: [{min(bm25_raw_scores):.4f}, {max(bm25_raw_scores):.4f}]")
-
-        scored: List[Tuple[int, float, Dict[str, Any]]] = []
-        for i, candidate in enumerate(candidates):
-            final_score = bm25_weight * bm25_norm[i] + bge_weight * bge_norm[i]
-            scored.append((i, final_score, candidate))
-
-        scored.sort(key=lambda x: x[1], reverse=True)
-        top_scored = scored[:top_k]
+        fine_scores, fine_elapsed = self._fine_rank(query, coarse_results)
+        _log_stage("fine", f"cross-encoder {len(fine_scores)} pairs scored  |  {_fmt_time(fine_elapsed)}")
 
         results: List[Dict[str, Any]] = []
-        for rank, (orig_idx, final_score, candidate) in enumerate(top_scored):
-            entry = dict(candidate)
-            entry["score"] = round(final_score, 6)
-            entry["bge_similarity"] = round(bge_similarities[orig_idx], 6)
-            entry["bm25_raw_score"] = round(bm25_raw_scores[orig_idx], 6)
+        for rank, (orig_idx, cross_score) in enumerate(fine_scores[:effective_top_k]):
+            entry = dict(coarse_results[orig_idx])
+            entry["score"] = round(cross_score, 6)
             entry["retriever"] = "rerank"
             results.append(entry)
-            logger.info(f"  排名 #{rank+1}: doc_id={entry.get('document_id', 'N/A')}, "
-                       f"title={entry.get('title', 'N/A')[:50]}, "
-                       f"final_score={final_score:.6f}, "
-                       f"bge_sim={bge_similarities[orig_idx]:.4f}, "
-                       f"bm25_raw={bm25_raw_scores[orig_idx]:.4f}")
+            _log_result_item(
+                rank + 1,
+                entry.get("document_id", ""),
+                entry.get("title", ""),
+                cross_score,
+            )
 
         total_elapsed = time.time() - total_start
-        logger.info(f"[重排序] ✅ 最终返回: {len(results)} 条, 总耗时={total_elapsed:.4f}s")
-        logger.info("=" * 60)
+        _log_foot(total_elapsed, len(results))
 
         return results
 
@@ -240,23 +334,23 @@ class RerankerService:
         total_start = time.time()
         recall_top_k = settings.RERANK_RECALL_TOP_K
 
-        logger.info("=" * 60)
-        logger.info(f"[重排序检索] 查询: {query}, 最终top_k={top_k}, 召回top_k={recall_top_k}")
+        _log_header(f"RAG Pipeline  |  recall={recall_top_k}  final={top_k}")
+        _log_row("query", query[:80])
 
-        bm25_start = time.time()
+        t0 = time.time()
         bm25_results = bm25_service.search(query, top_k=recall_top_k)
         bm25_results = self.filter_by_threshold(bm25_results)
-        logger.info(f"[重排序检索] BM25 召回: {len(bm25_results)} 条, 耗时: {time.time() - bm25_start:.4f}s")
+        _log_stage("bm25", f"{len(bm25_results)} hits  |  {_fmt_time(time.time() - t0)}")
 
-        embed_start = time.time()
+        t0 = time.time()
         query_for_vector = f"{BGE_QUERY_INSTRUCTION}{query}"
         query_embedding = embedding_service.encode_single(query_for_vector)
-        logger.info(f"[重排序检索] 查询向量化 耗时: {time.time() - embed_start:.4f}s")
+        _log_stage("embed", f"query vectorized  |  {_fmt_time(time.time() - t0)}")
 
-        vector_start = time.time()
+        t0 = time.time()
         vector_results = milvus_service.search(query_embedding, top_k=recall_top_k)
         vector_results = self.filter_by_threshold(vector_results)
-        logger.info(f"[重排序检索] Vector 召回: {len(vector_results)} 条, 耗时: {time.time() - vector_start:.4f}s")
+        _log_stage("vector", f"{len(vector_results)} hits  |  {_fmt_time(time.time() - t0)}")
 
         bm25_score_map: Dict[str, float] = {}
         for r in bm25_results:
@@ -279,11 +373,11 @@ class RerankerService:
             key = self._chunk_key(c)
             c["bm25_raw_score"] = bm25_score_map.get(key, 0.0)
 
-        logger.info(f"[重排序检索] 合并去重后候选数: {len(candidates_list)}")
+        _log_stage("merge", f"{len(candidates_list)} unique candidates")
 
         if not candidates_list:
-            logger.info(f"[重排序检索] 双路均无结果")
-            logger.info("=" * 60)
+            logger.info("  \033[1;36m│\033[0m  \033[1;31mNO RESULTS\033[0m - both recall paths returned empty")
+            logger.info("")
             return []
 
         results = self.rerank(
@@ -298,8 +392,7 @@ class RerankerService:
         results = self.enrich_with_adjacent_chunks(results)
 
         total_elapsed = time.time() - total_start
-        logger.info(f"[重排序检索] ✅ 全部完成, 总耗时={total_elapsed:.4f}s")
-        logger.info("=" * 60)
+        logger.info("  \033[90m↳ pipeline total: %s\033[0m", _fmt_time(total_elapsed))
 
         return results
 
