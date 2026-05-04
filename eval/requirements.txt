@@ -1,0 +1,9 @@
+ragas>=0.2.0
+datasets>=2.14
+pandas>=2.0
+numpy
+matplotlib>=3.7
+scikit-learn
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-community>=0.3.0

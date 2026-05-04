@@ -64,3 +64,13 @@ desktop.ini
 /models/
 milvus_data/
 uploads/
+
+# ===================
+# HeatAI - 评估模块
+# ===================
+eval_output/
+eval/*.log
+
+# 示例文件
+eval/demo_*.py
+eval/eval_data/sample_*.json
