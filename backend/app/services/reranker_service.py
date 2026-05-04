@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Tuple
 
 import numpy as np
@@ -11,6 +12,8 @@ from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
 from app.services.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
+
+CST = timezone(timedelta(hours=8))
 
 
 class RerankerService:
@@ -45,6 +48,63 @@ class RerankerService:
         sim = dot / (norm_a * norm_b)
         return max(0.0, min(1.0, float(sim)))
 
+    @staticmethod
+    def _cosine_similarity_from_distance(distance: float) -> float:
+        return max(0.0, 1.0 - float(distance))
+
+    @staticmethod
+    def filter_by_threshold(
+        candidates: List[Dict[str, Any]],
+        threshold: float | None = None,
+    ) -> List[Dict[str, Any]]:
+        if threshold is None:
+            threshold = settings.SIMILARITY_THRESHOLD
+        if threshold <= 0:
+            return candidates
+
+        filtered: List[Dict[str, Any]] = []
+        removed_count = 0
+        for c in candidates:
+            raw_score = c.get("score", 0)
+            similarity = RerankerService._cosine_similarity_from_distance(raw_score)
+            if similarity >= threshold:
+                filtered.append(c)
+            else:
+                removed_count += 1
+
+        if removed_count > 0:
+            logger.info(f"[阈值过滤] 移除 {removed_count} 条低相关度结果 (阈值={threshold}), 保留 {len(filtered)} 条")
+        return filtered
+
+    @staticmethod
+    def _mark_temporal_info(candidates: List[Dict[str, Any]]) -> None:
+        now = datetime.now(CST)
+        six_months_ago = now - timedelta(days=180)
+        one_year_ago = now - timedelta(days=365)
+
+        for c in candidates:
+            created_at = c.get("created_at", "")
+            if not created_at:
+                c["is_outdated"] = False
+                c["outdated_warning"] = ""
+                continue
+
+            try:
+                dt_str = created_at[:19]
+                doc_date = datetime.fromisoformat(dt_str)
+                if doc_date < one_year_ago:
+                    c["is_outdated"] = True
+                    c["outdated_warning"] = "⚠️ 该资料入库超过1年，信息可能已过时"
+                elif doc_date < six_months_ago:
+                    c["is_outdated"] = False
+                    c["outdated_warning"] = "该资料入库超过6个月，建议核实最新信息"
+                else:
+                    c["is_outdated"] = False
+                    c["outdated_warning"] = ""
+            except (ValueError, TypeError):
+                c["is_outdated"] = False
+                c["outdated_warning"] = ""
+
     def rerank(
         self,
         query: str,
@@ -66,6 +126,13 @@ class RerankerService:
         logger.info("=" * 60)
         logger.info(f"[重排序] 查询: {query}, 候选数={len(candidates)}, top_k={top_k}")
         logger.info(f"[重排序] 权重: BM25={bm25_weight}, BGE={bge_weight}")
+
+        self._mark_temporal_info(candidates)
+        candidates = self.filter_by_threshold(candidates)
+        if not candidates:
+            logger.info(f"[重排序] 所有候选均未达到相似度阈值，无结果返回")
+            logger.info("=" * 60)
+            return []
 
         if query_embedding is not None:
             logger.info(f"[重排序] 复用传入的查询向量 (dim={len(query_embedding)})，跳过重复编码")
@@ -124,6 +191,45 @@ class RerankerService:
 
         return results
 
+    def enrich_with_adjacent_chunks(
+        self,
+        results: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        if not results:
+            return results
+
+        for r in results:
+            doc_id = r.get("document_id", "")
+            chunk_idx = r.get("chunk_index", 0)
+            if not doc_id:
+                continue
+
+            try:
+                expr = f'document_id == "{doc_id}" && (chunk_index == {chunk_idx - 1} || chunk_index == {chunk_idx + 1})'
+                neighbor_chunks = milvus_service._client.query(
+                    collection_name=settings.MILVUS_COLLECTION_NAME,
+                    filter=expr,
+                    output_fields=["content", "chunk_index"],
+                    limit=2,
+                )
+            except Exception:
+                continue
+
+            prev_content = ""
+            next_content = ""
+            for nc in neighbor_chunks:
+                if nc.get("chunk_index") == chunk_idx - 1:
+                    prev_content = nc.get("content", "")[:200]
+                elif nc.get("chunk_index") == chunk_idx + 1:
+                    next_content = nc.get("content", "")[:200]
+
+            if prev_content:
+                r["adjacent_prev"] = prev_content
+            if next_content:
+                r["adjacent_next"] = next_content
+
+        return results
+
     def search_and_rerank(
         self,
         query: str,
@@ -139,6 +245,7 @@ class RerankerService:
 
         bm25_start = time.time()
         bm25_results = bm25_service.search(query, top_k=recall_top_k)
+        bm25_results = self.filter_by_threshold(bm25_results)
         logger.info(f"[重排序检索] BM25 召回: {len(bm25_results)} 条, 耗时: {time.time() - bm25_start:.4f}s")
 
         embed_start = time.time()
@@ -148,6 +255,7 @@ class RerankerService:
 
         vector_start = time.time()
         vector_results = milvus_service.search(query_embedding, top_k=recall_top_k)
+        vector_results = self.filter_by_threshold(vector_results)
         logger.info(f"[重排序检索] Vector 召回: {len(vector_results)} 条, 耗时: {time.time() - vector_start:.4f}s")
 
         bm25_score_map: Dict[str, float] = {}
@@ -186,6 +294,8 @@ class RerankerService:
             bge_weight=bge_weight,
             query_embedding=query_embedding,
         )
+
+        results = self.enrich_with_adjacent_chunks(results)
 
         total_elapsed = time.time() - total_start
         logger.info(f"[重排序检索] ✅ 全部完成, 总耗时={total_elapsed:.4f}s")

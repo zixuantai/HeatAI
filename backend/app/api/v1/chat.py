@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_session
+from app.core.config import settings
 from app.core.dependencies import CurrentUser
 from app.schemas.chat import ChatRequest
 from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate
@@ -55,13 +56,17 @@ async def _merge_expanded_results(main_results: list, rewrite_result: dict) -> l
         key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
         seen_keys.add(key)
 
+    threshold = settings.SIMILARITY_THRESHOLD
+
     async def _search_one_expanded(eq: str):
         try:
             bm25_res = await asyncio.to_thread(bm25_service.search, eq, 3)
+            bm25_res = reranker_service.filter_by_threshold(bm25_res, threshold)
             query_emb = await asyncio.to_thread(
                 embedding_service.encode_single, BGE_QUERY_INSTRUCTION + eq
             )
             vector_res = await asyncio.to_thread(milvus_service.search, query_emb, 3)
+            vector_res = reranker_service.filter_by_threshold(vector_res, threshold)
             for r in vector_res:
                 r["retriever"] = "vector_expanded"
             merged = list(bm25_res)

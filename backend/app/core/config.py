@@ -38,9 +38,16 @@ class Settings(BaseSettings):
     HYBRID_VECTOR_WEIGHT: float = 0.6
 
     RERANK_RECALL_TOP_K: int = 50
-    RERANK_FINAL_TOP_K: int = 5
+    RERANK_FINAL_TOP_K: int = 8
     RERANK_BM25_WEIGHT: float = 0.3
     RERANK_BGE_WEIGHT: float = 0.7
+
+    SIMILARITY_THRESHOLD: float = 0.35
+
+    CONTEXT_MAX_CHUNK_CHARS: int = 800
+    CONTEXT_MAX_TOTAL_CHARS: int = 6000
+
+    LLM_TEMPERATURE: float = 0.15
 
     UPLOAD_DIR: str = "./uploads"
 

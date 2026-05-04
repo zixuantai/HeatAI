@@ -56,6 +56,18 @@ class MilvusService:
             self._create_collection_if_not_exists()
             self._initialized = True
 
+    def _check_collection_compatible(self, collection_name: str) -> bool:
+        from pymilvus import DataType
+        desc = self._client.describe_collection(collection_name)
+        required_fields = {"id": DataType.VARCHAR, "created_at": DataType.VARCHAR, "version": DataType.INT64}
+        existing_fields = {f["name"]: f["type"] for f in desc.get("fields", [])}
+        for field_name, field_type in required_fields.items():
+            if field_name not in existing_fields:
+                return False
+            if existing_fields[field_name] != field_type:
+                return False
+        return True
+
     def _create_collection_if_not_exists(self):
         from pymilvus import CollectionSchema, FieldSchema, DataType
 
@@ -64,17 +76,13 @@ class MilvusService:
 
         if self._client.has_collection(collection_name):
             try:
-                desc = self._client.describe_collection(collection_name)
-                id_field = next((f for f in desc.get("fields", []) if f.get("name") == "id"), None)
-                if id_field and id_field.get("type") in (DataType.VARCHAR, 21):
-                    logger.info(f"Collection '{collection_name}' 已存在且 schema 正确 (id type={id_field.get('type')})，加载中...")
+                if self._check_collection_compatible(collection_name):
+                    logger.info(f"Collection '{collection_name}' 已存在且 schema 兼容，加载中...")
                     self._client.load_collection(collection_name)
                     return
                 else:
-                    actual_type = id_field.get("type") if id_field else "N/A"
                     logger.warning(
-                        f"Collection '{collection_name}' 的 id 字段类型不兼容 (当前为 {actual_type}，需要 VARCHAR/21)。"
-                        f"正在删除旧 Collection 并重新创建..."
+                        f"Collection '{collection_name}' schema 不兼容（缺少时间/版本字段），正在删除旧 Collection 并重新创建..."
                     )
                     self._client.drop_collection(collection_name)
             except Exception:
@@ -94,6 +102,8 @@ class MilvusService:
             FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="document_id", dtype=DataType.VARCHAR, max_length=64),
             FieldSchema(name="chunk_index", dtype=DataType.INT64),
+            FieldSchema(name="created_at", dtype=DataType.VARCHAR, max_length=32),
+            FieldSchema(name="version", dtype=DataType.INT64),
         ]
         schema = CollectionSchema(fields=fields, description="Document chunks collection")
 
@@ -118,6 +128,10 @@ class MilvusService:
     def insert(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]]) -> List[str]:
         self._ensure_initialized()
 
+        from datetime import datetime, timezone, timedelta
+        CST = timezone(timedelta(hours=8))
+        now_iso = datetime.now(CST).strftime("%Y-%m-%dT%H:%M:%S+08:00")
+
         data: List[Dict[str, Any]] = []
         chunk_ids: List[str] = []
 
@@ -133,6 +147,8 @@ class MilvusService:
                 "title": chunk["metadata"].get("title", ""),
                 "document_id": chunk["metadata"].get("document_id", ""),
                 "chunk_index": chunk["metadata"].get("chunk_index", 0),
+                "created_at": now_iso,
+                "version": chunk["metadata"].get("version", 1),
             })
 
         self._client.insert(collection_name=settings.MILVUS_COLLECTION_NAME, data=data)
@@ -172,7 +188,7 @@ class MilvusService:
                 collection_name=settings.MILVUS_COLLECTION_NAME,
                 data=[query_embedding],
                 limit=top_k,
-                output_fields=["content", "source", "title", "document_id", "chunk_index"],
+                output_fields=["content", "source", "title", "document_id", "chunk_index", "created_at", "version"],
             )
         except Exception as e:
             logger.error(f"[Milvus 检索] ❌ 检索失败: {type(e).__name__}: {e}")
@@ -192,6 +208,8 @@ class MilvusService:
                 "document_id": entity.get("document_id", ""),
                 "chunk_index": entity.get("chunk_index", 0),
                 "score": hit.get("distance", 0),
+                "created_at": entity.get("created_at", ""),
+                "version": entity.get("version", 1),
             })
 
         elapsed = time.time() - search_start
@@ -202,6 +220,7 @@ class MilvusService:
                 similarity = 1.0 - r['score'] / 2.0
                 logger.info(f"  #{i+1}: doc_id={r['document_id']}, chunk_index={r['chunk_index']}, "
                            f"distance={r['score']:.6f}, ~similarity={similarity:.4f}, "
+                           f"created_at={r.get('created_at', 'N/A')}, "
                            f"title={r.get('title', 'N/A')[:40]}")
         else:
             logger.info(f"[Milvus 检索] 无相关结果")
@@ -215,7 +234,7 @@ class MilvusService:
         res = self._client.query(
             collection_name=settings.MILVUS_COLLECTION_NAME,
             filter=expr,
-            output_fields=["id", "content", "chunk_index", "title", "source"],
+            output_fields=["id", "content", "chunk_index", "title", "source", "created_at", "version"],
             limit=10000,
         )
 
@@ -232,7 +251,7 @@ class MilvusService:
             res = self._client.query(
                 collection_name=settings.MILVUS_COLLECTION_NAME,
                 filter="id != ''",
-                output_fields=["id", "content", "chunk_index", "title", "source", "document_id"],
+                output_fields=["id", "content", "chunk_index", "title", "source", "document_id", "created_at", "version"],
                 limit=batch_size,
                 offset=offset,
             )

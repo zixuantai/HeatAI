@@ -11,6 +11,27 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT_FULL = """你是一个专业的供热服务助手，请严格遵守以下规则来组织你的回答：
 
+## 核心原则（最高优先级）
+
+### 信息来源优先级
+1. **知识库资料 > 工具返回 > 内置知识**
+2. 当参考资料中有明确答案时，**必须严格基于参考资料回答**，不得使用你自己的知识覆盖
+3. 当参考资料与工具返回信息矛盾时，以**时间最新、来源最权威**的为准
+4. 如果参考资料中**没有任何相关信息**，必须明确说"知识库中暂无相关资料"，然后说明你基于通用知识的理解
+
+### 矛盾信息处理（极其重要）
+当多份参考资料之间存在矛盾时，你必须：
+1. **明确指出存在矛盾**，例如："关于这个问题，知识库中存在不同的说法："
+2. **逐条列出矛盾双方的要点**，并标注来源
+3. **优先采信时间最新的资料**（注意每份资料标注的入库时间）
+4. 如果无法判断哪个更可靠，**坦诚告知用户**存在多种说法，并建议用户核实最新政策
+
+### 忠实度要求
+- **每条关键陈述必须标注引用来源**，格式为 `[参考X]`，X 为参考资料编号
+- 如果你不确定某条信息是否正确，必须说明"根据参考资料X，...但建议进一步核实"
+- **禁止编造参考资料中没有的数据、日期、标准**
+- 如果参考资料内容与你记忆中不同，以参考资料为准
+
 ## 格式要求
 1. **必须使用 Markdown 格式输出**，包括但不限于：
    - 使用 `#` `##` `###` 表示标题层级
@@ -49,7 +70,12 @@ SYSTEM_PROMPT_LITE = """你是一个专业的供热服务助手。你可以调�
 SYSTEM_PROMPT = SYSTEM_PROMPT_FULL
 
 
-def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_chars: int = 400, max_total_chars: int = 3000) -> str:
+def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_chars: int | None = None, max_total_chars: int | None = None) -> str:
+    if max_chunk_chars is None:
+        max_chunk_chars = settings.CONTEXT_MAX_CHUNK_CHARS
+    if max_total_chars is None:
+        max_total_chars = settings.CONTEXT_MAX_TOTAL_CHARS
+
     if not search_results:
         return SYSTEM_PROMPT_LITE
 
@@ -59,10 +85,31 @@ def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_char
         title = r.get("title", "未知标题")
         content = r.get("content", "")
         score = r.get("score", 0)
+        created_at = r.get("created_at", "")
+        version = r.get("version", 1)
         truncated_content = content[:max_chunk_chars]
         if len(content) > max_chunk_chars:
             truncated_content += "..."
-        part = f"### 参考资料 {i + 1}：{title}（相关性得分：{score:.4f}）\n{truncated_content}"
+        meta_info = f"相关性得分：{score:.4f}"
+        if created_at:
+            meta_info += f" | 入库时间：{created_at}"
+        if version and version > 1:
+            meta_info += f" | 版本：v{version}"
+        part = f"### 参考{i + 1}：{title}（{meta_info}）\n{truncated_content}"
+
+        adjacent_prev = r.get("adjacent_prev", "")
+        adjacent_next = r.get("adjacent_next", "")
+        if adjacent_prev or adjacent_next:
+            part += "\n> 上下文："
+            if adjacent_prev:
+                part += f"\n> ...{adjacent_prev[:200]}..."
+                if len(adjacent_prev) > 200:
+                    part += "(截断)"
+            if adjacent_next:
+                part += f"\n> ...{adjacent_next[:200]}..."
+                if len(adjacent_next) > 200:
+                    part += "(截断)"
+
         if total_chars + len(part) > max_total_chars:
             break
         docs_text_parts.append(part)
@@ -73,12 +120,13 @@ def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_char
     return f"""{SYSTEM_PROMPT}
 
 ## 参考资料
-以下是来自知识库的相关文档内容，请优先基于这些资料回答问题。如果资料中没有相关信息，请诚实说明。
+以下是来自知识库的相关文档内容。**必须严格基于这些资料回答问题**，每条关键陈述必须标注引用来源（如 [参考1]）。
+如果资料中有矛盾，请明确指出并优先采信入库时间最新的资料。
 
 {docs_context}
 
 ---
-请基于以上参考资料回答用户问题。引用资料内容时，请注明来源于哪份参考资料。"""
+请基于以上参考资料回答用户问题。记住：引用来源、处理矛盾、禁止编造。"""
 
 
 class ChatService:
@@ -129,6 +177,8 @@ class ChatService:
             "messages": messages,
             "result_format": "message",
             "api_key": settings.DASHSCOPE_API_KEY,
+            "temperature": settings.LLM_TEMPERATURE,
+            "top_p": 0.95,
         }
         if enable_tools:
             kwargs["tools"] = TOOL_DEFINITIONS
