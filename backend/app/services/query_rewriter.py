@@ -27,6 +27,36 @@ TRIVIAL_QUERY_PATTERNS = [
     r"^[\u3000-\u303F\uFF00-\uFFEF\s]+$",
 ]
 
+SIMPLE_SMALL_TALK_PATTERNS = [
+    r"^(你好|您好|嗨|哈喽|hello|hi)[\s!！。.~～]*$",
+    r"^(谢谢|多谢|感谢|3q|thx|thanks)[\s!！。.]*$",
+    r"^(再见|拜拜|bye|再见啦)[\s!！。.]*$",
+    r"^(嗯|哦|好|行|可以|OK|ok|对|是的|没错)[\s!！。.]*$",
+    r"^(早上好|下午好|晚上好|早|晚安)[\s!！。.]*$",
+    r"^(你是谁|你叫什么|介绍.*自己|你是.*机器人).*$",
+    r"^.{1,3}$",
+]
+
+TOOL_ONLY_QUERY_PATTERNS = [
+    r"^(现在|今天|明天|昨天).*(几点|时间|日期|星期|几号|啥时候)",
+    r"^(几点了|什么时候了|啥时候了|现在时间)",
+    r"^(天气|温度|气温).*(怎么样|如何|多少|怎样|冷|热)",
+    r"^(帮我|给我|请).*(算|计算|查|查询|看).*(费|费用|天气|时间|供暖)",
+    r"^(算一[下算]|计算|帮我算).*(费|费用|价格|钱|多少钱)",
+    r"^(现在|今天|明天).*(天气|温度|气温|冷|热).*$",
+    r"^(报修|我要报修|登记.*报修).*$",
+    r"^(供暖|供热).*(建议|节能|省|省钱|降|减少).*(费|费用).*$",
+    r"^(供暖季|供热季).*(安排|时间|开始|结束).*$",
+]
+
+HEATING_KEYWORDS = [
+    "供暖", "供热", "暖气", "锅炉", "散热器", "管道", "阀门",
+    "漏水", "不热", "压力", "温度", "循环", "补水", "排气",
+    "故障", "维修", "报修", "采暖", "节能", "热力", "换热站",
+    "一次网", "二次网", "分户", "计量", "温控", "调节",
+    "地暖", "壁挂炉", "燃气", "煤改", "清洁能源",
+]
+
 QUERY_REWRITE_SYSTEM_PROMPT = """你是一个供热行业查询优化专家。你的任务是对用户输入的问题进行改写优化，使其更适合用于知识库检索（BM25 + 向量检索）。
 
 ## 改写规则
@@ -97,7 +127,34 @@ class QueryRewriterService:
             if re.match(pattern, stripped):
                 return True
 
+        for pattern in SIMPLE_SMALL_TALK_PATTERNS:
+            if re.match(pattern, stripped):
+                return True
+
+        for pattern in TOOL_ONLY_QUERY_PATTERNS:
+            if re.match(pattern, stripped):
+                return True
+
         return False
+
+    @staticmethod
+    def needs_knowledge_base(query: str) -> bool:
+        stripped = query.strip()
+        if not stripped:
+            return False
+
+        for pattern in SIMPLE_SMALL_TALK_PATTERNS:
+            if re.match(pattern, stripped):
+                return False
+
+        for pattern in TOOL_ONLY_QUERY_PATTERNS:
+            if re.match(pattern, stripped):
+                return False
+
+        if len(stripped) <= 6 and not any(kw in stripped for kw in HEATING_KEYWORDS):
+            return False
+
+        return True
 
     async def rewrite(self, query: str) -> dict:
         if not settings.DASHSCOPE_API_KEY:

@@ -49,15 +49,39 @@ export interface ApiResponse<T = unknown> {
 
 export interface ChatMessage {
   id: string
-  role: 'user' | 'assistant' | 'system'
+  role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   timestamp: number
+  toolCalls?: ToolCallInfo[]
+  toolResults?: ToolResultInfo[]
+}
+
+export interface ToolCallInfo {
+  tool_name: string
+  tool_args: Record<string, unknown>
+  tool_call_id: string
+}
+
+export interface ToolResultInfo {
+  tool_name: string
+  result: string
+  tool_call_id: string
+}
+
+export interface ToolCallDef {
+  id: string
+  type: string
+  function: {
+    name: string
+    arguments: string
+  }
 }
 
 export interface ChatResponseData {
   answer: string
   model: string
   session_id: string
+  tool_calls?: ToolCallDef[]
 }
 
 export interface SessionInfo {

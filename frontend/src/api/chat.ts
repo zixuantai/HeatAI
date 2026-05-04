@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { ChatResponseData, SessionInfo, SessionDetail } from '@/types'
+import type { ChatResponseData, SessionInfo, SessionDetail, ToolCallInfo, ToolResultInfo } from '@/types'
 
 export function askApi(message: string, sessionId?: string): Promise<ChatResponseData> {
   return request<ChatResponseData>({
@@ -16,6 +16,8 @@ export interface StreamCallbacks {
   onError: (error: string) => void
   onSessionId?: (sessionId: string) => void
   onStatus?: (status: string) => void
+  onToolCall?: (info: ToolCallInfo) => void
+  onToolResult?: (info: ToolResultInfo) => void
 }
 
 let abortController: AbortController | null = null
@@ -32,7 +34,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
 
   const controller = new AbortController()
   abortController = controller
-  const { onChunk, onDone, onError, onSessionId, onStatus } = callbacks
+  const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult } = callbacks
 
   const token = localStorage.getItem('access_token')
 
@@ -92,6 +94,12 @@ export function askStreamApi(message: string, sessionId: string | null, callback
           }
           if (parsed.s && onStatus) {
             onStatus(parsed.s)
+          }
+          if (parsed.tc && onToolCall) {
+            onToolCall(parsed.tc)
+          }
+          if (parsed.tr && onToolResult) {
+            onToolResult(parsed.tr)
           }
           if (parsed.c != null) {
             onChunk(parsed.c)

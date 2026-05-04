@@ -449,7 +449,7 @@ async function handleSend() {
   }
 }
 
-/* ========== Message Bubbles ========== */
+/* ========== Message Bubbles (updated) ========== */
 .message-bubble {
   padding: 14px 20px;
   border-radius: 16px;
