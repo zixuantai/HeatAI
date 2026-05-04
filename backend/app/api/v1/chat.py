@@ -15,6 +15,8 @@ from app.services.memory.context_builder import context_builder
 from app.services.reranker_service import reranker_service
 from app.services.query_rewriter import query_rewriter
 from app.services.bm25_service import bm25_service
+from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
+from app.services.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
 
@@ -44,22 +46,36 @@ async def _merge_expanded_results(main_results: list, rewrite_result: dict) -> l
         key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
         seen_keys.add(key)
 
-    async def _bm25_search_one(eq: str):
+    async def _search_one_expanded(eq: str):
         try:
-            return await asyncio.to_thread(bm25_service.search, eq, 5)
+            bm25_res = await asyncio.to_thread(bm25_service.search, eq, 3)
+            query_emb = await asyncio.to_thread(
+                embedding_service.encode_single, BGE_QUERY_INSTRUCTION + eq
+            )
+            vector_res = await asyncio.to_thread(milvus_service.search, query_emb, 3)
+            for r in vector_res:
+                r["retriever"] = "vector_expanded"
+            merged = list(bm25_res)
+            bm25_keys = {f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}" for r in bm25_res}
+            for r in vector_res:
+                key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
+                if key not in bm25_keys:
+                    merged.append(r)
+            return merged
         except Exception as e:
-            logger.warning(f"[Query改写] 扩展查询 '{eq}' BM25检索失败: {e}")
+            logger.warning(f"[Query改写] 扩展查询 '{eq}' 检索失败: {e}")
             return []
 
-    all_expanded_results = await asyncio.gather(*[_bm25_search_one(eq) for eq in expanded_queries])
+    all_expanded_results = await asyncio.gather(*[_search_one_expanded(eq) for eq in expanded_queries])
 
     merged = list(main_results)
-    for bm25_results in all_expanded_results:
-        for r in bm25_results:
+    for exp_results in all_expanded_results:
+        for r in exp_results:
             key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
             if key not in seen_keys:
                 seen_keys.add(key)
-                r["retriever"] = "bm25_expanded"
+                if "retriever" not in r:
+                    r["retriever"] = "bm25_expanded"
                 merged.append(r)
 
     if len(merged) > len(main_results):

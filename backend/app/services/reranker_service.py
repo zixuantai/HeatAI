@@ -5,13 +5,12 @@ from typing import List, Dict, Any, Tuple
 import numpy as np
 
 from app.core.config import settings
+from app.core.utils import min_max_normalize
 from app.services.bm25_service import bm25_service
-from app.services.embedding import embedding_service
+from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
 from app.services.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
-
-BGE_QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关文章："
 
 
 class RerankerService:
@@ -45,16 +44,6 @@ class RerankerService:
             return 0.0
         sim = dot / (norm_a * norm_b)
         return max(0.0, min(1.0, float(sim)))
-
-    @staticmethod
-    def _min_max_normalize(scores: List[float]) -> List[float]:
-        if not scores:
-            return []
-        min_s = min(scores)
-        max_s = max(scores)
-        if max_s == min_s:
-            return [1.0] * len(scores)
-        return [(s - min_s) / (max_s - min_s) for s in scores]
 
     def rerank(
         self,
@@ -98,9 +87,9 @@ class RerankerService:
             bge_similarities.append(sim)
         logger.info(f"[重排序] 余弦相似度计算 耗时: {time.time() - sim_start:.4f}s")
 
-        bge_norm = self._min_max_normalize(bge_similarities)
+        bge_norm = min_max_normalize(bge_similarities)
         bm25_raw_scores = [c.get("bm25_raw_score", c.get("score", 0.0)) for c in candidates]
-        bm25_norm = self._min_max_normalize(bm25_raw_scores)
+        bm25_norm = min_max_normalize(bm25_raw_scores)
 
         if bge_similarities:
             logger.info(f"[重排序] BGE 相似度范围: [{min(bge_similarities):.4f}, {max(bge_similarities):.4f}]")

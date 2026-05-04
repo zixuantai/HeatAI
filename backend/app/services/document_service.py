@@ -15,7 +15,6 @@ from app.services.text_cleaner import text_cleaner
 from app.services.chunker import text_chunker
 from app.services.bm25_service import bm25_service
 from app.services.embedding import embedding_service
-from app.services.hybrid_service import hybrid_service
 from app.services.reranker_service import reranker_service
 from app.services.milvus_service import milvus_service
 
@@ -225,7 +224,7 @@ class DocumentService:
 
     @staticmethod
     async def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        return hybrid_service.search(query, top_k=top_k)
+        return reranker_service.search_and_rerank(query, top_k=top_k)
 
     @staticmethod
     async def rerank_search(

@@ -23,18 +23,24 @@ SYSTEM_PROMPT = """你是一个专业的供热服务助手，请严格遵守以�
 5. 语言简洁专业，避免冗余"""
 
 
-def build_rag_system_prompt(search_results: List[Dict[str, Any]]) -> str:
+def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_chars: int = 400, max_total_chars: int = 3000) -> str:
     if not search_results:
         return SYSTEM_PROMPT
 
     docs_text_parts: List[str] = []
+    total_chars = 0
     for i, r in enumerate(search_results):
         title = r.get("title", "未知标题")
         content = r.get("content", "")
         score = r.get("score", 0)
-        docs_text_parts.append(
-            f"### 参考资料 {i + 1}：{title}（相关性得分：{score:.4f}）\n{content}"
-        )
+        truncated_content = content[:max_chunk_chars]
+        if len(content) > max_chunk_chars:
+            truncated_content += "..."
+        part = f"### 参考资料 {i + 1}：{title}（相关性得分：{score:.4f}）\n{truncated_content}"
+        if total_chars + len(part) > max_total_chars:
+            break
+        docs_text_parts.append(part)
+        total_chars += len(part)
 
     docs_context = "\n\n---\n\n".join(docs_text_parts)
 

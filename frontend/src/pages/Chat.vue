@@ -1,83 +1,94 @@
 <template>
-  <div class="chat-container">
-    <div v-if="messages.length === 0" class="chat-welcome">
-      <div class="welcome-icon">🔥</div>
-      <h2>欢迎使用 HeatAI 供热智能客服</h2>
-      <p>我是您的供热服务助手，可以帮您解答供暖相关问题</p>
-      <div class="quick-questions">
-        <h4>您可以尝试问我：</h4>
-        <el-tag
-          v-for="q in quickQuestions"
-          :key="q"
-          class="quick-tag"
-          @click="handleQuickQuestion(q)"
-        >
-          {{ q }}
-        </el-tag>
-      </div>
-    </div>
-
-    <div v-else class="chat-messages" ref="messagesContainer">
-      <div
-        v-for="msg in messages"
-        :key="msg.id"
-        class="message-row"
-        :class="msg.role"
-      >
-        <div v-if="msg.role === 'assistant'" class="message-avatar">
-          <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
+  <div class="chat-container" :class="{ 'has-messages': messages.length > 0 }">
+    <div class="chat-body">
+      <div v-if="messages.length === 0" class="chat-welcome">
+        <div class="welcome-logo">
+          <div class="welcome-icon">🔥</div>
         </div>
-        <div class="message-bubble" :class="msg.role">
+        <h2>欢迎使用 HeatAI 供热智能客服</h2>
+        <p>我是您的供热服务助手，可以帮您解答供暖相关问题</p>
+        <div class="quick-questions">
+          <el-tag
+            v-for="q in quickQuestions"
+            :key="q"
+            class="quick-tag"
+            @click="handleQuickQuestion(q)"
+          >
+            {{ q }}
+          </el-tag>
+        </div>
+      </div>
+
+      <div v-else class="chat-messages" ref="messagesContainer">
+        <div class="messages-inner">
           <div
-            v-if="msg.role === 'assistant'"
-            class="message-text markdown-body"
-            v-html="renderMarkdown(msg.content)"
-          ></div>
-          <div v-else class="message-text">{{ msg.content }}</div>
-        </div>
-        <div v-if="msg.role === 'user'" class="message-avatar">
-          <el-avatar :size="32" icon="UserFilled" class="user-avatar" />
-        </div>
-      </div>
+            v-for="(msg, index) in messages"
+            :key="msg.id"
+            class="message-row"
+            :class="msg.role"
+            :style="{ animationDelay: `${index * 0.05}s` }"
+          >
+            <div class="message-bubble" :class="msg.role">
+              <div
+                v-if="msg.role === 'assistant'"
+                class="message-text markdown-body"
+                v-html="renderMarkdown(msg.content)"
+              ></div>
+              <div v-else class="message-text">{{ msg.content }}</div>
+            </div>
+          </div>
 
-      <div v-if="loading && streamingContent === ''" class="message-row assistant">
-        <div class="message-avatar">
-          <el-avatar :size="32" class="bot-avatar">AI</el-avatar>
-        </div>
-        <div class="message-bubble assistant thinking">
-          <span class="thinking-text">{{ statusMessage }}</span>
-          <span class="dot-pulse"></span>
+          <div v-if="loading && streamingContent === ''" class="message-row assistant thinking-row">
+            <div class="message-bubble assistant thinking">
+              <span class="thinking-text">{{ statusMessage || '正在思考' }}</span>
+              <span class="typing-dots">
+                <span class="typing-dot" :style="{ animationDelay: '0s' }"></span>
+                <span class="typing-dot" :style="{ animationDelay: '0.2s' }"></span>
+                <span class="typing-dot" :style="{ animationDelay: '0.4s' }"></span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="chat-input-area">
-      <el-input
-        v-model="inputMessage"
-        type="textarea"
-        :rows="2"
-        placeholder="请输入您的问题，Enter 发送，Shift+Enter 换行..."
-        resize="none"
-        :disabled="loading"
-        @keydown.enter.exact="handleSend"
-      />
-      <el-button
-        v-if="!loading"
-        type="primary"
-        :disabled="!inputMessage.trim()"
-        class="send-btn"
-        @click="handleSend"
-      >
-        发送
-      </el-button>
-      <el-button
-        v-else
-        type="danger"
-        class="stop-btn"
-        @click="handleStop"
-      >
-        停止
-      </el-button>
+      <div class="input-wrapper">
+        <el-input
+          v-model="inputMessage"
+          type="textarea"
+          :rows="1"
+          :autosize="{ minRows: 1, maxRows: 6 }"
+          placeholder="请输入您的问题，Enter 发送，Shift+Enter 换行..."
+          resize="none"
+          :disabled="loading"
+          class="chat-input"
+          @keydown.enter.exact="handleSend"
+        />
+        <button
+          v-if="!loading"
+          class="send-btn"
+          :disabled="!inputMessage.trim()"
+          title="发送消息"
+          @click="handleSend"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+          </svg>
+        </button>
+        <button
+          v-else
+          class="stop-btn"
+          title="停止生成"
+          @click="handleStop"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="4" y="4" width="16" height="16" rx="3" />
+          </svg>
+        </button>
+      </div>
+      <p class="input-hint">内容由AI生成，仅供参考</p>
     </div>
   </div>
 </template>
@@ -316,124 +327,156 @@ async function handleSend() {
   display: flex;
   flex-direction: column;
   background: #fafbfc;
+  font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* ========== Body Area (fills space above input) ========== */
+.chat-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========== Welcome Page (Empty State) ========== */
 .chat-welcome {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 40px 20px;
+}
+
+.welcome-logo {
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.3);
 }
 
 .welcome-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
+  font-size: 36px;
+  line-height: 1;
 }
 
 .chat-welcome h2 {
-  font-size: 24px;
+  font-size: 26px;
+  font-weight: 700;
   color: #1a1a2e;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  letter-spacing: -0.3px;
 }
 
 .chat-welcome p {
   font-size: 15px;
   color: #909399;
-  margin-bottom: 30px;
+  margin-bottom: 28px;
+  line-height: 1.6;
 }
 
 .quick-questions {
   text-align: center;
 }
 
-.quick-questions h4 {
-  font-size: 14px;
-  color: #606266;
-  margin-bottom: 12px;
-  font-weight: 500;
-}
-
 .quick-tag {
-  margin: 4px 6px;
+  margin: 5px 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s ease;
   border-radius: 20px;
-  padding: 6px 16px;
+  padding: 8px 18px;
   font-size: 13px;
+  border: 1px solid #e0e0e0;
+  background: #fff;
+  color: #606266;
 }
 
 .quick-tag:hover {
-  background-color: #ff6b35;
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
   color: #fff;
-  border-color: #ff6b35;
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.25);
 }
 
+/* ========== Messages Area ========== */
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 20px;
+}
+
+.messages-inner {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 4px;
 }
 
 .message-row {
   display: flex;
-  gap: 10px;
-  max-width: 85%;
+  width: 100%;
+  animation: fadeInUp 0.35s ease-out both;
 }
 
 .message-row.user {
-  align-self: flex-end;
-  flex-direction: row;
+  justify-content: flex-end;
 }
 
 .message-row.assistant {
-  align-self: flex-start;
+  justify-content: flex-start;
 }
 
-.message-avatar {
-  flex-shrink: 0;
+.thinking-row {
+  animation: fadeInUp 0.25s ease-out both;
 }
 
-.bot-avatar {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.user-avatar {
-  background: #1a1a2e;
-}
-
+/* ========== Message Bubbles ========== */
 .message-bubble {
-  padding: 10px 16px;
-  border-radius: 12px;
+  padding: 14px 20px;
+  border-radius: 16px;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.7;
   word-break: break-word;
+  max-width: 85%;
+  transition: box-shadow 0.2s ease;
 }
 
 .message-bubble.user {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
-  color: #fff;
-  border-bottom-right-radius: 4px;
+  background: #fff5ee;
+  color: #303133;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .message-bubble.assistant {
   background: #fff;
   color: #303133;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
+/* ========== Thinking Indicator ========== */
 .message-bubble.thinking {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 12px 20px;
 }
 
@@ -443,61 +486,173 @@ async function handleSend() {
   white-space: nowrap;
 }
 
-.dot-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ff6b35;
-  animation: dotPulse 1.2s infinite ease-in-out;
+.typing-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-@keyframes dotPulse {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.5;
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff6b35;
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
   }
-  40% {
-    transform: scale(1);
+  30% {
+    transform: translateY(-8px);
     opacity: 1;
   }
 }
 
+/* ========== Input Area (always at bottom) ========== */
 .chat-input-area {
+  padding: 12px 24px 16px;
+  background: transparent;
   display: flex;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid #ececec;
-  background: #fff;
+  flex-direction: column;
   align-items: center;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  max-width: 880px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e0e0e0;
+  padding: 6px 6px 6px 16px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-wrapper:focus-within {
+  border-color: #ff6b35;
+  box-shadow: 0 2px 16px rgba(255, 107, 53, 0.1);
+}
+
+.chat-input :deep(.el-textarea__inner) {
+  border: none !important;
+  box-shadow: none !important;
+  padding: 8px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.chat-input :deep(.el-textarea__inner):focus {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.chat-input :deep(.el-textarea__inner)::placeholder {
+  color: #b0b0b0;
+}
+
+.chat-input :deep(.el-textarea__inner)::-webkit-scrollbar {
+  display: none;
 }
 
 .send-btn {
-  height: 40px;
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   border: none;
-  border-radius: 20px;
-  padding: 0 24px;
-  font-size: 14px;
+  background: #e8e8e8;
+  color: #b0b0b0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  padding: 0;
 }
 
-.send-btn:hover {
-  background: linear-gradient(135deg, #e55d2b, #e6840e);
+.send-btn:not(:disabled) {
+  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.3);
+}
+
+.send-btn:not(:disabled):hover {
+  transform: scale(1.06);
+  box-shadow: 0 3px 10px rgba(255, 107, 53, 0.4);
+}
+
+.send-btn:not(:disabled):active {
+  transform: scale(0.96);
+}
+
+.send-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .stop-btn {
-  height: 40px;
-  background: #f56c6c;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   border: none;
-  border-radius: 20px;
-  padding: 0 24px;
-  font-size: 14px;
+  background: #f56c6c;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.3);
 }
 
 .stop-btn:hover {
   background: #e04040;
+  transform: scale(1.06);
+  box-shadow: 0 3px 10px rgba(245, 108, 108, 0.4);
 }
 
-/* ========== Markdown 渲染样式 ========== */
+.stop-btn:active {
+  transform: scale(0.96);
+}
+
+.input-hint {
+  font-size: 11px;
+  color: #c0c4cc;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* ========== Scrollbar (hidden) ========== */
+.chat-messages,
+.chat-body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-messages::-webkit-scrollbar,
+.chat-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* ========== Markdown Styles ========== */
 .markdown-body :deep(h1) {
   font-size: 20px;
   font-weight: 700;
@@ -606,7 +761,7 @@ async function handleSend() {
   border-radius: 6px;
 }
 
-/* ========== 代码块容器 ========== */
+/* ========== Code Block ========== */
 .markdown-body :deep(.code-block-wrapper) {
   margin: 12px 0;
   border: 1.5px solid #d0d0d0;

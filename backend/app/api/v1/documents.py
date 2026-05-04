@@ -31,7 +31,7 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-    if ext not in ("pdf", "docx", "doc", "html", "htm", "txt"):
+    if ext not in ("pdf", "docx", "html", "htm", "txt"):
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: .{ext}")
 
     file_bytes = await file.read()

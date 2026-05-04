@@ -257,12 +257,18 @@ class LongTermMemory:
         round_counter = existing.get("round_counter", 0) + 1
 
         has_api_key = bool(settings.DASHSCOPE_API_KEY)
-        should_llm = (
-            has_api_key
-            and round_counter % settings.MEMORY_EXTRACT_TRIGGER_ROUNDS == 0
+        is_trigger_round = (
+            round_counter % settings.MEMORY_EXTRACT_TRIGGER_ROUNDS == 0
         )
 
-        if should_llm:
+        if not is_trigger_round:
+            logger.info(f"[长期记忆] 第 {round_counter} 轮，非触发轮次（每 {settings.MEMORY_EXTRACT_TRIGGER_ROUNDS} 轮触发一次），仅更新计数器")
+            existing["round_counter"] = round_counter
+            existing["memory_last_updated"] = time.time()
+            await LongTermMemory.save(db, user_id, existing)
+            return False
+
+        if has_api_key:
             logger.info(f"[长期记忆] 第 {round_counter} 轮，触发 LLM 记忆提取")
             try:
                 conversation_text = _build_conversation_text(user_messages, assistant_messages)
@@ -669,9 +675,9 @@ async def _rebuild_summary(prefs: dict) -> dict:
 
 
 def _filter_idle(text: str) -> str | None:
-    stripped = text.strip().lower().rstrip("!！。.?？")
+    stripped = text.strip().rstrip("!！。.?？")
     for pattern in IDLE_PATTERNS:
-        if stripped == pattern.lower():
+        if stripped == pattern:
             return None
     if len(stripped) < 4:
         return None

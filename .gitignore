@@ -61,6 +61,6 @@ desktop.ini
 # ===================
 # HeatAI - 运行时数据
 # ===================
-models/
+/models/
 milvus_data/
 uploads/

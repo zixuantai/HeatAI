@@ -80,12 +80,29 @@ class TextChunker:
 
     def _force_split(self, para: str, base_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         chunks = []
-        step = self.chunk_size - self.chunk_overlap
-        if step < 1:
-            step = 1
-        for i in range(0, len(para), step):
-            chunk_text = para[i:i+self.chunk_size]
-            chunks.append({"content": chunk_text, "metadata": base_meta.copy()})
+        sentences = re.split(r"(?<=[。！？.!?])\s*", para)
+        current_text = ""
+        for sent in sentences:
+            sent = sent.strip()
+            if not sent:
+                continue
+            if len(current_text) + len(sent) + 1 <= self.chunk_size:
+                current_text += sent if not current_text else " " + sent
+            else:
+                if current_text:
+                    chunks.append({"content": current_text, "metadata": base_meta.copy()})
+                if len(sent) > self.chunk_size:
+                    step = self.chunk_size - self.chunk_overlap
+                    if step < 1:
+                        step = 1
+                    for i in range(0, len(sent), step):
+                        chunk_text = sent[i:i + self.chunk_size]
+                        chunks.append({"content": chunk_text, "metadata": base_meta.copy()})
+                    current_text = ""
+                else:
+                    current_text = sent
+        if current_text.strip():
+            chunks.append({"content": current_text, "metadata": base_meta.copy()})
         return chunks
 
     def _split_long_sentences(self, chunks_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -116,7 +116,7 @@ class QueryRewriterService:
         try:
             response = await asyncio.to_thread(
                 Generation.call,
-                model=settings.DASHSCOPE_MODEL,
+                model=settings.MEMORY_LLM_MODEL,
                 messages=messages,
                 result_format="message",
                 api_key=settings.DASHSCOPE_API_KEY

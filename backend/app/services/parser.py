@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 
 class DocumentParser:
-    SUPPORTED_TYPES = {"pdf", "docx", "doc", "html", "htm", "txt"}
+    SUPPORTED_TYPES = {"pdf", "docx", "html", "htm", "txt"}
 
     @staticmethod
     def parse(file_bytes: bytes, filename: str) -> Tuple[str, str]:
@@ -13,7 +13,7 @@ class DocumentParser:
 
         if ext == "pdf":
             return DocumentParser._parse_pdf(file_bytes, filename)
-        elif ext in ("docx", "doc"):
+        elif ext in ("docx",):
             return DocumentParser._parse_docx(file_bytes, filename)
         elif ext in ("html", "htm"):
             return DocumentParser._parse_html(file_bytes, filename)
