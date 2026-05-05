@@ -1,6 +1,11 @@
-from app.services.memory.short_term import ShortTermMemory, short_term_memory
-from app.services.memory.long_term import LongTermMemory, long_term_memory
-from app.services.memory.context_builder import ContextBuilder, context_builder
+try:
+    from app.services.memory.short_term import ShortTermMemory, short_term_memory
+    from app.services.memory.long_term import LongTermMemory, long_term_memory
+    from app.services.memory.context_builder import ContextBuilder, context_builder
+except ModuleNotFoundError:
+    from backend.app.services.memory.short_term import ShortTermMemory, short_term_memory
+    from backend.app.services.memory.long_term import LongTermMemory, long_term_memory
+    from backend.app.services.memory.context_builder import ContextBuilder, context_builder
 
 __all__ = [
     "ShortTermMemory",

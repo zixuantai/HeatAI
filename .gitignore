@@ -73,4 +73,10 @@ eval/*.log
 
 # 示例文件
 eval/demo_*.py
+eval/_fix_*.py
 eval/eval_data/sample_*.json
+
+# ===================
+# HeatAI - 爬虫运行时产物
+# ===================
+crawler/docs_downloaded/

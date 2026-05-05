@@ -1,16 +1,17 @@
 """
-Ragas 端到端 RAG 评估指标封装
+Ragas 端到端 RAG 评估指标封装 (兼容 Ragas >= 0.4.0)
 
 将 DashScope 评判 LLM 接入 Ragas，实现：
 - Faithfulness (忠实度)
 - Answer Relevancy (回答相关性)
 - Context Precision (上下文精准度)
 - Context Recall (上下文召回率)
-- Context Relevancy (上下文相关性)
 
-可选（需要 ground_truth）:
+可选（需要 ground_truth/reference）:
 - Answer Correctness (准确性)
 - Answer Similarity (语义相似度)
+
+注意: Context Relevancy 在 Ragas 0.4.x 中已移除。
 """
 
 import logging
@@ -27,6 +28,56 @@ from eval.judge.dashscope_llm import DashScopeLLM
 
 logger = logging.getLogger(__name__)
 
+_RAGAS_VERSION = None
+
+
+def _get_ragas_version() -> int:
+    global _RAGAS_VERSION
+    if _RAGAS_VERSION is not None:
+        return _RAGAS_VERSION
+    try:
+        import ragas
+        ver = ragas.__version__
+        major = int(ver.split(".")[0])
+        _RAGAS_VERSION = major
+        return major
+    except Exception:
+        _RAGAS_VERSION = 0
+        return 0
+
+
+def _import_metrics(metric_names: list[str]) -> list:
+    major = _get_ragas_version()
+    if major >= 1:
+        raise NotImplementedError("Ragas >= 1.0 not yet supported")
+
+    from ragas.metrics import (
+        _faithfulness,
+        _context_precision,
+        _context_recall,
+        _answer_correctness,
+        _answer_similarity,
+    )
+    from ragas.metrics._answer_relevance import answer_relevancy
+
+    metric_map = {
+        "faithfulness": _faithfulness,
+        "answer_relevancy": answer_relevancy,
+        "context_precision": _context_precision,
+        "context_recall": _context_recall,
+        "answer_correctness": _answer_correctness,
+        "answer_similarity": _answer_similarity,
+    }
+
+    selected = []
+    for name in metric_names:
+        m = metric_map.get(name)
+        if m is not None:
+            selected.append(m)
+        else:
+            logger.warning(f"Metric '{name}' not available in Ragas {major}.x, skipped")
+    return selected
+
 
 @dataclass
 class RagasScore:
@@ -36,7 +87,6 @@ class RagasScore:
     answer_relevancy: float = 0.0
     context_precision: float = 0.0
     context_recall: float = 0.0
-    context_relevancy: float = 0.0
     answer_correctness: float | None = None
     answer_similarity: float | None = None
     category: str = ""
@@ -52,22 +102,27 @@ class RagasResult:
     num_samples: int = 0
 
     def to_dict(self) -> dict[str, Any]:
+        per_sample = []
+        for s in self.scores:
+            item = {
+                "question": s.question[:60],
+                "faithfulness": round(s.faithfulness, 4),
+                "answer_relevancy": round(s.answer_relevancy, 4),
+                "context_precision": round(s.context_precision, 4),
+                "context_recall": round(s.context_recall, 4),
+                "category": s.category,
+            }
+            if s.answer_correctness is not None:
+                item["answer_correctness"] = round(s.answer_correctness, 4)
+            if s.answer_similarity is not None:
+                item["answer_similarity"] = round(s.answer_similarity, 4)
+            per_sample.append(item)
+
         return {
             "mean_scores": self.mean_scores,
             "num_samples": self.num_samples,
             "elapsed_seconds": round(self.elapsed_seconds, 1),
-            "per_sample": [
-                {
-                    "question": s.question[:60],
-                    "faithfulness": round(s.faithfulness, 4),
-                    "answer_relevancy": round(s.answer_relevancy, 4),
-                    "context_precision": round(s.context_precision, 4),
-                    "context_recall": round(s.context_recall, 4),
-                    "context_relevancy": round(s.context_relevancy, 4),
-                    "category": s.category,
-                }
-                for s in self.scores
-            ],
+            "per_sample": per_sample,
         }
 
 
@@ -136,25 +191,16 @@ class RagasEvaluator:
 
         Args:
             eval_dataset: 包含 question, answer, contexts 的评估数据集
-            metrics: 要计算的指标列表，默认全部
+            metrics: 要计算的指标列表，默认 f_ar_cp_cr (不含需要 reference 的指标)
             batch_size: 批处理大小
 
         Returns:
             RagasResult 评估结果
         """
         from ragas import evaluate as ragas_evaluate
-        from ragas.metrics import (
-            faithfulness,
-            answer_relevancy,
-            context_precision,
-            context_recall,
-            context_relevancy,
-            answer_correctness,
-            answer_similarity,
-        )
 
         if metrics is None:
-            metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall", "context_relevancy"]
+            metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
 
         if batch_size is None:
             batch_size = eval_settings.EVAL_BATCH_SIZE
@@ -166,17 +212,7 @@ class RagasEvaluator:
         hf_ds = self._to_hf_dataset(eval_dataset)
         judge = self._get_judge()
 
-        metric_map = {
-            "faithfulness": faithfulness,
-            "answer_relevancy": answer_relevancy,
-            "context_precision": context_precision,
-            "context_recall": context_recall,
-            "context_relevancy": context_relevancy,
-            "answer_correctness": answer_correctness,
-            "answer_similarity": answer_similarity,
-        }
-        selected_metrics = [metric_map[m] for m in metrics if m in metric_map]
-
+        selected_metrics = _import_metrics(metrics)
         if not selected_metrics:
             logger.warning("未选择任何有效指标")
             return RagasResult(num_samples=len(eval_dataset))
@@ -191,7 +227,8 @@ class RagasEvaluator:
             "llm": judge,
         }
 
-        if "answer_similarity" in metrics or "answer_correctness" in metrics:
+        need_embedding = any(m in metrics for m in ("answer_similarity", "answer_correctness"))
+        if need_embedding:
             eval_kwargs["embeddings"] = self._get_embedding()
 
         try:
@@ -212,7 +249,6 @@ class RagasEvaluator:
                 answer_relevancy=float(row.get("answer_relevancy", 0) or 0),
                 context_precision=float(row.get("context_precision", 0) or 0),
                 context_recall=float(row.get("context_recall", 0) or 0),
-                context_relevancy=float(row.get("context_relevancy", 0) or 0),
                 answer_correctness=float(row.get("answer_correctness", 0)) if "answer_correctness" in row else None,
                 answer_similarity=float(row.get("answer_similarity", 0)) if "answer_similarity" in row else None,
                 category=eval_dataset[i].get("category", ""),

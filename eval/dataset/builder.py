@@ -56,14 +56,14 @@ class EvalDataset:
         return [r.get("category", "未分类") for r in self.records]
 
     def to_ragas_dict(self) -> dict[str, list[Any]]:
-        """转为 Ragas 评估所需的 dict 格式"""
-        data: dict[str, list[Any]] = {"question": [], "answer": [], "contexts": []}
+        """转为 Ragas 评估所需的 dict 格式 (0.4.x column names)"""
+        data: dict[str, list[Any]] = {"user_input": [], "response": [], "retrieved_contexts": []}
         for r in self.records:
-            data["question"].append(r["question"])
-            data["answer"].append(r.get("answer", ""))
-            data["contexts"].append(r.get("contexts", []))
+            data["user_input"].append(r["question"])
+            data["response"].append(r.get("answer", ""))
+            data["retrieved_contexts"].append(r.get("contexts", []))
         if any(r.get("ground_truth") for r in self.records):
-            data["ground_truth"] = [r.get("ground_truth", "") for r in self.records]
+            data["reference"] = [r.get("ground_truth", "") for r in self.records]
         return data
 
     def to_pandas(self) -> pd.DataFrame:

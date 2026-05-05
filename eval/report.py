@@ -632,7 +632,7 @@ class EvalReport:
             )
 
             if ragas_result.scores:
-                metric_names = ["faithfulness", "answer_relevancy", "context_precision", "context_recall", "context_relevancy"]
+                metric_names = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
                 scores_list = []
                 valid_names = []
                 for m in metric_names:

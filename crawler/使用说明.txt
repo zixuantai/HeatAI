@@ -1,0 +1,270 @@
+================================================================
+  HeatAI 供热行业公开文档合规爬虫 - 使用说明
+  版本: 2.0
+  更新: 2026-05-05
+================================================================
+
+目录
+  一、项目简介
+  二、环境准备
+  三、命令说明
+  四、文档获取方式
+  五、模块说明
+  六、配置说明
+  七、文档清单说明
+  八、合规声明
+  九、常见问题
+
+================================================================
+一、项目简介
+================================================================
+
+本爬虫用于从政府网站、行业协会等公开渠道合法合规地下载
+供热行业相关文档，包括：
+
+  - 国家标准/行业标准（GB 55010-2021、CJJ/T 34-2022等）
+  - 各省市供热管理条例（覆盖15个北方城市）
+  - 便民服务指南（报修电话、投诉渠道、供暖温度标准）
+  - 供热行业知识参考文档（FAQ、标准清单、速查表）
+
+支持格式：PDF、DOCX、DOC、HTML、HTM、SHTML、SHTM、TXT
+
+================================================================
+二、环境准备
+================================================================
+
+1. 确保已安装 Python 3.10+
+2. 安装依赖：
+
+   cd crawl
+   pip install -r requirements.txt
+
+   所需包：requests, pdfplumber, python-docx, beautifulsoup4, lxml
+
+================================================================
+三、命令说明
+================================================================
+
+所有命令均在项目根目录下执行（E:\project\LLM\HeatAI）。
+
+------ 3.1 direct —— 主力命令：直接下载已验证的文档 ------
+
+   python -m crawler.main direct
+
+   从预置的46条直链中下载供热行业公开文档。
+   覆盖：7份国家标准 + 33份地方条例 + 5份便民指南 + 1份政策文件
+
+   子选项：
+
+   python -m crawler.main direct --category standard
+   → 仅下载标准规范类（GB/CJJ等）
+
+   python -m crawler.main direct --category regulation
+   → 仅下载地方法规类（各城市供热条例）
+
+   python -m crawler.main direct --category service
+   → 仅下载便民服务指南类
+
+------ 3.2 scan —— 扫描已有文件入库 ------
+
+   python -m crawler.main scan
+
+   扫描 docs_downloaded/ 目录中所有文档文件，
+   解析文本并写入 manifest.csv 清单。
+
+   适用场景：手动下载的文档放入该目录后，运行此命令入库。
+
+   子选项：
+
+   python -m crawler.main scan --dir ./my_docs
+   → 扫描指定目录
+
+------ 3.3 crawl —— 从网站入口页面爬取链接 ------
+
+   python -m crawler.main crawl
+
+   从 sites.py 中配置的网站入口页面爬取文档链接并下载。
+   注意：政府网站多有反爬机制，此命令适用性有限，
+   推荐优先使用 direct 命令。
+
+   子选项：
+
+   python -m crawler.main crawl --category policy
+   → 仅政策法规类站点
+
+------ 3.4 stats —— 查看统计 ------
+
+   python -m crawler.main stats
+
+   显示已下载文档数量、清单条目数、下载目录等统计信息。
+
+------ 3.5 export —— 导出清单 ------
+
+   python -m crawler.main export
+
+   将 manifest.csv 导出为 manifest.json（JSON格式）。
+
+   python -m crawler.main export --format txt
+   → 导出为 TXT 格式
+
+------ 3.6 list —— 列出所有站点 ------
+
+   python -m crawler.main list
+
+   显示 sites.py 中配置的所有目标网站及其启用状态。
+
+------ 3.7 test —— 测试单个 URL ------
+
+   python -m crawler.main test --url https://example.com/
+
+   测试某个 URL 是否可访问，以及能从中提取多少文档链接。
+
+================================================================
+四、文档获取方式（推荐工作流）
+================================================================
+
+方式一：自动下载（推荐首选）
+
+   python -m crawler.main direct
+
+   → 自动下载46条直链中的可用文档到 docs_downloaded/
+
+方式二：手动下载 + 扫描入库
+
+   1. 从政府网站、协会网站手动下载供热相关 PDF/Word 文档
+   2. 将文档放入 crawler/docs_downloaded/ 目录
+   3. 运行：
+      python -m crawler.main scan
+   4. 运行：
+      python -m crawler.main export --format json
+
+   扫描命令会自动解析文本内容，生成文档清单。
+
+方式三：完整工作流（定期更新推荐）
+
+   1. 首次运行 direct 下载所有可用文档
+   2. 手动搜索补充遗漏的文档，放入 docs_downloaded/
+   3. 运行 scan 扫描新文件入库
+   4. 运行 stats 查看统计
+   5. 运行 export 导出 JSON 清单供知识库使用
+
+================================================================
+五、模块说明
+================================================================
+
+crawler/
+├── main.py              → 命令行入口，所有命令的调度中心
+├── config.py            → 全局配置（速率、目录、关键词等）
+├── direct_urls.py       → 直链库（46条已验证的供热文档URL）
+├── fetcher.py           → HTTP抓取器（含robots.txt检查、限速）
+├── document_parser.py   → 文档解析器（PDF/Word/HTML/TXT→纯文本）
+├── scheduler.py         → 调度器（下载、解析、断点续抓、清单管理）
+├── sites.py             → 目标网站配置（入口页面+关键词过滤）
+├── requirements.txt     → Python依赖声明
+├── docs_downloaded/     → 文档存储目录
+│   ├── manifest.csv     → 文档清单（CSV格式）
+│   ├── manifest.json    → 文档清单（JSON格式，export命令生成）
+│   ├── checkpoint.json  → 断点续抓状态
+│   └── crawler.log      → 运行日志
+└── 使用说明.txt          → 本文件
+
+================================================================
+六、配置说明（config.py）
+================================================================
+
+如需调整行为，编辑 crawler/config.py：
+
+  REQUEST_DELAY_MIN = 2.0    → 最小请求间隔(秒)
+  REQUEST_DELAY_MAX = 5.0    → 最大请求间隔(秒)
+  REQUEST_TIMEOUT    = 30    → 请求超时(秒)
+  MAX_RETRIES        = 3     → 最大重试次数
+  MAX_LINKS_PER_SITE = 50    → 每站点最多下载链接数
+  DOWNLOAD_DIR       → 文档存储目录
+
+  SEARCH_KEYWORDS    → 供热行业关键词列表（用于链接过滤）
+
+================================================================
+七、文档清单说明（manifest.csv）
+================================================================
+
+每行记录包含以下字段：
+
+  字段名          说明
+  filename        文件名
+  source_url      来源URL（可追溯）
+  source_site     来源站点名称
+  category        分类（standard/regulation/service/manual等）
+  doc_format      文档格式（pdf/doc/html/txt等）
+  title           文档标题（自动提取）
+  text_length     提取的文本字符数
+  parse_status    解析状态（success/partial/failed）
+  fetched_at      抓取/导入时间
+
+================================================================
+八、合规声明
+================================================================
+
+本爬虫严格遵守以下原则：
+
+  1. robots.txt 检查 —— 每次请求前自动检查目标网站的
+     robots.txt，遵循 Disallow 规则和 Crawl-Delay 设置。
+
+  2. 速率限制 —— 每次请求间隔 2~5 秒，避免对服务器造成压力。
+
+  3. 仅爬取公开内容 —— 不绕过登录、验证码、会员限制等。
+
+  4. 版权尊重 —— 不抓取付费内容、版权受限文档。
+     标准全文受版权保护，请从官方渠道合法获取。
+
+  5. 来源可追溯 —— 每条记录标注来源URL和抓取时间。
+
+  6. 日志完整 —— 所有操作均有日志记录，可审计可监控。
+
+================================================================
+九、常见问题
+================================================================
+
+Q: 为什么有些链接下载失败？
+A: 可能原因：(1) 目标网站有反爬机制（403禁止访问）
+   (2) SSL证书过期（如乌鲁木齐某站点）
+   (3) 服务端错误（500/502/503）
+   (4) 文档格式损坏（如CJJ 28-2014 PDF无法解析）
+   建议：手动浏览器访问该URL下载后放入 docs_downloaded/，
+   然后运行 python -m crawler.main scan 入库。
+
+Q: 为什么下载的是HTML而不是PDF？
+A: 有些链接指向的是标准公告页面，PDF是页面中的"附件下载"。
+   爬虫会自动提取附件链接并下载。
+   部分页面因JavaScript动态加载无法提取PDF附件。
+
+Q: 如何添加新的文档链接？
+A: 编辑 crawler/direct_urls.py，按现有格式添加 DirectDoc，
+   然后重新运行 python -m crawler.main direct。
+
+Q: 如何添加新的爬取站点？
+A: 编辑 crawler/sites.py，按现有格式添加 SiteConfig。
+
+Q: 手动下载的文档放在哪里？
+A: 放在 crawler/docs_downloaded/ 目录下，
+   然后运行 python -m crawler.main scan 解析入库。
+
+Q: 清单文件在哪里？
+A: crawler/docs_downloaded/manifest.csv（CSV格式）
+   crawler/docs_downloaded/manifest.json（JSON格式，需运行export）
+
+================================================================
+  快捷命令汇总
+================================================================
+
+  python -m crawler.main direct               → 主力下载
+  python -m crawler.main direct -c standard   → 仅下载标准
+  python -m crawler.main scan                 → 扫描入库
+  python -m crawler.main scan -d ./目录       → 扫描指定目录
+  python -m crawler.main crawl                → 网站爬取
+  python -m crawler.main stats                → 查看统计
+  python -m crawler.main export               → 导出JSON清单
+  python -m crawler.main export -f txt        → 导出TXT清单
+  python -m crawler.main list                 → 站点列表
+  python -m crawler.main test -u URL          → 测试URL
+
+================================================================

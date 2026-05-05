@@ -151,7 +151,7 @@ def cmd_report(result_path: str, prefix: str = "dashboard"):
 
         per_sample = ragas_data.get("per_sample", [])
         if per_sample:
-            metric_names = ["faithfulness", "answer_relevancy", "context_precision", "context_recall", "context_relevancy"]
+            metric_names = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
             scores_list = []
             valid_names = []
             for m in metric_names:
