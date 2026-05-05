@@ -49,19 +49,22 @@
       </div>
     </div>
 
+    <div class="upload-notice">
+      <el-icon :size="16"><InfoFilled /></el-icon>
+      <span>上传文档后需经过解析、分块、向量化等处理步骤，请耐心等待</span>
+    </div>
+
     <div v-if="uploadingFiles.length > 0" class="upload-progress-section">
       <div v-for="uf in uploadingFiles" :key="uf.name" class="upload-progress-item">
         <div class="upload-progress-info">
           <el-icon><Document /></el-icon>
           <span class="upload-progress-name">{{ uf.name }}</span>
           <el-tag v-if="uf.status === 'uploading'" type="warning" size="small">处理中</el-tag>
-          <el-tag v-else-if="uf.status === 'success'" type="success" size="small">完成</el-tag>
-          <el-tag v-else type="danger" size="small">失败</el-tag>
+          <el-tag v-else type="success" size="small">完成</el-tag>
         </div>
         <div v-if="uf.status === 'uploading'" class="upload-progress-bar">
           <div class="upload-progress-fill"></div>
         </div>
-        <p v-if="uf.error" class="upload-progress-error">{{ uf.error }}</p>
       </div>
     </div>
 
@@ -87,9 +90,16 @@
         highlight-current-row
       >
         <el-table-column prop="original_filename" label="文件名" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="file_type" label="类型" width="80">
+        <el-table-column label="类型" width="110">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.file_type.toUpperCase() }}</el-tag>
+            <div class="file-type-cell">
+              <el-icon :size="18" :color="getFileTypeColor(row.file_type)">
+                <component :is="getFileTypeIcon(row.file_type)" />
+              </el-icon>
+              <span :style="{ color: getFileTypeColor(row.file_type) }" class="file-type-text">
+                {{ row.file_type.toUpperCase() }}
+              </span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="大小" width="100">
@@ -98,15 +108,6 @@
           </template>
         </el-table-column>
         <el-table-column prop="chunk_count" label="分块数" width="80" align="center" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag v-if="row.status === 'completed'" type="success" size="small">已完成</el-tag>
-            <el-tag v-else-if="row.status === 'processing'" type="warning" size="small">处理中</el-tag>
-            <el-tooltip v-else :content="row.error_message" placement="top">
-              <el-tag type="danger" size="small">失败</el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
         <el-table-column prop="created_at" label="上传时间" width="170">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
@@ -129,6 +130,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @current-change="handlePageChange"
+          @size-change="handleSizeChange"
+        />
+      </div>
     </div>
 
     <el-dialog
@@ -155,7 +169,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  FolderOpened, UploadFilled, Document, Delete, Refresh, Search
+  FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled
 } from '@element-plus/icons-vue'
 import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
 import type { DocumentInfo, ChunkInfo } from '@/types'
@@ -181,6 +195,33 @@ interface UploadingFile {
 
 const uploadingFiles = ref<UploadingFile[]>([])
 
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+function getFileTypeIcon(fileType: string): string {
+  const map: Record<string, string> = {
+    pdf: 'PictureFilled',
+    docx: 'Document',
+    doc: 'Document',
+    html: 'Monitor',
+    htm: 'Monitor',
+    txt: 'Memo',
+  }
+  return map[fileType.toLowerCase()] || 'Document'
+}
+
+function getFileTypeColor(fileType: string): string {
+  const map: Record<string, string> = {
+    pdf: '#e74c3c',
+    docx: '#2b579a',
+    doc: '#2b579a',
+    html: '#e67e22',
+    htm: '#e67e22',
+    txt: '#7f8c8d',
+  }
+  return map[fileType.toLowerCase()] || '#909399'
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -197,7 +238,8 @@ function formatDate(dateStr: string): string {
 async function loadDocuments(search?: string) {
   loading.value = true
   try {
-    const res = await getDocumentsApi(200, 0, search)
+    const offset = (currentPage.value - 1) * pageSize.value
+    const res = await getDocumentsApi(pageSize.value, offset, search)
     documents.value = res.items
     total.value = res.total
   } catch {
@@ -215,16 +257,18 @@ async function uploadFile(file: File) {
     await uploadDocumentApi(file)
     uf.status = 'success'
     ElMessage.success(`"${file.name}" 上传并处理成功`)
+    currentPage.value = 1
     await loadDocuments()
   } catch (e: unknown) {
-    uf.status = 'error'
-    uf.error = (e as { message?: string })?.message || '处理失败'
-    ElMessage.error(`"${file.name}" 处理失败: ${uf.error}`)
-  } finally {
-    setTimeout(() => {
-      uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== uf.name)
-    }, 3000)
+    const errMsg = (e as { message?: string })?.message || '处理失败'
+    ElMessage.error(`"${file.name}" 上传失败: ${errMsg}，请重试`)
+    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== uf.name)
+    return
   }
+
+  setTimeout(() => {
+    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== uf.name)
+  }, 3000)
 }
 
 function handleDrop(e: DragEvent) {
@@ -250,9 +294,11 @@ function handleFileSelect() {
 async function handleDelete(id: string) {
   try {
     await deleteDocumentApi(id)
-    documents.value = documents.value.filter(d => d.id !== id)
-    total.value--
     ElMessage.success('文档已删除')
+    if (documents.value.length === 1 && currentPage.value > 1) {
+      currentPage.value--
+    }
+    await loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
   } catch (e: unknown) {
     const msg = (e as { message?: string })?.message || '删除失败'
     ElMessage.error(msg)
@@ -277,6 +323,7 @@ async function handleSearch() {
   const q = searchQuery.value.trim()
   if (q) {
     isSearching.value = true
+    currentPage.value = 1
     await loadDocuments(q)
   }
 }
@@ -284,7 +331,19 @@ async function handleSearch() {
 async function handleClearSearch() {
   searchQuery.value = ''
   isSearching.value = false
+  currentPage.value = 1
   await loadDocuments()
+}
+
+function handlePageChange(page: number) {
+  currentPage.value = page
+  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
+}
+
+function handleSizeChange(size: number) {
+  pageSize.value = size
+  currentPage.value = 1
+  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
 }
 
 onMounted(() => {
@@ -358,6 +417,21 @@ onMounted(() => {
   font-size: 12px;
   color: #c0c4cc;
   margin: 0;
+}
+
+.upload-notice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 24px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #fff7e6, #fff3d6);
+  border: 1px solid #ffd666;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #d48806;
+  font-weight: 500;
 }
 
 .upload-progress-section {
@@ -520,5 +594,23 @@ onMounted(() => {
 
 .search-btn:hover {
   opacity: 0.9;
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 4px;
+}
+
+.file-type-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-type-text {
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>
