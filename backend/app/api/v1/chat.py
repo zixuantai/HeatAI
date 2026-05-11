@@ -126,23 +126,38 @@ async def ask(
                 "rewritten_query": req.message,
                 "expanded_queries": []
             }
-        else:
-            rewrite_result = await query_rewriter.rewrite(req.message)
-        _log_rewrite_result(rewrite_result)
+            _log_rewrite_result(rewrite_result)
 
-        if need_kb:
-            search_query = rewrite_result["rewritten_query"]
-            search_results = await asyncio.to_thread(
-                reranker_service.search_and_rerank, search_query
+            if need_kb:
+                search_results = await asyncio.to_thread(
+                    reranker_service.search_and_rerank, req.message
+                )
+                if search_results:
+                    logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+            else:
+                search_results = []
+
+            ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+        else:
+            ctx_task = asyncio.create_task(
+                context_builder.build(db, session_id, current_user.id, req.message)
             )
-            search_results = await _merge_expanded_results(search_results, rewrite_result)
-            if search_results:
-                logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
-        else:
-            logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
-            search_results = []
 
-        ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+            rewrite_result = await query_rewriter.rewrite(req.message)
+            _log_rewrite_result(rewrite_result)
+
+            if need_kb:
+                search_query = rewrite_result["rewritten_query"]
+                search_results = await asyncio.to_thread(
+                    reranker_service.search_and_rerank, search_query
+                )
+                search_results = await _merge_expanded_results(search_results, rewrite_result)
+                if search_results:
+                    logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+            else:
+                search_results = []
+
+            ctx = await ctx_task
 
         result = await chat_service.ask(req.message, ctx.messages, search_results)
 

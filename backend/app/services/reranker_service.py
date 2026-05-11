@@ -292,30 +292,49 @@ class RerankerService:
         if not results:
             return results
 
+        chunk_requests: List[tuple] = []
+        for r in results:
+            doc_id = r.get("document_id", "")
+            chunk_idx = r.get("chunk_index", 0)
+            if doc_id:
+                chunk_requests.append((doc_id, chunk_idx))
+
+        if not chunk_requests:
+            return results
+
+        filter_parts = []
+        for doc_id, chunk_idx in chunk_requests:
+            filter_parts.append(
+                f'(document_id == "{doc_id}" && (chunk_index == {chunk_idx - 1} || chunk_index == {chunk_idx + 1}))'
+            )
+        combined_filter = " || ".join(filter_parts)
+
+        try:
+            all_neighbors = milvus_service._client.query(
+                collection_name=settings.MILVUS_COLLECTION_NAME,
+                filter=combined_filter,
+                output_fields=["content", "chunk_index", "document_id"],
+                limit=len(chunk_requests) * 2,
+            )
+        except Exception:
+            return results
+
+        neighbor_map: Dict[str, Dict[str, str]] = {}
+        for nc in all_neighbors:
+            key = f"{nc.get('document_id', '')}_{nc.get('chunk_index', 0)}"
+            neighbor_map[key] = nc.get("content", "")
+
         for r in results:
             doc_id = r.get("document_id", "")
             chunk_idx = r.get("chunk_index", 0)
             if not doc_id:
                 continue
 
-            try:
-                expr = f'document_id == "{doc_id}" && (chunk_index == {chunk_idx - 1} || chunk_index == {chunk_idx + 1})'
-                neighbor_chunks = milvus_service._client.query(
-                    collection_name=settings.MILVUS_COLLECTION_NAME,
-                    filter=expr,
-                    output_fields=["content", "chunk_index"],
-                    limit=2,
-                )
-            except Exception:
-                continue
+            prev_key = f"{doc_id}_{chunk_idx - 1}"
+            next_key = f"{doc_id}_{chunk_idx + 1}"
 
-            prev_content = ""
-            next_content = ""
-            for nc in neighbor_chunks:
-                if nc.get("chunk_index") == chunk_idx - 1:
-                    prev_content = nc.get("content", "")[:200]
-                elif nc.get("chunk_index") == chunk_idx + 1:
-                    next_content = nc.get("content", "")[:200]
+            prev_content = neighbor_map.get(prev_key, "")[:200]
+            next_content = neighbor_map.get(next_key, "")[:200]
 
             if prev_content:
                 r["adjacent_prev"] = prev_content

@@ -1,3 +1,4 @@
+import os
 from pydantic_settings import BaseSettings
 from typing import Optional
 
@@ -20,11 +21,13 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     DASHSCOPE_API_KEY: str = ""
-    DASHSCOPE_MODEL: str = "qwen3-max"
+    DASHSCOPE_MODEL: str = "qwen-max"
 
     MILVUS_URI: str = ""
     MILVUS_TOKEN: str = ""
     MILVUS_COLLECTION_NAME: str = "knowledge_base"
+
+    MODELS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "..", "..", "models")
 
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
     EMBEDDING_DEVICE: str = "cpu"
@@ -40,8 +43,8 @@ class Settings(BaseSettings):
     HYBRID_BM25_WEIGHT: float = 0.4
     HYBRID_VECTOR_WEIGHT: float = 0.6
 
-    RERANK_RECALL_TOP_K: int = 50
-    RERANK_COARSE_TOP_K: int = 20
+    RERANK_RECALL_TOP_K: int = 20
+    RERANK_COARSE_TOP_K: int = 10
     RERANK_FINAL_TOP_K: int = 8
     RERANK_BM25_WEIGHT: float = 0.3
     RERANK_BGE_WEIGHT: float = 0.7

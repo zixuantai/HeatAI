@@ -3,13 +3,50 @@ import os
 import threading
 from typing import List, Tuple
 
+from app.core.tokenizer_patch import apply_tokenizer_patch
+
+apply_tokenizer_patch()
+
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 _MODELS_DIR = os.path.join(_PROJECT_ROOT, "models")
 os.environ.setdefault("HF_HUB_CACHE", _MODELS_DIR)
 os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(_MODELS_DIR, "transformers"))
+os.environ["HF_HUB_OFFLINE"] = "1"
 os.makedirs(_MODELS_DIR, exist_ok=True)
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_local_reranker(settings_model_dir: str, model_name: str) -> str:
+    models_dir = os.path.abspath(settings_model_dir)
+    model_slug = model_name.split("/")[-1]
+    local_candidate = os.path.join(models_dir, model_slug)
+    if os.path.isdir(local_candidate):
+        config_file = os.path.join(local_candidate, "config.json")
+        model_file = os.path.join(local_candidate, "model.safetensors")
+        pytorch_file = os.path.join(local_candidate, "pytorch_model.bin")
+        if os.path.isfile(config_file) and (os.path.isfile(model_file) or os.path.isfile(pytorch_file)):
+            logger.info(f"Using local reranker model: {local_candidate}")
+            return local_candidate
+
+    hf_cache_candidate = os.path.join(models_dir, f"models--{model_name.replace('/', '--')}")
+    if os.path.isdir(hf_cache_candidate):
+        snapshots_dir = os.path.join(hf_cache_candidate, "snapshots")
+        if os.path.isdir(snapshots_dir):
+            for snapshot in sorted(os.listdir(snapshots_dir), reverse=True):
+                snapshot_path = os.path.join(snapshots_dir, snapshot)
+                config_file = os.path.join(snapshot_path, "config.json")
+                model_file = os.path.join(snapshot_path, "model.safetensors")
+                pytorch_file = os.path.join(snapshot_path, "pytorch_model.bin")
+                if os.path.isfile(config_file) and (os.path.isfile(model_file) or os.path.isfile(pytorch_file)):
+                    logger.info(f"Using local reranker model from HF cache: {snapshot_path}")
+                    return snapshot_path
+
+    if os.path.isabs(model_name) and os.path.isdir(model_name):
+        return model_name
+
+    logger.info(f"No local reranker model found, will use: {model_name}")
+    return model_name
 
 
 class CrossRerankerService:
@@ -37,9 +74,11 @@ class CrossRerankerService:
             model_name = settings.RERANKER_MODEL
             device = settings.RERANKER_DEVICE
 
-            logger.info(f"Loading Cross-Encoder reranker: {model_name} (device={device})")
+            local_path = _resolve_local_reranker(settings.MODELS_DIR, model_name)
+
+            logger.info(f"Loading Cross-Encoder reranker: {local_path} (device={device})")
             self._model = FlagReranker(
-                model_name,
+                local_path,
                 use_fp16=(device != "cpu"),
                 devices=[device] if device != "cpu" else None,
             )

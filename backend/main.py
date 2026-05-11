@@ -1,3 +1,17 @@
+import os
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_MODELS_DIR = os.path.join(_PROJECT_ROOT, "models")
+os.makedirs(_MODELS_DIR, exist_ok=True)
+
+os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
+os.environ.setdefault("HF_HUB_CACHE", _MODELS_DIR)
+os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", _MODELS_DIR)
+os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(_MODELS_DIR, "transformers"))
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ["HF_HUB_OFFLINE"] = "1"
+
+import asyncio
 import logging
 import sys
 
@@ -47,7 +61,7 @@ def _rebuild_bm25_from_milvus():
         logger.info(f"BM25 索引已有 {bm25_service.chunk_count} 条数据，跳过重建")
         return
 
-    logger.info("BM25 索引为空，正在从 Milvus 重建...")
+    logger.info("BM25 磁盘缓存不可用，正在从 Milvus 重建...")
     milvus_service._ensure_initialized()
     chunks = milvus_service.get_all_chunks()
     logger.info(f"Milvus 中共有 {len(chunks)} 条 chunk 记录")
@@ -65,7 +79,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    threading.Thread(target=_startup_init, daemon=True).start()
+    await asyncio.get_running_loop().run_in_executor(None, _startup_init)
 
     yield
     await engine.dispose()

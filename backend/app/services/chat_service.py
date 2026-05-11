@@ -228,7 +228,6 @@ class ChatService:
                 tool_round += 1
                 logger.info(f"[Tool Calling] 第 {tool_round} 轮，检测到 {len(tool_calls)} 个工具调用")
 
-                assistant_msg = {"role": "assistant", "content": ""}
                 tc_list = []
                 for tc in tool_calls:
                     tc_info = {
@@ -242,6 +241,10 @@ class ChatService:
                     tc_list.append(tc_info)
                     all_tool_calls.append(tc_info)
 
+                assistant_msg = {"role": "assistant", "content": "", "tool_calls": tc_list}
+                messages.append(assistant_msg)
+
+                for tc_info in tc_list:
                     fn_name = tc_info["function"]["name"]
                     try:
                         fn_args = json.loads(tc_info["function"]["arguments"]) if isinstance(tc_info["function"]["arguments"], str) else tc_info["function"]["arguments"]
@@ -256,9 +259,6 @@ class ChatService:
                         "tool_call_id": tc_info["id"],
                         "name": fn_name
                     })
-
-                assistant_msg["tool_calls"] = tc_list
-                messages.append(assistant_msg)
 
                 continue
 
@@ -356,6 +356,10 @@ class ChatService:
                 sorted_tcs = [collected_tool_calls[i] for i in sorted(collected_tool_calls.keys())]
                 logger.info(f"[Tool Calling-Stream] 第 {tool_round} 轮，检测到 {len(sorted_tcs)} 个工具调用")
 
+                assistant_msg = {"role": "assistant", "content": "".join(collected_content) if collected_content else ""}
+                assistant_msg["tool_calls"] = sorted_tcs
+                messages.append(assistant_msg)
+
                 for tc in sorted_tcs:
                     fn_name = tc["function"]["name"]
                     fn_call_id = tc["id"]
@@ -388,9 +392,6 @@ class ChatService:
                         "name": fn_name
                     })
 
-                assistant_msg = {"role": "assistant", "content": "".join(collected_content) if collected_content else ""}
-                assistant_msg["tool_calls"] = sorted_tcs
-                messages.append(assistant_msg)
                 collected_content = []
                 continue
 
