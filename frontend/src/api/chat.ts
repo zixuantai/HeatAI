@@ -29,7 +29,7 @@ export function stopStream() {
   }
 }
 
-export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks): AbortController {
+export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false): AbortController {
   stopStream()
 
   const controller = new AbortController()
@@ -38,13 +38,15 @@ export function askStreamApi(message: string, sessionId: string | null, callback
 
   const token = localStorage.getItem('access_token')
 
+  console.log('[快速模式] API层 quickMode =', quickMode, ', 请求体 =', { message: message.slice(0, 30), session_id: sessionId, quick_mode: quickMode })
+
   fetch('/api/chat/stream', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': token ? `Bearer ${token}` : ''
     },
-    body: JSON.stringify({ message, session_id: sessionId }),
+    body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode }),
     signal: controller.signal
   }).then(async (response) => {
     if (!response.ok) {

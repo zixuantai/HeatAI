@@ -47,6 +47,26 @@
 
       <div class="chat-input-area">
         <div class="input-wrapper">
+          <el-tooltip
+            effect="dark"
+            content="快速模式回答质量会低一些哦"
+            placement="top"
+            :show-after="300"
+            :disabled="quickMode"
+            popper-class="quick-tooltip"
+          >
+            <button
+              class="quick-mode-toggle"
+              :class="{ active: quickMode }"
+              :disabled="loading"
+              @click="toggleQuickMode"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span>快速模式</span>
+            </button>
+          </el-tooltip>
           <el-input
             v-model="inputMessage"
             type="textarea"
@@ -163,6 +183,12 @@ const statusMessage = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
 const currentSessionId = ref<string | null>(null)
+const quickMode = ref(false)
+
+function toggleQuickMode() {
+  quickMode.value = !quickMode.value
+  console.log('[快速模式] 切换为:', quickMode.value)
+}
 
 const statusTextMap: Record<string, string> = {
   analyzing: '正在分析您的问题...',
@@ -272,6 +298,7 @@ async function handleSend() {
 
   streamMsgId = genId()
   let placeholderPushed = false
+  console.log('[快速模式] 发送消息时 quickMode.value =', quickMode.value)
 
   askStreamApi(content, currentSessionId.value, {
     onChunk(text: string) {
@@ -321,7 +348,7 @@ async function handleSend() {
       ElMessage.error(error || '请求失败，请稍后重试')
       scrollToBottom()
     }
-  })
+  }, quickMode.value)
 }
 </script>
 
@@ -598,6 +625,62 @@ async function handleSend() {
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+}
+
+.quick-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+  transition: all var(--transition-base);
+  line-height: 1;
+  user-select: none;
+}
+
+.quick-mode-toggle:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.quick-mode-toggle:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.quick-mode-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.quick-mode-toggle.active {
+  border-color: var(--color-primary);
+  background: var(--gradient-primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.quick-mode-toggle.active:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.45);
+}
+
+.quick-mode-toggle svg {
+  flex-shrink: 0;
+  fill: none;
+}
+
+.quick-mode-toggle.active svg {
+  fill: rgba(255, 255, 255, 0.3);
 }
 
 .input-wrapper {
@@ -937,5 +1020,12 @@ async function handleSend() {
   font-size: var(--font-size-sm);
   font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Courier New', monospace;
   font-weight: var(--font-weight-medium);
+}
+</style>
+
+<style>
+.quick-tooltip {
+  border-radius: 9999px !important;
+  padding: 6px 16px !important;
 }
 </style>

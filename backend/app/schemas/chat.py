@@ -15,6 +15,7 @@ class ToolCall(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000, description="用户消息")
     session_id: str | None = Field(None, description="会话ID，不传则自动创建新会话")
+    quick_mode: bool = Field(False, description="快速模式，跳过知识库检索直接回复")
 
 
 class ChatResponse(BaseModel):

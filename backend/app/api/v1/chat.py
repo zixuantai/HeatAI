@@ -116,50 +116,62 @@ async def ask(
 
         await conversation_service.save_message(db, session_id, "user", req.message)
 
-        need_kb = query_rewriter.needs_knowledge_base(req.message)
-        skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
+        if req.quick_mode:
+            logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
 
-        if skip_rewrite:
-            logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
-            rewrite_result = {
-                "original_query": req.message,
-                "rewritten_query": req.message,
-                "expanded_queries": []
-            }
-            _log_rewrite_result(rewrite_result)
+            history_messages = []
+            try:
+                ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+                history_messages = ctx.messages
+            except Exception:
+                pass
 
-            if need_kb:
-                search_results = await asyncio.to_thread(
-                    reranker_service.search_and_rerank, req.message
-                )
-                if search_results:
-                    logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
-            else:
-                search_results = []
-
-            ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+            result = await chat_service.quick_ask(req.message, history_messages)
         else:
-            ctx_task = asyncio.create_task(
-                context_builder.build(db, session_id, current_user.id, req.message)
-            )
+            need_kb = query_rewriter.needs_knowledge_base(req.message)
+            skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
 
-            rewrite_result = await query_rewriter.rewrite(req.message)
-            _log_rewrite_result(rewrite_result)
+            if skip_rewrite:
+                logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
+                rewrite_result = {
+                    "original_query": req.message,
+                    "rewritten_query": req.message,
+                    "expanded_queries": []
+                }
+                _log_rewrite_result(rewrite_result)
 
-            if need_kb:
-                search_query = rewrite_result["rewritten_query"]
-                search_results = await asyncio.to_thread(
-                    reranker_service.search_and_rerank, search_query
-                )
-                search_results = await _merge_expanded_results(search_results, rewrite_result)
-                if search_results:
-                    logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                if need_kb:
+                    search_results = await asyncio.to_thread(
+                        reranker_service.search_and_rerank, req.message
+                    )
+                    if search_results:
+                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                else:
+                    search_results = []
+
+                ctx = await context_builder.build(db, session_id, current_user.id, req.message)
             else:
-                search_results = []
+                ctx_task = asyncio.create_task(
+                    context_builder.build(db, session_id, current_user.id, req.message)
+                )
 
-            ctx = await ctx_task
+                rewrite_result = await query_rewriter.rewrite(req.message)
+                _log_rewrite_result(rewrite_result)
 
-        result = await chat_service.ask(req.message, ctx.messages, search_results)
+                if need_kb:
+                    search_query = rewrite_result["rewritten_query"]
+                    search_results = await asyncio.to_thread(
+                        reranker_service.search_and_rerank, search_query
+                    )
+                    search_results = await _merge_expanded_results(search_results, rewrite_result)
+                    if search_results:
+                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                else:
+                    search_results = []
+
+                ctx = await ctx_task
+
+            result = await chat_service.ask(req.message, ctx.messages, search_results)
 
         await conversation_service.save_message(db, session_id, "assistant", result["answer"])
 
@@ -187,6 +199,7 @@ async def stream_chat(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
+    logger.info(f"[对话] 收到请求，quick_mode={req.quick_mode}, message={req.message[:50]}...")
     session_id = req.session_id
     if session_id:
         session = await conversation_service.get_session(db, session_id, current_user.id)
@@ -201,54 +214,78 @@ async def stream_chat(
     async def event_generator():
         collected_content = []
         try:
-            need_kb = query_rewriter.needs_knowledge_base(req.message)
-            skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
+            if req.quick_mode:
+                logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
+                yield f"data: {json.dumps({'s': 'generating'})}\n\n"
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
-            ctx_task = asyncio.create_task(
-                context_builder.build(db, session_id, current_user.id, req.message)
-            )
+                history_messages = []
+                try:
+                    ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+                    history_messages = ctx.messages
+                except Exception:
+                    pass
 
-            if skip_rewrite:
-                logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
-                rewrite_result = {
-                    "original_query": req.message,
-                    "rewritten_query": req.message,
-                    "expanded_queries": []
-                }
+                async for event in chat_service.stream_quick_ask(req.message, history_messages):
+                    event_type = event.get("type", "content")
+                    if event_type == "content":
+                        collected_content.append(event["content"])
+                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
+                    elif event_type == "tool_call":
+                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "tool_result":
+                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "error":
+                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
             else:
-                yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
-                rewrite_result = await query_rewriter.rewrite(req.message)
-            _log_rewrite_result(rewrite_result)
+                need_kb = query_rewriter.needs_knowledge_base(req.message)
+                skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
 
-            if need_kb:
-                yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
-                search_query = rewrite_result["rewritten_query"]
-                search_results = await asyncio.to_thread(
-                    reranker_service.search_and_rerank, search_query
+                ctx_task = asyncio.create_task(
+                    context_builder.build(db, session_id, current_user.id, req.message)
                 )
-                search_results = await _merge_expanded_results(search_results, rewrite_result)
-                if search_results:
-                    logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
-            else:
-                logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
-                search_results = []
 
-            yield f"data: {json.dumps({'s': 'generating'})}\n\n"
+                if skip_rewrite:
+                    logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
+                    rewrite_result = {
+                        "original_query": req.message,
+                        "rewritten_query": req.message,
+                        "expanded_queries": []
+                    }
+                else:
+                    yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
+                    rewrite_result = await query_rewriter.rewrite(req.message)
+                _log_rewrite_result(rewrite_result)
 
-            ctx = await ctx_task
+                if need_kb:
+                    yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
+                    search_query = rewrite_result["rewritten_query"]
+                    search_results = await asyncio.to_thread(
+                        reranker_service.search_and_rerank, search_query
+                    )
+                    search_results = await _merge_expanded_results(search_results, rewrite_result)
+                    if search_results:
+                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                else:
+                    logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
+                    search_results = []
 
-            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-            async for event in chat_service.stream_ask(req.message, ctx.messages, search_results):
-                event_type = event.get("type", "content")
-                if event_type == "content":
-                    collected_content.append(event["content"])
-                    yield f"data: {json.dumps({'c': event['content']})}\n\n"
-                elif event_type == "tool_call":
-                    yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                elif event_type == "tool_result":
-                    yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                elif event_type == "error":
-                    yield f"data: {json.dumps({'error': event['content']})}\n\n"
+                yield f"data: {json.dumps({'s': 'generating'})}\n\n"
+
+                ctx = await ctx_task
+
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+                async for event in chat_service.stream_ask(req.message, ctx.messages, search_results):
+                    event_type = event.get("type", "content")
+                    if event_type == "content":
+                        collected_content.append(event["content"])
+                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
+                    elif event_type == "tool_call":
+                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "tool_result":
+                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "error":
+                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
 
             full_answer = "".join(collected_content)
             async with async_session() as save_db:
