@@ -275,11 +275,11 @@ watch(() => route.path, () => {
 }
 
 .layout-aside {
-  background: #1a1a2e;
+  background: #0f172a;
   color: #fff;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2a2a4a;
+  border-right: 1px solid #1e293b;
   transition: width 0.25s ease;
   overflow: hidden;
 }
@@ -289,7 +289,7 @@ watch(() => route.path, () => {
   align-items: center;
   gap: 12px;
   padding: 20px 16px;
-  border-bottom: 1px solid #2a2a4a;
+  border-bottom: 1px solid #1e293b;
 }
 
 .collapsed .aside-header {
@@ -323,7 +323,7 @@ watch(() => route.path, () => {
 .hamburger span {
   display: block;
   height: 2px;
-  background: #ccc;
+  background: #94a3b8;
   border-radius: 1px;
   transition: all 0.25s ease;
   transform-origin: center;
@@ -346,12 +346,12 @@ watch(() => route.path, () => {
 .logo-text {
   font-size: 22px;
   font-weight: 700;
-  color: #ff6b35;
+  color: #6366f1;
 }
 
 .new-chat-btn {
   margin: 16px 20px;
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
   border-radius: 8px;
   white-space: nowrap;
@@ -378,18 +378,18 @@ watch(() => route.path, () => {
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
-  color: #b0b0b0;
+  color: #94a3b8;
   margin-bottom: 2px;
 }
 
 .nav-item:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #e0e0e0;
+  color: #cbd5e1;
 }
 
 .nav-item.active {
-  background: rgba(255, 107, 53, 0.2);
-  color: #ff6b35;
+  background: rgba(99, 102, 241, 0.2);
+  color: #818cf8;
   font-weight: 500;
 }
 
@@ -411,7 +411,7 @@ watch(() => route.path, () => {
 
 .session-empty {
   text-align: center;
-  color: #909399;
+  color: #64748b;
   font-size: 13px;
   padding: 40px 0;
 }
@@ -432,31 +432,31 @@ watch(() => route.path, () => {
 }
 
 .session-item.active {
-  background: rgba(255, 107, 53, 0.2);
+  background: rgba(99, 102, 241, 0.2);
 }
 
 .session-item-title {
   flex: 1;
   font-size: 13px;
-  color: #e0e0e0;
+  color: #cbd5e1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .session-item.active .session-item-title {
-  color: #ff6b35;
+  color: #818cf8;
 }
 
 .session-item-meta {
   font-size: 11px;
-  color: #909399;
+  color: #64748b;
   flex-shrink: 0;
 }
 
 .session-delete {
   font-size: 14px;
-  color: #909399;
+  color: #64748b;
   flex-shrink: 0;
   opacity: 0;
   transition: opacity 0.15s;
@@ -467,7 +467,7 @@ watch(() => route.path, () => {
 }
 
 .session-delete:hover {
-  color: #f56c6c;
+  color: #ef4444;
 }
 
 .aside-spacer {
@@ -479,7 +479,7 @@ watch(() => route.path, () => {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid #2a2a4a;
+  border-top: 1px solid #1e293b;
   cursor: pointer;
   transition: background 0.2s;
   user-select: none;
@@ -512,12 +512,12 @@ watch(() => route.path, () => {
 
 .user-role {
   font-size: 12px;
-  color: #909399;
+  color: #64748b;
 }
 
 .user-arrow {
   font-size: 12px;
-  color: #909399;
+  color: #64748b;
   transition: transform 0.2s;
 }
 
@@ -526,7 +526,7 @@ watch(() => route.path, () => {
 }
 
 .layout-main {
-  background: #f5f5f5;
+  background: #f1f5f9;
   padding: 0;
   overflow: hidden;
 }
@@ -554,12 +554,12 @@ watch(() => route.path, () => {
 .user-menu-name {
   font-size: 14px;
   font-weight: 500;
-  color: #303133;
+  color: #1e293b;
 }
 
 .user-menu-divider {
   margin: 0 12px;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid #e2e8f0;
 }
 
 .user-menu-item {
@@ -568,20 +568,20 @@ watch(() => route.path, () => {
   gap: 10px;
   padding: 10px 16px;
   font-size: 14px;
-  color: #303133;
+  color: #1e293b;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .user-menu-item:hover {
-  background: #f5f5f5;
+  background: #f1f5f9;
 }
 
 .user-menu-item--danger {
-  color: #f56c6c;
+  color: #ef4444;
 }
 
 .user-menu-item--danger:hover {
-  background: #fef0f0;
+  background: #fef2f2;
 }
 </style>

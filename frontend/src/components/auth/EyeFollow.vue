@@ -106,10 +106,10 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: linear-gradient(170deg, #ffa94d 0%, #ff7b39 35%, #f06020 100%);
+  background: linear-gradient(170deg, #a78bfa 0%, #6366f1 35%, #4338ca 100%);
   position: relative;
   box-shadow:
-    0 10px 36px rgba(255, 80, 30, 0.32),
+    0 10px 36px rgba(99, 102, 241, 0.32),
     inset 0 -10px 20px rgba(0, 0, 0, 0.08),
     inset 0 10px 18px rgba(255, 255, 255, 0.12);
 }
@@ -240,7 +240,7 @@ onUnmounted(() => {
   position: absolute;
   width: var(--size, 6px);
   height: var(--size, 6px);
-  background: #ffb347;
+  background: #a78bfa;
   border-radius: 50% 50% 50% 0;
   transform: translate(var(--x, 0), var(--y, 0)) rotate(-45deg) scale(0);
   left: calc(50% - var(--size, 6px) / 2);

@@ -8,7 +8,7 @@ html, body {
   width: 100%;
   height: 100%;
   font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background-color: #f0f2f5;
+  background-color: #f1f5f9;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -22,7 +22,7 @@ html, body {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: linear-gradient(135deg, #ff6b35 0%, #f7931e 50%, #ffb347 100%);
+  background: linear-gradient(135deg, #4338ca 0%, #6366f1 50%, #8b5cf6 100%);
   padding: 20px;
 }
 
@@ -51,7 +51,7 @@ html, body {
 .auth-logo-icon {
   width: 48px;
   height: 48px;
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -63,13 +63,13 @@ html, body {
 .auth-title {
   font-size: 28px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1e293b;
   margin-bottom: 4px;
 }
 
 .auth-subtitle {
   font-size: 14px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 24px;
 }
 
@@ -80,21 +80,21 @@ html, body {
 .auth-footer {
   text-align: center;
   padding: 20px 40px;
-  background: #fafafa;
-  border-top: 1px solid #f0f0f0;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
   font-size: 14px;
-  color: #909399;
+  color: #94a3b8;
 }
 
 .auth-footer a {
-  color: #ff6b35;
+  color: #6366f1;
   text-decoration: none;
   font-weight: 500;
   margin-left: 4px;
 }
 
 .auth-footer a:hover {
-  color: #e55d2b;
+  color: #4f46e5;
 }
 
 .password-input .el-input__suffix {
@@ -130,11 +130,11 @@ html, body {
 }
 
 .el-message--info {
-  background: #f4f4f5;
-  border-color: #e9e9eb;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
 }
 .el-message--info .el-message__content {
-  color: #909399;
+  color: #64748b;
 }
 
 /* ========== MessageBox ========== */
@@ -151,13 +151,13 @@ html, body {
 .el-message-box__title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #1e293b;
 }
 
 .el-message-box__message {
   white-space: nowrap;
   word-break: keep-all;
-  color: #606266;
+  color: #475569;
   font-size: 14px;
 }
 
@@ -172,33 +172,33 @@ html, body {
 }
 
 .el-message-box__btns .el-button--primary {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
 }
 
 .el-message-box__btns .el-button--primary:hover {
-  background: linear-gradient(135deg, #e55d2b, #e6840e);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
 }
 
 .el-message-box__btns .el-button--default {
-  border-color: #dcdfe6;
-  color: #606266;
+  border-color: #cbd5e1;
+  color: #475569;
 }
 
 .el-message-box__btns .el-button--default:hover {
-  border-color: #ff6b35;
-  color: #ff6b35;
+  border-color: #6366f1;
+  color: #6366f1;
 }
 
 /* ========== Popconfirm ========== */
 .el-popconfirm__main {
   white-space: nowrap;
-  color: #606266;
+  color: #475569;
   font-size: 13px;
 }
 
 .el-popconfirm__action .el-button--primary {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border: none;
   border-radius: 6px;
   font-size: 12px;
@@ -206,18 +206,18 @@ html, body {
 }
 
 .el-popconfirm__action .el-button--primary:hover {
-  background: linear-gradient(135deg, #e55d2b, #e6840e);
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
 }
 
 .el-popconfirm__action .el-button--default {
-  border-color: #dcdfe6;
-  color: #606266;
+  border-color: #cbd5e1;
+  color: #475569;
   border-radius: 6px;
   font-size: 12px;
   padding: 5px 14px;
 }
 
 .el-popconfirm__action .el-button--default:hover {
-  border-color: #ff6b35;
-  color: #ff6b35;
+  border-color: #6366f1;
+  color: #6366f1;
 }

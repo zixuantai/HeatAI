@@ -326,7 +326,7 @@ async function handleSend() {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #fafbfc;
+  background: #f8fafc;
   font-family: 'Helvetica Neue', 'Helvetica', 'Arial', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -352,13 +352,13 @@ async function handleSend() {
 .welcome-logo {
   width: 72px;
   height: 72px;
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 24px;
-  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.3);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
 }
 
 .welcome-icon {
@@ -369,14 +369,14 @@ async function handleSend() {
 .chat-welcome h2 {
   font-size: 26px;
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1e293b;
   margin-bottom: 10px;
   letter-spacing: -0.3px;
 }
 
 .chat-welcome p {
   font-size: 15px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 28px;
   line-height: 1.6;
 }
@@ -392,17 +392,17 @@ async function handleSend() {
   border-radius: 20px;
   padding: 8px 18px;
   font-size: 13px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e2e8f0;
   background: #fff;
-  color: #606266;
+  color: #475569;
 }
 
 .quick-tag:hover {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: #fff;
   border-color: transparent;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.25);
+  box-shadow: 0 2px 12px rgba(99, 102, 241, 0.3);
 }
 
 /* ========== Messages Area ========== */
@@ -461,14 +461,14 @@ async function handleSend() {
 }
 
 .message-bubble.user {
-  background: #fff5ee;
-  color: #303133;
+  background: #eef2ff;
+  color: #1e293b;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .message-bubble.assistant {
   background: #fff;
-  color: #303133;
+  color: #1e293b;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
@@ -482,7 +482,7 @@ async function handleSend() {
 
 .thinking-text {
   font-size: 13px;
-  color: #909399;
+  color: #94a3b8;
   white-space: nowrap;
 }
 
@@ -496,7 +496,7 @@ async function handleSend() {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ff6b35;
+  background: #6366f1;
   animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
@@ -534,15 +534,15 @@ async function handleSend() {
   max-width: 880px;
   background: #fff;
   border-radius: 16px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e2e8f0;
   padding: 6px 6px 6px 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .input-wrapper:focus-within {
-  border-color: #ff6b35;
-  box-shadow: 0 2px 16px rgba(255, 107, 53, 0.1);
+  border-color: #6366f1;
+  box-shadow: 0 2px 20px rgba(99, 102, 241, 0.1);
 }
 
 .chat-input :deep(.el-textarea__inner) {
@@ -563,7 +563,7 @@ async function handleSend() {
 }
 
 .chat-input :deep(.el-textarea__inner)::placeholder {
-  color: #b0b0b0;
+  color: #94a3b8;
 }
 
 .chat-input :deep(.el-textarea__inner)::-webkit-scrollbar {
@@ -575,8 +575,8 @@ async function handleSend() {
   height: 36px;
   border-radius: 10px;
   border: none;
-  background: #e8e8e8;
-  color: #b0b0b0;
+  background: #e2e8f0;
+  color: #94a3b8;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -587,14 +587,14 @@ async function handleSend() {
 }
 
 .send-btn:not(:disabled) {
-  background: linear-gradient(135deg, #ff6b35, #f7931e);
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
   color: #fff;
-  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.3);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
 }
 
 .send-btn:not(:disabled):hover {
   transform: scale(1.06);
-  box-shadow: 0 3px 10px rgba(255, 107, 53, 0.4);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45);
 }
 
 .send-btn:not(:disabled):active {
@@ -611,7 +611,7 @@ async function handleSend() {
   height: 36px;
   border-radius: 10px;
   border: none;
-  background: #f56c6c;
+  background: #ef4444;
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -620,13 +620,13 @@ async function handleSend() {
   flex-shrink: 0;
   transition: all 0.2s ease;
   padding: 0;
-  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.3);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
 }
 
 .stop-btn:hover {
-  background: #e04040;
+  background: #dc2626;
   transform: scale(1.06);
-  box-shadow: 0 3px 10px rgba(245, 108, 108, 0.4);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.45);
 }
 
 .stop-btn:active {
@@ -635,7 +635,7 @@ async function handleSend() {
 
 .input-hint {
   font-size: 11px;
-  color: #c0c4cc;
+  color: #cbd5e1;
   margin-top: 8px;
   text-align: center;
 }
@@ -658,7 +658,7 @@ async function handleSend() {
   font-weight: 700;
   margin: 16px 0 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .markdown-body :deep(h2) {
@@ -703,7 +703,7 @@ async function handleSend() {
 
 .markdown-body :deep(strong) {
   font-weight: 700;
-  color: #1a1a2e;
+  color: #1e293b;
 }
 
 .markdown-body :deep(em) {
@@ -713,9 +713,9 @@ async function handleSend() {
 .markdown-body :deep(blockquote) {
   margin: 10px 0;
   padding: 8px 14px;
-  border-left: 3px solid #ff6b35;
-  background: #fff7f0;
-  color: #666;
+  border-left: 3px solid #6366f1;
+  background: #eef2ff;
+  color: #475569;
 }
 
 .markdown-body :deep(table) {
@@ -728,32 +728,32 @@ async function handleSend() {
 .markdown-body :deep(th),
 .markdown-body :deep(td) {
   padding: 8px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #e2e8f0;
   text-align: left;
 }
 
 .markdown-body :deep(th) {
-  background: #f5f5f5;
+  background: #f1f5f9;
   font-weight: 600;
 }
 
 .markdown-body :deep(tr:nth-child(even)) {
-  background: #fafafa;
+  background: #f8fafc;
 }
 
 .markdown-body :deep(a) {
-  color: #ff6b35;
+  color: #6366f1;
   text-decoration: underline;
 }
 
 .markdown-body :deep(a:hover) {
-  color: #e55d2b;
+  color: #4f46e5;
 }
 
 .markdown-body :deep(hr) {
   margin: 16px 0;
   border: none;
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid #e2e8f0;
 }
 
 .markdown-body :deep(img) {
@@ -764,10 +764,10 @@ async function handleSend() {
 /* ========== Code Block ========== */
 .markdown-body :deep(.code-block-wrapper) {
   margin: 12px 0;
-  border: 1.5px solid #d0d0d0;
+  border: 1.5px solid #cbd5e1;
   border-radius: 8px;
   overflow: hidden;
-  background: #f8f8f8;
+  background: #f8fafc;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
@@ -776,39 +776,39 @@ async function handleSend() {
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  background: #ececec;
-  border-bottom: 1px solid #d0d0d0;
+  background: #e2e8f0;
+  border-bottom: 1px solid #cbd5e1;
 }
 
 .markdown-body :deep(.code-lang-label) {
   font-size: 12px;
   font-weight: 600;
-  color: #777;
+  color: #64748b;
   text-transform: uppercase;
 }
 
 .markdown-body :deep(.code-copy-btn) {
   font-size: 12px;
   padding: 3px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
-  background: #fafafa;
-  color: #666;
+  background: #f8fafc;
+  color: #64748b;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .markdown-body :deep(.code-copy-btn:hover) {
-  background: #ff6b35;
+  background: #6366f1;
   color: #fff;
-  border-color: #ff6b35;
+  border-color: #6366f1;
 }
 
 .markdown-body :deep(pre) {
   margin: 0;
   border-radius: 0;
   overflow-x: auto;
-  background: #f8f8f8;
+  background: #f8fafc;
 }
 
 .markdown-body :deep(pre code) {
@@ -822,8 +822,8 @@ async function handleSend() {
 .markdown-body :deep(.inline-code) {
   padding: 2px 6px;
   border-radius: 4px;
-  background: #f0f0f0;
-  color: #e55d2b;
+  background: #eef2ff;
+  color: #4f46e5;
   font-size: 13px;
   font-family: 'Consolas', 'Courier New', monospace;
 }

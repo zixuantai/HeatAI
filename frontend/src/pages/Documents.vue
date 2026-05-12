@@ -219,7 +219,7 @@ function getFileTypeColor(fileType: string): string {
     htm: '#e67e22',
     txt: '#7f8c8d',
   }
-  return map[fileType.toLowerCase()] || '#909399'
+  return map[fileType.toLowerCase()] || '#94a3b8'
 }
 
 function formatFileSize(bytes: number): string {
@@ -370,52 +370,52 @@ onMounted(() => {
   gap: 10px;
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
   margin: 0 0 8px;
 }
 
 .page-desc {
-  color: #909399;
+  color: #94a3b8;
   font-size: 14px;
   margin: 0;
 }
 
 .upload-zone {
-  border: 2px dashed #dcdfe6;
+  border: 2px dashed #cbd5e1;
   border-radius: 12px;
   padding: 40px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
-  background: #fafafa;
+  background: #f8fafc;
   margin-bottom: 24px;
 }
 
 .upload-zone:hover,
 .upload-zone.is-dragover {
-  border-color: #ff6b35;
-  background: rgba(255, 107, 53, 0.04);
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.04);
 }
 
 .upload-icon {
-  color: #c0c4cc;
+  color: #cbd5e1;
   margin-bottom: 12px;
 }
 
 .upload-zone:hover .upload-icon,
 .upload-zone.is-dragover .upload-icon {
-  color: #ff6b35;
+  color: #6366f1;
 }
 
 .upload-text {
   font-size: 16px;
-  color: #606266;
+  color: #475569;
   margin: 0 0 6px;
 }
 
 .upload-hint {
   font-size: 12px;
-  color: #c0c4cc;
+  color: #94a3b8;
   margin: 0;
 }
 
@@ -440,7 +440,7 @@ onMounted(() => {
 
 .upload-progress-item {
   background: #fff;
-  border: 1px solid #ebeef5;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 8px;
@@ -456,7 +456,7 @@ onMounted(() => {
 .upload-progress-name {
   flex: 1;
   font-size: 14px;
-  color: #303133;
+  color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -464,7 +464,7 @@ onMounted(() => {
 
 .upload-progress-bar {
   height: 4px;
-  background: #ebeef5;
+  background: #e2e8f0;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -472,7 +472,7 @@ onMounted(() => {
 .upload-progress-fill {
   height: 100%;
   width: 30%;
-  background: linear-gradient(90deg, #ff6b35, #f7931e);
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
   border-radius: 2px;
   animation: progress 1.8s ease-in-out infinite;
 }
@@ -506,7 +506,7 @@ onMounted(() => {
 .section-header h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #303133;
+  color: #1e293b;
   margin: 0;
 }
 
@@ -520,11 +520,11 @@ onMounted(() => {
 }
 
 .documents-section :deep(.el-table__body tr:hover) {
-  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.12);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.12);
 }
 
 .documents-section :deep(.el-table__body tr:hover > td) {
-  background-color: rgba(255, 107, 53, 0.04) !important;
+  background-color: rgba(99, 102, 241, 0.04) !important;
 }
 
 .chunk-list {
@@ -534,7 +534,7 @@ onMounted(() => {
 }
 
 .chunk-item {
-  border: 1px solid #ebeef5;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 12px;
@@ -542,7 +542,7 @@ onMounted(() => {
 }
 
 .chunk-item:hover {
-  border-color: #ff6b35;
+  border-color: #6366f1;
 }
 
 .chunk-header {
@@ -554,12 +554,12 @@ onMounted(() => {
 
 .chunk-title {
   font-size: 13px;
-  color: #909399;
+  color: #94a3b8;
 }
 
 .chunk-content {
   font-size: 14px;
-  color: #303133;
+  color: #1e293b;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-all;
@@ -583,7 +583,7 @@ onMounted(() => {
 }
 
 .search-btn {
-  background: linear-gradient(135deg, #ff6b35, #f7931e) !important;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
   border: none !important;
   color: #fff !important;
   font-weight: 500;
