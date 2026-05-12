@@ -275,7 +275,7 @@ async function handleRegister() {
   height: 38px;
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
-  border-radius: 10px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -365,7 +365,7 @@ async function handleRegister() {
   width: 38px;
   height: 38px;
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  border-radius: 10px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -419,7 +419,7 @@ async function handleRegister() {
   height: 48px;
   padding: 0 16px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 20px;
   font-size: 15px;
   color: #1e293b;
   background: #fff;
@@ -477,13 +477,13 @@ async function handleRegister() {
   flex: 1;
   height: 5px;
   background: #e2e8f0;
-  border-radius: 3px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .strength-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 8px;
   transition: all 0.4s ease;
 }
 
@@ -501,7 +501,7 @@ async function handleRegister() {
   color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
-  border-radius: 10px;
+  border-radius: 18px;
   text-align: center;
 }
 

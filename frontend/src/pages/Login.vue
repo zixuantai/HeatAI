@@ -221,7 +221,7 @@ async function handleLogin() {
   height: 38px;
   background: rgba(255, 255, 255, 0.15);
   backdrop-filter: blur(8px);
-  border-radius: 10px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -311,7 +311,7 @@ async function handleLogin() {
   width: 38px;
   height: 38px;
   background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  border-radius: 10px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -365,7 +365,7 @@ async function handleLogin() {
   height: 48px;
   padding: 0 16px;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: 20px;
   font-size: 15px;
   color: #1e293b;
   background: #fff;
@@ -444,7 +444,7 @@ async function handleLogin() {
   color: #dc2626;
   background: #fef2f2;
   border: 1px solid #fecaca;
-  border-radius: 10px;
+  border-radius: 18px;
   text-align: center;
 }
 

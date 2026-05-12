@@ -1,17 +1,12 @@
 <template>
   <el-container class="layout-container">
     <el-aside :width="collapsed ? '60px' : '320px'" class="layout-aside" :class="{ collapsed }">
-      <div class="aside-header">
+      <div class="aside-header" :class="{ collapsed }">
         <div class="collapse-btn" @click="collapsed = !collapsed">
-          <span class="hamburger" :class="{ open: !collapsed }">
-            <span></span>
-            <span></span>
-            <span></span>
-          </span>
-        </div>
-        <div v-show="!collapsed" class="aside-logo">
-          <span class="logo-icon">🔥</span>
-          <span class="logo-text">HeatAI</span>
+          <el-icon :size="20">
+            <Fold v-if="!collapsed" />
+            <Expand v-else />
+          </el-icon>
         </div>
       </div>
       <div class="nav-section">
@@ -127,7 +122,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, Fold, Expand } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi } from '@/api/chat'
@@ -274,25 +269,29 @@ watch(() => route.path, () => {
   height: 100vh;
 }
 
+/* ── Sidebar ─────────────────────────────────────────── */
 .layout-aside {
-  background: #0f172a;
-  color: #fff;
+  background: var(--color-surface);
+  color: var(--color-text-main);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #1e293b;
-  transition: width 0.25s ease;
+  border-right: 1px solid var(--color-border);
+  box-shadow: 2px 0 24px rgba(79, 70, 229, 0.06);
+  transition: width var(--transition-base);
   overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
+/* ── Sidebar Header ──────────────────────────────────── */
 .aside-header {
   display: flex;
   align-items: center;
-  gap: 12px;
   padding: 20px 16px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.collapsed .aside-header {
+.aside-header.collapsed {
   justify-content: center;
   padding: 20px 0;
 }
@@ -304,97 +303,84 @@ watch(() => route.path, () => {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 6px;
-  transition: background 0.2s;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.aside-header.collapsed .collapse-btn {
+  margin-left: 0;
 }
 
 .collapse-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
 }
 
-.hamburger {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  width: 20px;
-}
-
-.hamburger span {
-  display: block;
-  height: 2px;
-  background: #94a3b8;
-  border-radius: 1px;
-  transition: all 0.25s ease;
-  transform-origin: center;
-}
-
-.collapse-btn:hover .hamburger span {
-  background: #fff;
-}
-
-.aside-logo {
+/* ── Brand Area ──────────────────────────────────────── */
+.brand-area {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 4px 0;
 }
 
-.logo-icon {
-  font-size: 28px;
-}
-
-.logo-text {
-  font-size: 22px;
-  font-weight: 700;
-  color: #6366f1;
-}
-
-.new-chat-btn {
-  margin: 16px 20px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  border: none;
-  border-radius: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.collapsed .new-chat-btn {
-  margin: 16px 10px;
-  padding: 0;
-  min-width: 40px;
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  background: var(--gradient-primary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
   justify-content: center;
-  height: 40px;
+  font-size: 17px;
+  color: #fff;
+  flex-shrink: 0;
 }
 
+.brand-name {
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-main);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+}
+
+/* ── Navigation ──────────────────────────────────────── */
 .nav-section {
-  padding: 12px 12px 0;
+  padding: 16px 12px 8px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.15s;
-  color: #94a3b8;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
   margin-bottom: 2px;
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
 }
 
 .nav-item.active {
-  background: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
-  font-weight: 500;
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: var(--shadow-sm);
 }
 
 .collapsed .nav-section {
-  padding: 12px 8px 0;
+  padding: 16px 8px 8px;
 }
 
 .collapsed .nav-item {
@@ -403,16 +389,47 @@ watch(() => route.path, () => {
   gap: 0;
 }
 
+/* ── New Chat Button ─────────────────────────────────── */
+.new-chat-btn {
+  margin: 12px 20px;
+  background: var(--gradient-primary) !important;
+  border: none !important;
+  border-radius: var(--radius-sm) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: var(--font-size-base) !important;
+  font-weight: var(--font-weight-semibold) !important;
+  height: 44px;
+  box-shadow: var(--shadow-button);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.new-chat-btn:hover {
+  background: var(--gradient-primary-hover) !important;
+  box-shadow: var(--shadow-button-hover);
+  transform: translateY(-1px);
+}
+
+.collapsed .new-chat-btn {
+  margin: 12px 10px;
+  padding: 0 !important;
+  min-width: 42px;
+  justify-content: center;
+  height: 42px;
+  border-radius: var(--radius-sm) !important;
+}
+
+/* ── Session List ────────────────────────────────────── */
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px;
+  padding: 0 12px 8px;
 }
 
 .session-empty {
   text-align: center;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
   padding: 40px 0;
 }
 
@@ -420,46 +437,52 @@ watch(() => route.path, () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.15s;
-  margin-bottom: 4px;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+  margin-bottom: 3px;
 }
 
 .session-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--color-bg);
 }
 
 .session-item.active {
-  background: rgba(99, 102, 241, 0.2);
+  background: var(--gradient-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 .session-item-title {
   flex: 1;
-  font-size: 13px;
-  color: #cbd5e1;
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: var(--font-weight-medium);
 }
 
 .session-item.active .session-item-title {
-  color: #818cf8;
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .session-item-meta {
-  font-size: 11px;
-  color: #64748b;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
   flex-shrink: 0;
+  background: var(--color-bg);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
 }
 
 .session-delete {
   font-size: 14px;
-  color: #64748b;
+  color: var(--color-text-muted);
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
 }
 
 .session-item:hover .session-delete {
@@ -474,14 +497,15 @@ watch(() => route.path, () => {
   flex: 1;
 }
 
+/* ── User Area ───────────────────────────────────────── */
 .aside-user {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid var(--color-border);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background var(--transition-fast);
   user-select: none;
 }
 
@@ -492,7 +516,7 @@ watch(() => route.path, () => {
 
 .aside-user:hover,
 .aside-user.is-active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--gradient-subtle);
 }
 
 .user-info {
@@ -503,30 +527,33 @@ watch(() => route.path, () => {
 }
 
 .user-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .user-role {
-  font-size: 12px;
-  color: #64748b;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
 }
 
 .user-arrow {
   font-size: 12px;
-  color: #64748b;
-  transition: transform 0.2s;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
 }
 
 .aside-user.is-active .user-arrow {
   transform: rotate(90deg);
 }
 
+/* ── Main Content ────────────────────────────────────── */
 .layout-main {
-  background: #f1f5f9;
+  background: var(--color-bg);
   padding: 0;
   overflow: hidden;
 }
@@ -539,9 +566,10 @@ watch(() => route.path, () => {
 <style>
 .user-menu-popover {
   padding: 8px 0 !important;
-  background: #fff !important;
-  border-radius: 10px !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
+  background: var(--color-surface) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  border: 1px solid var(--color-border-light) !important;
 }
 
 .user-menu-header {
@@ -552,14 +580,14 @@ watch(() => route.path, () => {
 }
 
 .user-menu-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #1e293b;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
 }
 
 .user-menu-divider {
-  margin: 0 12px;
-  border-top: 1px solid #e2e8f0;
+  margin: 4px 12px;
+  border-top: 1px solid var(--color-border);
 }
 
 .user-menu-item {
@@ -567,14 +595,16 @@ watch(() => route.path, () => {
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
-  font-size: 14px;
-  color: #1e293b;
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  font-weight: var(--font-weight-medium);
 }
 
 .user-menu-item:hover {
-  background: #f1f5f9;
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
 }
 
 .user-menu-item--danger {
@@ -583,5 +613,6 @@ watch(() => route.path, () => {
 
 .user-menu-item--danger:hover {
   background: #fef2f2;
+  color: #dc2626;
 }
 </style>
