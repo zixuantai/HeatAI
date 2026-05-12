@@ -41,21 +41,27 @@
           @click="handleSelectSession(sess.id)"
         >
           <div class="session-item-title">{{ sess.title }}</div>
-          <div class="session-item-meta">{{ sess.message_count }} 条消息</div>
-          <el-popconfirm
-            title="确定删除该对话？"
-            confirm-button-text="删除"
-            cancel-button-text="取消"
-            @confirm.stop="handleDeleteSession(sess.id)"
+          <el-popover
+            v-model:visible="sessionMenuVisible[sess.id]"
+            :width="160"
+            trigger="click"
+            placement="bottom-start"
+            popper-class="session-menu-popover"
           >
             <template #reference>
-              <el-icon class="session-delete" @click.stop><Delete /></el-icon>
+              <button class="session-more-btn" @click.stop>
+                <el-icon :size="18"><MoreFilled /></el-icon>
+              </button>
             </template>
-          </el-popconfirm>
+            <div class="session-menu">
+              <div class="session-menu-item session-menu-item--danger" @click.stop="handleDeleteClick(sess)">
+                <el-icon><Delete /></el-icon>
+                <span>删除对话</span>
+              </div>
+            </div>
+          </el-popover>
         </div>
       </div>
-
-      <div class="aside-spacer"></div>
 
       <el-popover
         v-model:visible="popoverVisible"
@@ -122,7 +128,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, Fold, Expand } from '@element-plus/icons-vue'
+import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, Fold, Expand, MoreFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi } from '@/api/chat'
@@ -133,6 +139,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const popoverVisible = ref(false)
 const collapsed = ref(false)
+const sessionMenuVisible = ref<Record<string, boolean>>({})
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
 const sessions = ref<SessionInfo[]>([])
@@ -235,6 +242,20 @@ function handleNavToDocuments() {
 
 function handleSelectSession(sessionId: string) {
   router.push(`/chat/${sessionId}`)
+}
+
+async function handleDeleteClick(sess: SessionInfo) {
+  sessionMenuVisible.value[sess.id] = false
+  try {
+    await ElMessageBox.confirm('确定删除该对话？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await handleDeleteSession(sess.id)
+  } catch {
+    // 用户取消
+  }
 }
 
 async function handleDeleteSession(sessionId: string) {
@@ -468,33 +489,30 @@ watch(() => route.path, () => {
   font-weight: var(--font-weight-semibold);
 }
 
-.session-item-meta {
-  font-size: var(--font-size-xs);
+.session-more-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-xs);
+  border: none;
+  background: transparent;
   color: var(--color-text-muted);
-  flex-shrink: 0;
-  background: var(--color-bg);
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-}
-
-.session-delete {
-  font-size: 14px;
-  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   opacity: 0;
-  transition: opacity var(--transition-fast), color var(--transition-fast);
+  transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+  padding: 0;
 }
 
-.session-item:hover .session-delete {
+.session-item:hover .session-more-btn {
   opacity: 1;
 }
 
-.session-delete:hover {
-  color: #ef4444;
-}
-
-.aside-spacer {
-  flex: 1;
+.session-more-btn:hover {
+  background: var(--color-bg);
+  color: var(--color-text-main);
 }
 
 /* ── User Area ───────────────────────────────────────── */
@@ -503,7 +521,7 @@ watch(() => route.path, () => {
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid var(--color-border);
+  margin-top: auto;
   cursor: pointer;
   transition: background var(--transition-fast);
   user-select: none;
@@ -612,6 +630,42 @@ watch(() => route.path, () => {
 }
 
 .user-menu-item--danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* ── Session Menu Popover ─────────────────────────────── */
+.session-menu-popover {
+  padding: 6px 0 !important;
+  background: var(--color-surface) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  border: 1px solid var(--color-border-light) !important;
+  min-width: 140px !important;
+}
+
+.session-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  font-weight: var(--font-weight-medium);
+}
+
+.session-menu-item:hover {
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
+}
+
+.session-menu-item--danger {
+  color: #ef4444;
+}
+
+.session-menu-item--danger:hover {
   background: #fef2f2;
   color: #dc2626;
 }

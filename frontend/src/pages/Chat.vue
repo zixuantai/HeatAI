@@ -372,8 +372,7 @@ async function handleSend() {
   align-items: center;
   padding: 16px 28px;
   flex-shrink: 0;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: transparent;
   position: relative;
   z-index: 1;
 }
@@ -444,14 +443,14 @@ async function handleSend() {
 .chat-welcome p {
   font-size: var(--font-size-md);
   color: var(--color-text-muted);
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   line-height: var(--leading-normal);
   font-weight: var(--font-weight-medium);
 }
 
 .quick-questions {
   text-align: center;
-  margin-top: 24px;
+  margin-top: 12px;
 }
 
 .quick-tag {
@@ -590,7 +589,7 @@ async function handleSend() {
 
 /* ── Input Area ──────────────────────────────────────── */
 .chat-input-area {
-  padding: 16px 28px 24px;
+  padding: 12px 28px 24px;
   background: transparent;
   display: flex;
   flex-direction: column;
