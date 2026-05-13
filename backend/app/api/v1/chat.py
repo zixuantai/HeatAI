@@ -9,7 +9,7 @@ from app.core.database import get_db, async_session
 from app.core.config import settings
 from app.core.dependencies import CurrentUser
 from app.schemas.chat import ChatRequest
-from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate
+from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate, SessionPinUpdate
 from app.services.chat_service import chat_service
 from app.services.conversation_service import conversation_service
 from app.services.memory.context_builder import context_builder
@@ -365,6 +365,23 @@ async def update_session(
     if req.title is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="至少需要提供title字段")
     session = await conversation_service.update_session_title(db, session_id, current_user.id, req.title)
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
+    return {
+        "code": 0,
+        "message": "success",
+        "data": SessionOut.model_validate(session).model_dump(mode="json")
+    }
+
+
+@router.patch("/sessions/{session_id}/pin", response_model=dict)
+async def toggle_pin_session(
+    session_id: str,
+    req: SessionPinUpdate,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    session = await conversation_service.toggle_pin(db, session_id, current_user.id, req.is_pinned)
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     return {

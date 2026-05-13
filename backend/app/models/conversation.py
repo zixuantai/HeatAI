@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, DateTime, func, ForeignKey, Integer
+from sqlalchemy import String, Text, DateTime, func, ForeignKey, Integer, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
@@ -13,6 +13,7 @@ class ConversationSession(Base):
     user_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), default="新对话")
     message_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

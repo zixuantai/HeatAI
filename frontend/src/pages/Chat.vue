@@ -2,7 +2,6 @@
   <div class="chat-container" :class="{ 'has-messages': messages.length > 0 }">
     <div class="chat-topbar">
       <div class="topbar-brand">
-        <span class="topbar-icon">🔥</span>
         <span class="topbar-text">HeatAI</span>
       </div>
     </div>
@@ -397,7 +396,7 @@ async function handleSend() {
 .chat-topbar {
   display: flex;
   align-items: center;
-  padding: 16px 28px;
+  padding: 20px 16px;
   flex-shrink: 0;
   background: transparent;
   position: relative;
@@ -410,24 +409,13 @@ async function handleSend() {
   gap: 10px;
 }
 
-.topbar-icon {
-  width: 36px;
-  height: 36px;
-  background: var(--gradient-primary);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
-  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
-}
-
 .topbar-text {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-xl);
   font-weight: var(--font-weight-extrabold);
   color: var(--color-text-main);
   letter-spacing: var(--tracking-tight);
+  line-height: 1;
+  padding-top: 2px;
 }
 
 /* ── Body Area ───────────────────────────────────────── */

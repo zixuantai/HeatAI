@@ -407,6 +407,12 @@ html, body {
   font-weight: var(--font-weight-bold);
 }
 
+/* Element Plus Tooltip */
+.el-tooltip__popper {
+  border-radius: var(--radius-xl) !important;
+  padding: 6px 14px !important;
+}
+
 /* Element Plus Pagination */
 .el-pagination .el-pager li {
   border-radius: var(--radius-sm) !important;

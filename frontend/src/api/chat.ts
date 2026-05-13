@@ -150,3 +150,11 @@ export function updateSessionTitleApi(sessionId: string, title: string): Promise
     data: { title }
   })
 }
+
+export function togglePinSessionApi(sessionId: string, isPinned: boolean): Promise<SessionInfo> {
+  return request<SessionInfo>({
+    method: 'PATCH',
+    url: `/chat/sessions/${sessionId}/pin`,
+    data: { is_pinned: isPinned }
+  })
+}

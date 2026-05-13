@@ -16,6 +16,7 @@ class SessionOut(BaseModel):
     id: str
     title: str
     message_count: int
+    is_pinned: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -36,6 +37,10 @@ class SessionCreate(BaseModel):
 
 class SessionUpdate(BaseModel):
     title: str | None = Field(None, max_length=200)
+
+
+class SessionPinUpdate(BaseModel):
+    is_pinned: bool
 
 
 class PreferencesOut(BaseModel):

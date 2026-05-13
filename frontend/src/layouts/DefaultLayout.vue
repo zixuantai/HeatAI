@@ -2,65 +2,89 @@
   <el-container class="layout-container">
     <el-aside :width="collapsed ? '60px' : '320px'" class="layout-aside" :class="{ collapsed }">
       <div class="aside-header" :class="{ collapsed }">
+        <div class="brand-area">
+          <span class="brand-icon">🔥</span>
+        </div>
         <div class="collapse-btn" @click="collapsed = !collapsed">
-          <el-icon :size="20">
-            <Fold v-if="!collapsed" />
-            <Expand v-else />
-          </el-icon>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
         </div>
       </div>
       <div class="nav-section">
-        <div
-          class="nav-item"
-          :class="{ active: isChatRoute }"
-          @click="handleNavToChat"
-        >
-          <el-icon :size="20"><ChatDotRound /></el-icon>
-          <span v-show="!collapsed">对话</span>
-        </div>
-        <div
-          class="nav-item"
-          :class="{ active: isDocumentsRoute }"
-          @click="handleNavToDocuments"
-        >
-          <el-icon :size="20"><FolderOpened /></el-icon>
-          <span v-show="!collapsed">知识库</span>
-        </div>
-      </div>
-      <el-button v-if="isChatRoute" type="primary" class="new-chat-btn" @click="handleNewChat">
-        <el-icon><Plus /></el-icon>
-        <span v-show="!collapsed">新建对话</span>
-      </el-button>
-      <div v-show="!collapsed && isChatRoute" class="session-list">
-        <div v-if="sessions.length === 0" class="session-empty">暂无历史对话</div>
-        <div
-          v-for="sess in sessions"
-          :key="sess.id"
-          class="session-item"
-          :class="{ active: activeSessionId === sess.id }"
-          @click="handleSelectSession(sess.id)"
-        >
-          <div class="session-item-title">{{ sess.title }}</div>
-          <el-popover
-            v-model:visible="sessionMenuVisible[sess.id]"
-            :width="160"
-            trigger="click"
-            placement="bottom-start"
-            popper-class="session-menu-popover"
+        <el-tooltip content="新对话" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            :class="{ active: isNewChatRoute }"
+            @click="handleNewChat"
           >
-            <template #reference>
-              <button class="session-more-btn" @click.stop>
-                <el-icon :size="18"><MoreFilled /></el-icon>
-              </button>
-            </template>
-            <div class="session-menu">
-              <div class="session-menu-item session-menu-item--danger" @click.stop="handleDeleteClick(sess)">
-                <el-icon><Delete /></el-icon>
-                <span>删除对话</span>
+            <el-icon :size="20"><ChatDotRound /></el-icon>
+            <span v-show="!collapsed">新对话</span>
+          </div>
+        </el-tooltip>
+        <el-tooltip content="知识库" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            :class="{ active: isDocumentsRoute }"
+            @click="handleNavToDocuments"
+          >
+            <el-icon :size="20"><FolderOpened /></el-icon>
+            <span v-show="!collapsed">知识库</span>
+          </div>
+        </el-tooltip>
+        <el-tooltip content="搜索对话" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            @click="searchDialogVisible = true"
+          >
+            <el-icon :size="20"><Search /></el-icon>
+            <span v-show="!collapsed">搜索对话</span>
+          </div>
+        </el-tooltip>
+      </div>
+      <div v-show="!collapsed" class="session-list">
+        <div v-if="sessions.length === 0" class="session-empty">暂无历史对话</div>
+        <template v-for="group in sessionGroups" :key="group.key">
+          <div class="session-date-label">{{ group.label }}</div>
+          <div
+            v-for="sess in group.sessions"
+            :key="sess.id"
+            class="session-item"
+            :class="{ active: activeSessionId === sess.id }"
+            @click="handleSelectSession(sess.id)"
+          >
+            <div class="session-item-title">{{ sess.title }}</div>
+            <el-popover
+              v-model:visible="sessionMenuVisible[sess.id]"
+              :width="160"
+              trigger="click"
+              placement="bottom-start"
+              popper-class="session-menu-popover"
+            >
+              <template #reference>
+                <button class="session-more-btn" @click.stop>
+                  <el-icon :size="18"><MoreFilled /></el-icon>
+                </button>
+              </template>
+              <div class="session-menu">
+                <div class="session-menu-item" @click.stop="handleTogglePin(sess)">
+                  <el-icon><Top /></el-icon>
+                  <span>{{ sess.is_pinned ? '取消置顶' : '置顶' }}</span>
+                </div>
+                <div class="session-menu-item" @click.stop="handleRenameClick(sess)">
+                  <el-icon><Edit /></el-icon>
+                  <span>重命名</span>
+                </div>
+                <div class="session-menu-divider"></div>
+                <div class="session-menu-item session-menu-item--danger" @click.stop="handleDeleteClick(sess)">
+                  <el-icon><Delete /></el-icon>
+                  <span>删除对话</span>
+                </div>
               </div>
-            </div>
-          </el-popover>
-        </div>
+            </el-popover>
+          </div>
+        </template>
       </div>
 
       <el-popover
@@ -72,7 +96,8 @@
         :disabled="collapsed"
       >
         <template #reference>
-          <div class="aside-user" :class="{ 'is-active': popoverVisible }">
+          <el-tooltip :content="authStore.user?.username || '用户'" placement="right" :disabled="!collapsed" :show-after="300">
+            <div class="aside-user" :class="{ 'is-active': popoverVisible }">
             <el-avatar :size="36" icon="UserFilled" />
             <div v-show="!collapsed" class="user-info">
               <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
@@ -80,6 +105,7 @@
             </div>
             <el-icon v-show="!collapsed" class="user-arrow"><ArrowRight /></el-icon>
           </div>
+          </el-tooltip>
         </template>
         <div class="user-menu">
           <div class="user-menu-header">
@@ -123,15 +149,52 @@
       <el-button type="primary" :loading="editLoading" @click="handleSaveProfile">保存</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="searchDialogVisible" title="搜索对话" width="620px" :close-on-click-modal="false" destroy-on-close @opened="handleSearchDialogOpened">
+    <div class="search-dialog-body">
+      <el-input
+        ref="searchInputRef"
+        v-model="searchKeyword"
+        placeholder="搜索历史对话…"
+        clearable
+        :prefix-icon="Search"
+        size="large"
+        class="search-dialog-input"
+        @input="handleSearchInput"
+      />
+      <div class="search-new-chat" @click="handleSearchNewChat">
+        <el-icon :size="18"><ChatDotRound /></el-icon>
+        <span>新对话</span>
+      </div>
+      <div class="search-results">
+        <div v-if="!searchKeyword && filteredSessions.length > 0" class="search-section-label">最近</div>
+        <div v-if="filteredSessions.length === 0" class="search-empty">
+          {{ searchKeyword ? '未找到匹配的对话' : '暂无历史对话' }}
+        </div>
+        <div
+          v-for="sess in filteredSessions"
+          :key="sess.id"
+          class="search-result-item"
+          :class="{ active: activeSessionId === sess.id }"
+          @click="handleSearchSelect(sess.id)"
+        >
+          <div class="search-result-title">{{ sess.title }}</div>
+          <div class="search-result-meta">
+            <span>{{ formatYearMonth(sess.created_at) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Plus, SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, Fold, Expand, MoreFilled } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Top } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { getSessionsApi, deleteSessionApi } from '@/api/chat'
+import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
 import type { SessionInfo } from '@/types'
 
 const router = useRouter()
@@ -143,6 +206,9 @@ const sessionMenuVisible = ref<Record<string, boolean>>({})
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
 const sessions = ref<SessionInfo[]>([])
+const searchDialogVisible = ref(false)
+const searchKeyword = ref('')
+const searchInputRef = ref<any>()
 
 const activeSessionId = computed(() => {
   return (route.params.sessionId as string) || null
@@ -152,8 +218,43 @@ const isChatRoute = computed(() => {
   return route.path.startsWith('/chat')
 })
 
+const isNewChatRoute = computed(() => {
+  return route.path === '/chat'
+})
+
 const isDocumentsRoute = computed(() => {
   return route.path.startsWith('/documents')
+})
+
+function formatYearMonth(dateStr: string): string {
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const sessionGroups = computed(() => {
+  const groups: { key: string; label: string; sessions: SessionInfo[] }[] = []
+  const sorted = [...sessions.value].sort((a, b) => {
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
+    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+  })
+  for (const sess of sorted) {
+    const label = formatYearMonth(sess.created_at)
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) {
+      last.sessions.push(sess)
+    } else {
+      groups.push({ key: label, label, sessions: [sess] })
+    }
+  }
+  return groups
+})
+
+const filteredSessions = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  if (!keyword) {
+    return sessions.value.slice(0, 20)
+  }
+  return sessions.value.filter(s => s.title.toLowerCase().includes(keyword))
 })
 
 const editForm = reactive({
@@ -232,10 +333,6 @@ function handleNewChat() {
   router.push('/chat')
 }
 
-function handleNavToChat() {
-  router.push('/chat')
-}
-
 function handleNavToDocuments() {
   router.push('/documents')
 }
@@ -258,6 +355,17 @@ async function handleDeleteClick(sess: SessionInfo) {
   }
 }
 
+async function handleTogglePin(sess: SessionInfo) {
+  sessionMenuVisible.value[sess.id] = false
+  const newPinned = !sess.is_pinned
+  sess.is_pinned = newPinned
+  try {
+    await togglePinSessionApi(sess.id, newPinned)
+  } catch {
+    sess.is_pinned = !newPinned
+  }
+}
+
 async function handleDeleteSession(sessionId: string) {
   try {
     await deleteSessionApi(sessionId)
@@ -272,16 +380,56 @@ async function handleDeleteSession(sessionId: string) {
   }
 }
 
-onMounted(() => {
-  if (isChatRoute.value) {
-    loadSessions()
+async function handleRenameClick(sess: SessionInfo) {
+  sessionMenuVisible.value[sess.id] = false
+  try {
+    const { value } = await ElMessageBox.prompt('', '重命名对话', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputValue: sess.title,
+      inputMaxlength: 200,
+      closeOnClickModal: false
+    })
+    const title = (value || '').trim()
+    if (!title) return
+    await updateSessionTitleApi(sess.id, title)
+    const found = sessions.value.find(s => s.id === sess.id)
+    if (found) {
+      found.title = title
+    }
+    ElMessage.success('重命名成功')
+  } catch {
+    // 用户取消
   }
+}
+
+function handleSearchDialogOpened() {
+  searchKeyword.value = ''
+  nextTick(() => {
+    searchInputRef.value?.focus()
+  })
+}
+
+function handleSearchInput() {
+  // reactive, handled by computed
+}
+
+function handleSearchSelect(sessionId: string) {
+  searchDialogVisible.value = false
+  router.push(`/chat/${sessionId}`)
+}
+
+function handleSearchNewChat() {
+  searchDialogVisible.value = false
+  router.push('/chat')
+}
+
+onMounted(() => {
+  loadSessions()
 })
 
 watch(() => route.path, () => {
-  if (isChatRoute.value) {
-    loadSessions()
-  }
+  loadSessions()
 })
 </script>
 
@@ -317,18 +465,38 @@ watch(() => route.path, () => {
   padding: 20px 0;
 }
 
+.aside-header.collapsed .brand-area {
+  display: flex;
+  padding: 0;
+}
+
+.aside-header.collapsed .collapse-btn {
+  display: none;
+}
+
+.aside-header.collapsed:hover .brand-area {
+  display: none;
+}
+
+.aside-header.collapsed:hover .collapse-btn {
+  display: flex;
+}
+
 .collapse-btn {
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 37px;
+  height: 37px;
   border-radius: var(--radius-sm);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  border: 1.5px solid var(--color-border);
+  box-sizing: border-box;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   flex-shrink: 0;
   margin-left: auto;
   color: var(--color-text-muted);
+  background: var(--color-bg);
 }
 
 .aside-header.collapsed .collapse-btn {
@@ -338,6 +506,7 @@ watch(() => route.path, () => {
 .collapse-btn:hover {
   background: var(--gradient-subtle);
   color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 /* ── Brand Area ──────────────────────────────────────── */
@@ -349,8 +518,8 @@ watch(() => route.path, () => {
 }
 
 .brand-icon {
-  width: 34px;
-  height: 34px;
+  width: 37px;
+  height: 37px;
   background: var(--gradient-primary);
   border-radius: var(--radius-sm);
   display: flex;
@@ -359,6 +528,8 @@ watch(() => route.path, () => {
   font-size: 17px;
   color: #fff;
   flex-shrink: 0;
+  border: 1.5px solid transparent;
+  box-sizing: border-box;
 }
 
 .brand-name {
@@ -410,36 +581,6 @@ watch(() => route.path, () => {
   gap: 0;
 }
 
-/* ── New Chat Button ─────────────────────────────────── */
-.new-chat-btn {
-  margin: 12px 20px;
-  background: var(--gradient-primary) !important;
-  border: none !important;
-  border-radius: var(--radius-sm) !important;
-  white-space: nowrap;
-  overflow: hidden;
-  font-size: var(--font-size-base) !important;
-  font-weight: var(--font-weight-semibold) !important;
-  height: 44px;
-  box-shadow: var(--shadow-button);
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-
-.new-chat-btn:hover {
-  background: var(--gradient-primary-hover) !important;
-  box-shadow: var(--shadow-button-hover);
-  transform: translateY(-1px);
-}
-
-.collapsed .new-chat-btn {
-  margin: 12px 10px;
-  padding: 0 !important;
-  min-width: 42px;
-  justify-content: center;
-  height: 42px;
-  border-radius: var(--radius-sm) !important;
-}
-
 /* ── Session List ────────────────────────────────────── */
 .session-list {
   flex: 1;
@@ -452,6 +593,14 @@ watch(() => route.path, () => {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
   padding: 40px 0;
+}
+
+.session-date-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  padding: 12px 14px 6px;
+  letter-spacing: 0.04em;
 }
 
 .session-item {
@@ -668,5 +817,92 @@ watch(() => route.path, () => {
 .session-menu-item--danger:hover {
   background: #fef2f2;
   color: #dc2626;
+}
+
+.session-menu-divider {
+  margin: 4px 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Search Dialog ────────────────────────────────────── */
+.search-dialog-input {
+  margin-bottom: 12px;
+}
+
+.search-new-chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+}
+
+.search-new-chat:hover {
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
+}
+
+.search-results {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.search-section-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  padding: 12px 16px 4px;
+  letter-spacing: 0.04em;
+}
+
+.search-empty {
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  padding: 32px 0;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.search-result-item:hover {
+  background: var(--gradient-subtle);
+}
+
+.search-result-item.active {
+  background: var(--gradient-subtle);
+}
+
+.search-result-title {
+  flex: 1;
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 16px;
+}
+
+.search-result-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 </style>
