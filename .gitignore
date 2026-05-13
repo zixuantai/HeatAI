@@ -80,3 +80,8 @@ eval/eval_data/sample_*.json
 # HeatAI - 爬虫运行时产物
 # ===================
 crawler/docs_downloaded/
+
+# ===================
+# HeatAI - VAD语音检测模型
+# ===================
+frontend/public/vad/

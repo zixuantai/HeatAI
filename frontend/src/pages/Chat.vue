@@ -45,7 +45,7 @@
       </div>
 
       <div class="chat-input-area">
-        <div class="input-wrapper">
+        <div class="input-wrapper" :class="{ 'voice-active': isVoiceMode }">
           <el-tooltip
             effect="dark"
             content="快速模式回答质量会低一些哦"
@@ -71,11 +71,27 @@
             type="textarea"
             :rows="1"
             :autosize="{ minRows: 1, maxRows: 6 }"
-            placeholder="有问题，尽管问"
+            :placeholder="isVoiceMode ? '' : '有问题，尽管问'"
             resize="none"
             class="chat-input"
+            :disabled="isVoiceMode"
             @keydown.enter.exact.prevent="handleSend"
           />
+          <VoiceInput
+            ref="voiceInputRef"
+            @send="handleVoiceSend"
+            @stop="handleVoiceStop"
+            @update:voiceMode="onVoiceModeChange"
+            @update:isSpeaking="onSpeakingChange"
+          />
+          <div v-if="isVoiceMode && !isSpeaking" class="voice-hint-overlay">请讲话</div>
+          <div v-if="isSpeaking" class="voice-wave-overlay">
+            <div
+              v-for="i in 32" :key="i"
+              class="voice-wave-bar"
+              :style="{ animationDelay: `${i * 0.1}s` }"
+            ></div>
+          </div>
           <button
             v-if="!loading"
             class="send-btn"
@@ -92,7 +108,7 @@
             v-else
             class="stop-btn"
             title="停止生成"
-            @click="handleStop"
+            @click="handleTotalStop"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <rect x="4" y="4" width="16" height="16" rx="3" />
@@ -120,10 +136,12 @@ import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { ElInput } from 'element-plus'
-import { askStreamApi, stopStream, getSessionDetailApi } from '@/api/chat'
+import { askStreamApi, stopStream, stopVoiceStream, getSessionDetailApi } from '@/api/chat'
+import { sendVoiceToBackend } from '@/api/voice'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import VoiceInput from '@/components/chat/VoiceInput.vue'
 
 const props = defineProps<{
   sessionId?: string
@@ -184,6 +202,9 @@ const messagesContainer = ref<HTMLElement>()
 const inputRef = ref<InstanceType<typeof ElInput>>()
 const currentSessionId = ref<string | null>(null)
 const quickMode = ref(false)
+const isVoiceMode = ref(false)
+const isSpeaking = ref(false)
+const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
 
 function toggleQuickMode() {
   quickMode.value = !quickMode.value
@@ -308,6 +329,9 @@ watch(() => props.sessionId, (newId) => {
   } else {
     messages.value = []
     currentSessionId.value = null
+    if (voiceInputRef.value) {
+      voiceInputRef.value.disableVoiceMode()
+    }
     focusInput()
   }
 })
@@ -316,6 +340,55 @@ function handleStop() {
   stopStream()
   flushStreamRender()
   finishStream()
+}
+
+function handleTotalStop() {
+  stopStream()
+  stopVoiceStream()
+  if (voiceInputRef.value) {
+    voiceInputRef.value.handleStop()
+  }
+  flushStreamRender()
+  finishStream()
+}
+
+function handleVoiceStop() {
+  stopStream()
+  stopVoiceStream()
+  flushStreamRender()
+  finishStream()
+}
+
+function onVoiceModeChange(value: boolean) {
+  isVoiceMode.value = value
+  if (!value) {
+    focusInput()
+  }
+}
+
+function onSpeakingChange(value: boolean) {
+  isSpeaking.value = value
+}
+
+function handleVoiceSend(audioBase64: string) {
+  console.log('[Chat] 收到语音数据, base64长度:', audioBase64.length)
+  if (loading.value) {
+    handleStop()
+  }
+
+  sendVoiceToBackend(audioBase64, {
+    onTranscript(text: string) {
+      console.log('[Chat] ASR识别结果:', text)
+      if (text.trim()) {
+        inputMessage.value = text.trim()
+        handleSend()
+      }
+    },
+    onError(error: string) {
+      console.error('[Chat] ASR错误:', error)
+      ElMessage.error(error)
+    }
+  })
 }
 
 function finishStream() {
@@ -739,6 +812,7 @@ async function handleSend() {
 }
 
 .input-wrapper {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -755,6 +829,54 @@ async function handleSend() {
 .input-wrapper:focus-within {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12), var(--shadow-card);
+}
+
+.input-wrapper.voice-active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.16), var(--shadow-card);
+}
+
+.voice-hint-overlay {
+  position: absolute;
+  left: 20px;
+  right: 60px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-subtle, #9ca3af);
+  font-size: var(--font-size-base);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.voice-wave-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.voice-wave-bar {
+  width: 2px;
+  height: 4px;
+  border-radius: 1px;
+  background: rgba(139, 92, 246, 0.5);
+  animation: wave-animation 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes wave-animation {
+  0% { height: 4px; opacity: 0.2; }
+  100% { height: 24px; opacity: 1; }
 }
 
 .chat-input :deep(.el-textarea__inner) {

@@ -21,11 +21,19 @@ export interface StreamCallbacks {
 }
 
 let abortController: AbortController | null = null
+export const voiceAbortController: { current: AbortController | null } = { current: null }
 
 export function stopStream() {
   if (abortController) {
     abortController.abort()
     abortController = null
+  }
+}
+
+export function stopVoiceStream() {
+  if (voiceAbortController.current) {
+    voiceAbortController.current.abort()
+    voiceAbortController.current = null
   }
 }
 
