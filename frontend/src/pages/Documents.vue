@@ -102,7 +102,7 @@
               <el-icon :size="16"><List /></el-icon>
             </button>
           </div>
-          <button class="neu-btn-ghost" :disabled="loading" @click="() => loadDocuments()">
+          <button class="neu-btn-ghost" :disabled="loading" @click="handleRefresh">
             <el-icon :size="14"><Refresh /></el-icon>
             刷新
           </button>
@@ -231,7 +231,7 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="pageSizes"
           :total="total"
           layout="total, sizes, prev, pager, next, jumper"
           background
@@ -263,7 +263,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
@@ -296,6 +296,17 @@ const uploadingFiles = ref<UploadingFile[]>([])
 
 const currentPage = ref(1)
 const pageSize = ref(12)
+
+const pageSizes = computed(() => {
+  return viewMode.value === 'card'
+    ? [12, 24, 36, 48, 60, 72]
+    : [10, 20, 50, 100]
+})
+
+watch(viewMode, (mode) => {
+  currentPage.value = 1
+  pageSize.value = mode === 'card' ? 12 : 10
+})
 
 function getFileTypeColor(fileType: string): string {
   const map: Record<string, string> = {
@@ -440,6 +451,10 @@ async function handleClearSearch() {
   isSearching.value = false
   currentPage.value = 1
   await loadDocuments()
+}
+
+function handleRefresh() {
+  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
 }
 
 function handlePageChange(page: number) {
