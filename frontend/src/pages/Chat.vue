@@ -141,6 +141,7 @@ import { sendVoiceToBackend } from '@/api/voice'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
+import { useAuthStore } from '@/store/modules/auth'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
 
 const props = defineProps<{
@@ -148,6 +149,7 @@ const props = defineProps<{
 }>()
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 marked.setOptions({
   breaks: true,
@@ -307,11 +309,21 @@ async function loadSessionMessages(sessionId: string) {
 }
 
 function handleQuickQuestion(question: string) {
+  if (!authStore.isAuthenticated) {
+    sessionStorage.setItem('pending_question', question)
+    router.push({ name: 'Login', query: { redirect: '/chat' } })
+    return
+  }
   inputMessage.value = question
   handleSend()
 }
 
 onMounted(() => {
+  const pendingQuestion = sessionStorage.getItem('pending_question')
+  if (pendingQuestion) {
+    inputMessage.value = pendingQuestion
+    sessionStorage.removeItem('pending_question')
+  }
   if (props.sessionId) {
     loadSessionMessages(props.sessionId)
   } else {
@@ -372,6 +384,12 @@ function onSpeakingChange(value: boolean) {
 
 function handleVoiceSend(audioBase64: string) {
   console.log('[Chat] 收到语音数据, base64长度:', audioBase64.length)
+
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/chat' } })
+    return
+  }
+
   if (loading.value) {
     handleStop()
   }
@@ -419,6 +437,12 @@ function finishStream() {
 async function handleSend() {
   const content = inputMessage.value.trim()
   if (!content) return
+
+  if (!authStore.isAuthenticated) {
+    sessionStorage.setItem('pending_question', content)
+    router.push({ name: 'Login', query: { redirect: '/chat' } })
+    return
+  }
 
   if (loading.value) {
     handleStop()

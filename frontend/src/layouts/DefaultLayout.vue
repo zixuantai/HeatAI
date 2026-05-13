@@ -38,7 +38,7 @@
         <el-tooltip content="搜索对话" placement="right" :disabled="!collapsed" :show-after="300">
           <div
             class="nav-item"
-            @click="searchDialogVisible = true"
+            @click="handleSearchConversations"
           >
             <el-icon :size="20"><Search /></el-icon>
             <span v-show="!collapsed">搜索对话</span>
@@ -106,12 +106,12 @@
       </div>
 
       <div class="user-area-wrapper" ref="userAreaRef">
-        <el-tooltip :content="authStore.user?.username || '用户'" placement="right" :disabled="!collapsed" :show-after="300">
-          <div class="aside-user" :class="{ 'is-active': popoverVisible }" @click="toggleUserMenu">
+        <el-tooltip :content="authStore.isAuthenticated ? (authStore.user?.username || '用户') : '未登录'" placement="right" :disabled="!collapsed" :show-after="300">
+          <div class="aside-user" :class="{ 'is-active': popoverVisible }" @click="handleUserAreaClick">
             <el-avatar :size="36" icon="UserFilled" />
             <div v-show="!collapsed" class="user-info">
-              <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
-              <span class="user-role">{{ authStore.isAdmin ? '管理员' : '普通用户' }}</span>
+              <span class="user-name">{{ authStore.isAuthenticated ? (authStore.user?.username || '用户') : '未登录' }}</span>
+              <span class="user-role">{{ authStore.isAuthenticated ? (authStore.isAdmin ? '管理员' : '普通用户') : '' }}</span>
             </div>
             <el-icon v-show="!collapsed" class="user-arrow"><ArrowRight /></el-icon>
           </div>
@@ -295,6 +295,14 @@ const editRules: FormRules = {
   ]
 }
 
+function handleUserAreaClick() {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/chat' } })
+    return
+  }
+  toggleUserMenu()
+}
+
 function toggleUserMenu() {
   if (collapsed.value) return
   if (!popoverVisible.value && userAreaRef.value) {
@@ -356,6 +364,7 @@ async function handleSaveProfile() {
 }
 
 async function loadSessions() {
+  if (!authStore.isAuthenticated) return
   try {
     sessions.value = await getSessionsApi(50, 0)
   } catch {
@@ -368,7 +377,19 @@ function handleNewChat() {
 }
 
 function handleNavToDocuments() {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/documents' } })
+    return
+  }
   router.push('/documents')
+}
+
+function handleSearchConversations() {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/chat' } })
+    return
+  }
+  searchDialogVisible.value = true
 }
 
 function handleSelectSession(sessionId: string) {
