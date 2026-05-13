@@ -569,7 +569,7 @@ async function handleSend() {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .topbar-text {
@@ -666,7 +666,7 @@ async function handleSend() {
   padding: 28px 28px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .message-row {
