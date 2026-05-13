@@ -46,12 +46,12 @@
       <div v-show="!collapsed" class="session-list">
         <div v-if="sessions.length === 0" class="session-empty">暂无历史对话</div>
         <template v-for="group in sessionGroups" :key="group.key">
-          <div class="session-date-label">{{ group.label }}</div>
+          <div v-if="group.label" class="session-date-label">{{ group.label }}</div>
           <div
             v-for="sess in group.sessions"
             :key="sess.id"
             class="session-item"
-            :class="{ active: activeSessionId === sess.id }"
+            :class="{ active: activeSessionId === sess.id, pinned: sess.is_pinned }"
             @click="handleSelectSession(sess.id)"
           >
             <div class="session-item-title">{{ sess.title }}</div>
@@ -69,7 +69,7 @@
               </template>
               <div class="session-menu">
                 <div class="session-menu-item" @click.stop="handleTogglePin(sess)">
-                  <el-icon><Top /></el-icon>
+                  <el-icon><Top v-if="!sess.is_pinned" /><Bottom v-else /></el-icon>
                   <span>{{ sess.is_pinned ? '取消置顶' : '置顶' }}</span>
                 </div>
                 <div class="session-menu-item" @click.stop="handleRenameClick(sess)">
@@ -191,7 +191,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Top } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Top, Bottom } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -233,11 +233,18 @@ function formatYearMonth(dateStr: string): string {
 
 const sessionGroups = computed(() => {
   const groups: { key: string; label: string; sessions: SessionInfo[] }[] = []
-  const sorted = [...sessions.value].sort((a, b) => {
-    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  })
-  for (const sess of sorted) {
+  const pinned: SessionInfo[] = []
+  const unpinned: SessionInfo[] = []
+  for (const sess of sessions.value) {
+    if (sess.is_pinned) pinned.push(sess)
+    else unpinned.push(sess)
+  }
+  pinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+  unpinned.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+  if (pinned.length > 0) {
+    groups.push({ key: '__pinned__', label: '', sessions: pinned })
+  }
+  for (const sess of unpinned) {
     const label = formatYearMonth(sess.created_at)
     const last = groups[groups.length - 1]
     if (last && last.label === label) {
@@ -358,11 +365,11 @@ async function handleDeleteClick(sess: SessionInfo) {
 async function handleTogglePin(sess: SessionInfo) {
   sessionMenuVisible.value[sess.id] = false
   const newPinned = !sess.is_pinned
-  sess.is_pinned = newPinned
   try {
     await togglePinSessionApi(sess.id, newPinned)
+    await loadSessions()
   } catch {
-    sess.is_pinned = !newPinned
+    // revert silently
   }
 }
 
@@ -615,6 +622,10 @@ watch(() => route.path, () => {
 }
 
 .session-item:hover {
+  background: var(--color-bg);
+}
+
+.session-item.pinned {
   background: var(--color-bg);
 }
 
