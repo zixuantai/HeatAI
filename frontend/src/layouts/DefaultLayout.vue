@@ -55,6 +55,12 @@
             @click="handleSelectSession(sess.id)"
           >
             <div class="session-item-title">{{ sess.title }}</div>
+            <span v-if="sess.is_pinned" class="session-pin-icon" @click.stop="handleTogglePin(sess)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="17" x2="12" y2="22"/>
+                <path d="M5 17h14v-1.17a2 2 0 0 0-.59-1.42L17 13V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-1.41 1.41A2 2 0 0 0 5 15.83V17z"/>
+              </svg>
+            </span>
             <el-popover
               v-model:visible="sessionMenuVisible[sess.id]"
               :width="160"
@@ -69,7 +75,17 @@
               </template>
               <div class="session-menu">
                 <div class="session-menu-item" @click.stop="handleTogglePin(sess)">
-                  <el-icon><Top v-if="!sess.is_pinned" /><Bottom v-else /></el-icon>
+                  <span class="session-menu-pin-icon">
+                    <svg v-if="!sess.is_pinned" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="17" x2="12" y2="22"/>
+                      <path d="M5 17h14v-1.17a2 2 0 0 0-.59-1.42L17 13V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-1.41 1.41A2 2 0 0 0 5 15.83V17z"/>
+                    </svg>
+                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="17" x2="12" y2="22"/>
+                      <path d="M5 17h14v-1.17a2 2 0 0 0-.59-1.42L17 13V5a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v8l-1.41 1.41A2 2 0 0 0 5 15.83V17z"/>
+                      <line x1="2" y1="2" x2="22" y2="22"/>
+                    </svg>
+                  </span>
                   <span>{{ sess.is_pinned ? '取消置顶' : '置顶' }}</span>
                 </div>
                 <div class="session-menu-item" @click.stop="handleRenameClick(sess)">
@@ -191,7 +207,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Top, Bottom } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -611,6 +627,7 @@ watch(() => route.path, () => {
 }
 
 .session-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -642,6 +659,33 @@ watch(() => route.path, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: var(--font-weight-medium);
+  padding-right: 40px;
+}
+
+.session-pin-icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: right var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+  z-index: 1;
+}
+
+.session-pin-icon:hover {
+  color: var(--color-primary);
+  background: var(--color-bg);
+}
+
+.session-item:hover .session-pin-icon {
+  right: 48px;
 }
 
 .session-item.active .session-item-title {
@@ -650,6 +694,10 @@ watch(() => route.path, () => {
 }
 
 .session-more-btn {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 30px;
   height: 30px;
   border-radius: var(--radius-xs);
@@ -660,10 +708,10 @@ watch(() => route.path, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   opacity: 0;
   transition: opacity var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
   padding: 0;
+  z-index: 2;
 }
 
 .session-item:hover .session-more-btn {
@@ -828,6 +876,15 @@ watch(() => route.path, () => {
 .session-menu-item--danger:hover {
   background: #fef2f2;
   color: #dc2626;
+}
+
+.session-menu-pin-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 .session-menu-divider {

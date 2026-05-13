@@ -25,7 +25,7 @@
               <div
                 v-if="msg.role === 'assistant'"
                 class="message-text markdown-body"
-                v-html="renderMarkdown(msg.content)"
+                v-html="renderMarkdownCached(msg.content)"
               ></div>
               <div v-else class="message-text">{{ msg.content }}</div>
             </div>
@@ -57,7 +57,6 @@
             <button
               class="quick-mode-toggle"
               :class="{ active: quickMode }"
-              :disabled="loading"
               @click="toggleQuickMode"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -67,15 +66,15 @@
             </button>
           </el-tooltip>
           <el-input
+            ref="inputRef"
             v-model="inputMessage"
             type="textarea"
             :rows="1"
             :autosize="{ minRows: 1, maxRows: 6 }"
             placeholder="有问题，尽管问"
             resize="none"
-            :disabled="loading"
             class="chat-input"
-            @keydown.enter.exact="handleSend"
+            @keydown.enter.exact.prevent="handleSend"
           />
           <button
             v-if="!loading"
@@ -120,6 +119,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import type { ElInput } from 'element-plus'
 import { askStreamApi, stopStream, getSessionDetailApi } from '@/api/chat'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
@@ -181,6 +181,7 @@ const streamingContent = ref('')
 const statusMessage = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
+const inputRef = ref<InstanceType<typeof ElInput>>()
 const currentSessionId = ref<string | null>(null)
 const quickMode = ref(false)
 
@@ -199,6 +200,48 @@ let msgIdCounter = 0
 let streamMsgId = ''
 let sessionLoadedFromStream = false
 
+let streamRafId: number | null = null
+let pendingStreamContent = ''
+
+function flushStreamRender() {
+  if (streamRafId !== null) {
+    cancelAnimationFrame(streamRafId)
+    streamRafId = null
+  }
+  if (pendingStreamContent) {
+    const msg = messages.value.find(m => m.id === streamMsgId)
+    if (msg) {
+      msg.content = pendingStreamContent
+    }
+    pendingStreamContent = ''
+  }
+}
+
+function scheduleStreamRender(content: string) {
+  pendingStreamContent = content
+  if (streamRafId === null) {
+    streamRafId = requestAnimationFrame(() => {
+      streamRafId = null
+      if (!pendingStreamContent) return
+      const msg = messages.value.find(m => m.id === streamMsgId)
+      if (msg) {
+        msg.content = pendingStreamContent
+      }
+      pendingStreamContent = ''
+      scrollToBottom()
+    })
+  }
+}
+
+const markdownCache = new Map<string, string>()
+function renderMarkdownCached(text: string): string {
+  const cached = markdownCache.get(text)
+  if (cached !== undefined) return cached
+  const html = marked.parse(text) as string
+  markdownCache.set(text, html)
+  return html
+}
+
 const quickQuestions = [
   '暖气不热怎么办？',
   '供暖温度标准是多少？',
@@ -208,6 +251,12 @@ const quickQuestions = [
 
 function genId() {
   return `msg_${Date.now()}_${++msgIdCounter}`
+}
+
+function focusInput() {
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
 }
 
 function scrollToBottom() {
@@ -244,6 +293,8 @@ function handleQuickQuestion(question: string) {
 onMounted(() => {
   if (props.sessionId) {
     loadSessionMessages(props.sessionId)
+  } else {
+    focusInput()
   }
 })
 
@@ -257,15 +308,28 @@ watch(() => props.sessionId, (newId) => {
   } else {
     messages.value = []
     currentSessionId.value = null
+    focusInput()
   }
 })
 
 function handleStop() {
   stopStream()
+  flushStreamRender()
   finishStream()
 }
 
 function finishStream() {
+  if (streamRafId !== null) {
+    cancelAnimationFrame(streamRafId)
+    streamRafId = null
+  }
+  if (pendingStreamContent) {
+    const lastMsg = messages.value.find(m => m.id === streamMsgId)
+    if (lastMsg) {
+      lastMsg.content = pendingStreamContent
+    }
+    pendingStreamContent = ''
+  }
   if (streamingContent.value) {
     const lastMsg = messages.value.find(m => m.id === streamMsgId)
     if (lastMsg) {
@@ -281,7 +345,11 @@ function finishStream() {
 
 async function handleSend() {
   const content = inputMessage.value.trim()
-  if (!content || loading.value) return
+  if (!content) return
+
+  if (loading.value) {
+    handleStop()
+  }
 
   const userMsg: ChatMessage = {
     id: genId(),
@@ -291,9 +359,11 @@ async function handleSend() {
   }
   messages.value.push(userMsg)
   inputMessage.value = ''
+  focusInput()
   scrollToBottom()
   loading.value = true
   streamingContent.value = ''
+  pendingStreamContent = ''
 
   streamMsgId = genId()
   let placeholderPushed = false
@@ -307,16 +377,11 @@ async function handleSend() {
         messages.value.push({
           id: streamMsgId,
           role: 'assistant',
-          content: streamingContent.value,
+          content: '',
           timestamp: Date.now()
         })
-      } else {
-        const msg = messages.value.find(m => m.id === streamMsgId)
-        if (msg) {
-          msg.content = streamingContent.value
-        }
       }
-      scrollToBottom()
+      scheduleStreamRender(streamingContent.value)
     },
     onSessionId(sessionId: string) {
       if (!currentSessionId.value) {
@@ -332,6 +397,7 @@ async function handleSend() {
       finishStream()
     },
     onError(error: string) {
+      flushStreamRender()
       if (!placeholderPushed) {
         loading.value = false
         ElMessage.error(error || '请求失败，请稍后重试')

@@ -29,12 +29,17 @@ export function stopStream() {
   }
 }
 
+export function isStreaming(): boolean {
+  return abortController !== null && !abortController.signal.aborted
+}
+
 export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false): AbortController {
   stopStream()
 
   const controller = new AbortController()
   abortController = controller
   const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult } = callbacks
+  let aborted = false
 
   const token = localStorage.getItem('access_token')
 
@@ -49,13 +54,14 @@ export function askStreamApi(message: string, sessionId: string | null, callback
     body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode }),
     signal: controller.signal
   }).then(async (response) => {
+    if (aborted) return
     if (!response.ok) {
       let errorText = '请求失败'
       try {
         const errData = await response.json()
         errorText = errData.detail || errorText
       } catch { /* ignore */ }
-      onError(errorText)
+      if (!aborted) onError(errorText)
       return
     }
 
@@ -64,9 +70,15 @@ export function askStreamApi(message: string, sessionId: string | null, callback
     let buffer = ''
 
     while (true) {
+      if (aborted) {
+        reader.cancel().catch(() => {})
+        return
+      }
       const { done, value } = await reader.read()
       if (done) {
-        onDone()
+        if (!aborted) {
+          onDone()
+        }
         abortController = null
         break
       }
@@ -76,11 +88,12 @@ export function askStreamApi(message: string, sessionId: string | null, callback
       buffer = lines.pop() || ''
 
       for (const line of lines) {
+        if (aborted) return
         if (!line.startsWith('data: ')) continue
         const dataStr = line.slice(6)
 
         if (dataStr === '[DONE]' || dataStr === '') {
-          onDone()
+          if (!aborted) onDone()
           abortController = null
           return
         }
@@ -88,7 +101,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
         try {
           const parsed = JSON.parse(dataStr)
           if (parsed.error) {
-            onError(parsed.error)
+            if (!aborted) onError(parsed.error)
             return
           }
           if (parsed.session_id && onSessionId) {
@@ -112,7 +125,9 @@ export function askStreamApi(message: string, sessionId: string | null, callback
       }
     }
   }).catch((err) => {
-    if (err.name !== 'AbortError') {
+    if (err.name === 'AbortError') {
+      aborted = true
+    } else if (!aborted) {
       onError(String(err))
     }
     abortController = null
