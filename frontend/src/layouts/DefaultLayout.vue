@@ -5,12 +5,14 @@
         <div class="brand-area">
           <span class="brand-icon">🔥</span>
         </div>
-        <div class="collapse-btn" @click="collapsed = !collapsed">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <line x1="9" y1="3" x2="9" y2="21" />
-          </svg>
-        </div>
+        <el-tooltip :content="collapsed ? '展开侧边栏' : '收起侧边栏'" placement="right" :show-after="300">
+          <div class="collapse-btn" @click="collapsed = !collapsed">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+          </div>
+        </el-tooltip>
       </div>
       <div class="nav-section">
         <el-tooltip content="新对话" placement="right" :disabled="!collapsed" :show-after="300">
