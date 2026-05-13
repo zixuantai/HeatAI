@@ -507,6 +507,7 @@ async function handleSend() {
   flex-direction: column;
   align-items: center;
   padding: 0 20px 12px;
+  margin-top: -56px;
 }
 
 .chat-welcome h2 {

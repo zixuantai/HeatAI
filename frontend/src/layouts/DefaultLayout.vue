@@ -105,17 +105,9 @@
         </template>
       </div>
 
-      <el-popover
-        v-model:visible="popoverVisible"
-        :width="240"
-        trigger="click"
-        placement="right-start"
-        popper-class="user-menu-popover"
-        :disabled="collapsed"
-      >
-        <template #reference>
-          <el-tooltip :content="authStore.user?.username || '用户'" placement="right" :disabled="!collapsed" :show-after="300">
-            <div class="aside-user" :class="{ 'is-active': popoverVisible }">
+      <div class="user-area-wrapper" ref="userAreaRef">
+        <el-tooltip :content="authStore.user?.username || '用户'" placement="right" :disabled="!collapsed" :show-after="300">
+          <div class="aside-user" :class="{ 'is-active': popoverVisible }" @click="toggleUserMenu">
             <el-avatar :size="36" icon="UserFilled" />
             <div v-show="!collapsed" class="user-info">
               <span class="user-name">{{ authStore.user?.username || '用户' }}</span>
@@ -123,29 +115,31 @@
             </div>
             <el-icon v-show="!collapsed" class="user-arrow"><ArrowRight /></el-icon>
           </div>
-          </el-tooltip>
-        </template>
-        <div class="user-menu">
-          <div class="user-menu-header">
-            <el-avatar :size="28" icon="UserFilled" />
-            <span class="user-menu-name">{{ authStore.user?.username || '用户' }}</span>
-          </div>
-          <div class="user-menu-divider"></div>
-          <div class="user-menu-item" @click="handleEditProfile">
-            <el-icon><Edit /></el-icon>
-            <span>修改信息</span>
-          </div>
-          <div class="user-menu-item user-menu-item--danger" @click="handleLogoutClick">
-            <el-icon><SwitchButton /></el-icon>
-            <span>退出登录</span>
-          </div>
-        </div>
-      </el-popover>
+        </el-tooltip>
+      </div>
     </el-aside>
     <el-main class="layout-main">
       <router-view />
     </el-main>
   </el-container>
+
+  <Teleport to="body">
+    <div v-if="popoverVisible" class="user-dropdown" :style="dropdownStyle" @click.stop>
+      <div class="user-menu-header">
+        <el-avatar :size="28" icon="UserFilled" />
+        <span class="user-menu-name">{{ authStore.user?.username || '用户' }}</span>
+      </div>
+      <div class="user-menu-divider"></div>
+      <div class="user-menu-item" @click="handleEditProfile">
+        <el-icon><Edit /></el-icon>
+        <span>修改信息</span>
+      </div>
+      <div class="user-menu-item user-menu-item--danger" @click="handleLogoutClick">
+        <el-icon><SwitchButton /></el-icon>
+        <span>退出登录</span>
+      </div>
+    </div>
+  </Teleport>
 
   <el-dialog v-model="editDialogVisible" title="修改个人信息" width="440px" :close-on-click-modal="false" destroy-on-close>
     <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="70px" class="edit-form">
@@ -207,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
@@ -220,6 +214,8 @@ const route = useRoute()
 const authStore = useAuthStore()
 const popoverVisible = ref(false)
 const collapsed = ref(false)
+const userAreaRef = ref<HTMLElement | null>(null)
+const dropdownStyle = ref<Record<string, string>>({})
 const sessionMenuVisible = ref<Record<string, boolean>>({})
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
@@ -297,6 +293,19 @@ const editRules: FormRules = {
     { min: 3, max: 20, message: '用户名长度为3-20位', trigger: 'blur' },
     { pattern: /^[a-zA-Z0-9_\u4e00-\u9fa5]+$/, message: '用户名支持字母、数字、下划线和中文', trigger: 'blur' }
   ]
+}
+
+function toggleUserMenu() {
+  if (collapsed.value) return
+  if (!popoverVisible.value && userAreaRef.value) {
+    const rect = userAreaRef.value.getBoundingClientRect()
+    dropdownStyle.value = {
+      position: 'fixed',
+      left: rect.right + 8 + 'px',
+      bottom: (window.innerHeight - rect.bottom) + 'px',
+    }
+  }
+  popoverVisible.value = !popoverVisible.value
 }
 
 async function handleLogoutClick() {
@@ -449,8 +458,19 @@ function handleSearchNewChat() {
   router.push('/chat')
 }
 
+function handleClickOutside(e: MouseEvent) {
+  if (popoverVisible.value && userAreaRef.value && !userAreaRef.value.contains(e.target as Node)) {
+    popoverVisible.value = false
+  }
+}
+
 onMounted(() => {
   loadSessions()
+  document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 
 watch(() => route.path, () => {
@@ -609,6 +629,7 @@ watch(() => route.path, () => {
 /* ── Session List ────────────────────────────────────── */
 .session-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 12px 8px;
 }
@@ -726,15 +747,21 @@ watch(() => route.path, () => {
 }
 
 /* ── User Area ───────────────────────────────────────── */
+.user-area-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
 .aside-user {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 16px;
-  margin-top: auto;
   cursor: pointer;
   transition: background var(--transition-fast);
   user-select: none;
+  flex-shrink: 0;
 }
 
 .collapsed .aside-user {
@@ -798,6 +825,16 @@ watch(() => route.path, () => {
   border-radius: var(--radius-md) !important;
   box-shadow: var(--shadow-card-hover) !important;
   border: 1px solid var(--color-border-light) !important;
+}
+
+.user-dropdown {
+  width: 240px;
+  padding: 8px 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+  border: 1px solid var(--color-border-light);
+  z-index: 1000;
 }
 
 .user-menu-header {

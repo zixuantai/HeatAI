@@ -1,20 +1,25 @@
 <template>
   <div class="documents-page">
+    <!-- ── 页面头部 ────────────────────────────── -->
     <div class="page-header">
-      <h1 class="page-title">
-        <el-icon :size="24"><FolderOpened /></el-icon>
-        知识库文档管理
-      </h1>
-      <p class="page-desc">上传、管理和检索知识库文档，支持 PDF、Word、HTML、TXT 格式</p>
+      <div class="header-left">
+        <h1 class="page-title">
+          <el-icon :size="24"><FolderOpened /></el-icon>
+          知识库文档管理
+        </h1>
+        <p class="page-desc">上传、管理和检索知识库文档，支持 PDF、Word、HTML、TXT 格式</p>
+      </div>
     </div>
 
-    <div class="search-section">
+    <!-- ── 搜索区 ──────────────────────────────── -->
+    <div class="search-section neu-card">
       <div class="search-bar">
         <el-input
           v-model="searchQuery"
           placeholder="输入文档名搜索..."
           clearable
           size="large"
+          class="neu-search-input"
           @keyup.enter="handleSearch"
           @clear="handleClearSearch"
         >
@@ -22,13 +27,12 @@
             <el-icon><Search /></el-icon>
           </template>
         </el-input>
-        <el-button class="search-btn" size="large" @click="handleSearch">
-          搜索
-        </el-button>
+        <button class="neu-btn-primary" @click="handleSearch">搜索</button>
       </div>
     </div>
 
-    <div class="upload-zone"
+    <!-- ── 上传区域 ────────────────────────────── -->
+    <div class="upload-zone neu-card"
       :class="{ 'is-dragover': isDragOver }"
       @dragover.prevent="isDragOver = true"
       @dragleave.prevent="isDragOver = false"
@@ -43,9 +47,11 @@
         @change="handleFileSelect"
       />
       <div class="upload-content" @click="fileInputRef?.click()">
-        <el-icon :size="48" class="upload-icon"><UploadFilled /></el-icon>
+        <div class="upload-icon-housing">
+          <el-icon :size="36" class="upload-icon"><UploadFilled /></el-icon>
+        </div>
         <p class="upload-text">点击或拖拽文件到此处上传</p>
-        <p class="upload-hint">支持 PDF、Word (.docx/.doc)、HTML、TXT，单文件最大 50MB</p>
+        <p class="upload-hint">支持 PDF · Word (.docx/.doc) · HTML · TXT，单文件最大 50MB</p>
       </div>
     </div>
 
@@ -54,8 +60,9 @@
       <span>上传文档后需经过解析、分块、向量化等处理步骤，请耐心等待</span>
     </div>
 
+    <!-- ── 上传进度 ────────────────────────────── -->
     <div v-if="uploadingFiles.length > 0" class="upload-progress-section">
-      <div v-for="uf in uploadingFiles" :key="uf.name" class="upload-progress-item">
+      <div v-for="uf in uploadingFiles" :key="uf.name" class="upload-progress-item neu-recessed">
         <div class="upload-progress-info">
           <el-icon><Document /></el-icon>
           <span class="upload-progress-name">{{ uf.name }}</span>
@@ -68,35 +75,55 @@
       </div>
     </div>
 
-    <div class="documents-section">
+    <!-- ── 文档列表 ────────────────────────────── -->
+    <div class="documents-section neu-card">
       <div class="section-header">
-        <h3>
-          <template v-if="isSearching">搜索结果：{{ total }} 个文档</template>
-          <template v-else>文档列表（{{ total }}）</template>
-        </h3>
-        <el-button text :loading="loading" @click="loadDocuments">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
+        <div class="section-header-left">
+          <template v-if="isSearching">搜索结果：<strong>{{ total }}</strong> 个文档</template>
+          <template v-else>文档列表（<strong>{{ total }}</strong>）</template>
+        </div>
+        <div class="section-header-right">
+          <!-- 视图切换 -->
+          <div class="view-toggle neu-recessed">
+            <button
+              class="view-toggle-btn"
+              :class="{ active: viewMode === 'card' }"
+              @click="viewMode = 'card'"
+              title="卡片视图"
+            >
+              <el-icon :size="16"><Grid /></el-icon>
+            </button>
+            <button
+              class="view-toggle-btn"
+              :class="{ active: viewMode === 'table' }"
+              @click="viewMode = 'table'"
+              title="表格视图"
+            >
+              <el-icon :size="16"><List /></el-icon>
+            </button>
+          </div>
+          <button class="neu-btn-ghost" :disabled="loading" @click="() => loadDocuments()">
+            <el-icon :size="14"><Refresh /></el-icon>
+            刷新
+          </button>
+        </div>
       </div>
 
+      <!-- 表格视图 -->
       <el-table
+        v-if="viewMode === 'table'"
         v-loading="loading"
         :data="documents"
         stripe
         style="width: 100%"
         empty-text="暂无文档，请上传"
-        @row-click="handleRowClick"
         highlight-current-row
       >
         <el-table-column prop="original_filename" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
             <div class="file-type-cell">
-              <el-icon :size="18" :color="getFileTypeColor(row.file_type)">
-                <component :is="getFileTypeIcon(row.file_type)" />
-              </el-icon>
-              <span :style="{ color: getFileTypeColor(row.file_type) }" class="file-type-text">
+              <span class="file-type-badge" :style="{ background: getFileTypeColor(row.file_type) }">
                 {{ row.file_type.toUpperCase() }}
               </span>
             </div>
@@ -115,22 +142,91 @@
         </el-table-column>
         <el-table-column label="操作" width="80" align="center" fixed="right">
           <template #default="{ row }">
-            <el-popconfirm
-              title="确定删除该文档？"
-              confirm-button-text="删除"
-              cancel-button-text="取消"
-              @confirm.stop="handleDelete(row.id)"
-            >
-              <template #reference>
-                <el-button type="danger" text size="small" @click.stop>
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </template>
-            </el-popconfirm>
+            <el-button type="danger" text size="small" @click.stop="handleDeleteClick(row)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
 
+      <!-- 卡片视图 -->
+      <div v-else class="doc-cards-grid">
+        <div v-loading="loading" class="doc-cards-wrapper">
+          <div
+            v-for="doc in documents"
+            :key="doc.id"
+            class="tilt-container"
+            @mousemove="(e) => handleTilt(e, doc.id)"
+            @mouseleave="(e) => handleTiltLeave(e, doc.id)"
+          >
+            <div class="doc-card tilt-card" :data-doc-id="doc.id" @click="handleRowClick(doc)">
+              <!-- 角螺丝 -->
+              <span class="neu-screw neu-screw-tl" />
+              <span class="neu-screw neu-screw-tr" />
+              <span class="neu-screw neu-screw-bl" />
+              <span class="neu-screw neu-screw-br" />
+
+              <!-- 散热槽 -->
+              <div class="neu-vents">
+                <span class="neu-vent" />
+                <span class="neu-vent" />
+                <span class="neu-vent" />
+              </div>
+
+              <!-- 顶部：文件类型图标 -->
+              <div class="doc-card-top">
+                <div
+                  class="doc-type-badge"
+                  :style="{ '--badge-color': getFileTypeColor(doc.file_type) }"
+                >
+                  <span class="doc-type-ext">{{ doc.file_type.toUpperCase() }}</span>
+                  <svg class="doc-type-ring" viewBox="0 0 56 56">
+                    <circle cx="28" cy="28" r="26" fill="none" stroke-width="2"
+                      :stroke="getFileTypeColor(doc.file_type)" opacity="0.3" />
+                  </svg>
+                </div>
+                <div class="doc-meta-row">
+                  <span class="neu-led" :class="doc.chunk_count > 0 ? 'neu-led-online' : 'neu-led-warning'" />
+                  <span class="doc-meta-label">{{ doc.chunk_count > 0 ? 'INDEXED' : 'PENDING' }}</span>
+                </div>
+              </div>
+
+              <!-- 中间：文件名 -->
+              <h3 class="doc-card-name" :title="doc.original_filename">
+                {{ doc.original_filename }}
+              </h3>
+
+              <!-- 底部：信息条 -->
+              <div class="doc-card-info">
+                <div class="doc-info-item">
+                  <el-icon :size="14"><Coin /></el-icon>
+                  <span>{{ formatFileSize(doc.file_size) }}</span>
+                </div>
+                <div class="doc-info-item">
+                  <span class="doc-info-chip">{{ doc.chunk_count }} 块</span>
+                </div>
+                <div class="doc-info-item">
+                  <el-icon :size="14"><Clock /></el-icon>
+                  <span>{{ formatDateShort(doc.created_at) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 操作按钮：在卡片外部，不受 3D transform 影响 -->
+            <button class="neu-btn-delete" @click.stop="handleDeleteClick(doc)">
+              <el-icon :size="14"><Delete /></el-icon>
+            </button>
+          </div>
+
+          <el-empty
+            v-if="!loading && documents.length === 0"
+            description="暂无文档，请上传"
+            class="doc-empty"
+          />
+        </div>
+      </div>
+
+      <!-- 分页 -->
       <div class="pagination-wrapper">
         <el-pagination
           v-model:current-page="currentPage"
@@ -145,6 +241,7 @@
       </div>
     </div>
 
+    <!-- ── 分块详情弹窗 ─────────────────────────── -->
     <el-dialog
       v-model="chunkDialogVisible"
       :title="chunkDialogTitle"
@@ -152,7 +249,7 @@
       destroy-on-close
     >
       <div v-loading="chunkLoading" class="chunk-list">
-        <div v-for="chunk in chunks" :key="chunk.id" class="chunk-item">
+        <div v-for="chunk in chunks" :key="chunk.id" class="chunk-item neu-recessed">
           <div class="chunk-header">
             <el-tag size="small" type="info">#{{ chunk.chunk_index }}</el-tag>
             <span class="chunk-title">{{ chunk.title }}</span>
@@ -167,9 +264,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled
+  FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
+  Grid, List, Coin, Clock
 } from '@element-plus/icons-vue'
 import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
 import type { DocumentInfo, ChunkInfo } from '@/types'
@@ -186,6 +284,7 @@ const chunkDialogTitle = ref('')
 
 const searchQuery = ref('')
 const isSearching = ref(false)
+const viewMode = ref<'card' | 'table'>('card')
 
 interface UploadingFile {
   name: string
@@ -196,19 +295,7 @@ interface UploadingFile {
 const uploadingFiles = ref<UploadingFile[]>([])
 
 const currentPage = ref(1)
-const pageSize = ref(10)
-
-function getFileTypeIcon(fileType: string): string {
-  const map: Record<string, string> = {
-    pdf: 'PictureFilled',
-    docx: 'Document',
-    doc: 'Document',
-    html: 'Monitor',
-    htm: 'Monitor',
-    txt: 'Memo',
-  }
-  return map[fileType.toLowerCase()] || 'Document'
-}
+const pageSize = ref(12)
 
 function getFileTypeColor(fileType: string): string {
   const map: Record<string, string> = {
@@ -233,6 +320,13 @@ function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatDateShort(dateStr: string): string {
+  if (!dateStr) return '-'
+  const d = new Date(dateStr)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 async function loadDocuments(search?: string) {
@@ -291,6 +385,19 @@ function handleFileSelect() {
   }
 }
 
+async function handleDeleteClick(doc: DocumentInfo) {
+  try {
+    await ElMessageBox.confirm(
+      '确定要删除该文档吗？此操作不可撤销。',
+      '删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await handleDelete(doc.id)
+  } catch {
+    // 用户取消
+  }
+}
+
 async function handleDelete(id: string) {
   try {
     await deleteDocumentApi(id)
@@ -346,38 +453,82 @@ function handleSizeChange(size: number) {
   loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
 }
 
+// ── 3D Tilt 倾斜效果 ──────────────────────────────
+function handleTilt(e: MouseEvent, docId: string) {
+  const card = (e.currentTarget as HTMLElement).querySelector('.tilt-card') as HTMLElement
+  if (!card) return
+
+  const rect = card.getBoundingClientRect()
+  const x = e.clientX - rect.left
+  const y = e.clientY - rect.top
+
+  const centerX = rect.width / 2
+  const centerY = rect.height / 2
+
+  const rotateX = ((y - centerY) / centerY) * -8
+  const rotateY = ((x - centerX) / centerX) * 8
+
+  card.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(8px)`
+  card.style.boxShadow = `
+    ${10 + Math.abs(rotateY) * 0.8}px ${10 + Math.abs(rotateX) * 0.8}px 22px var(--neu-shadow-dark),
+    ${-10 - Math.abs(rotateY) * 0.8}px ${-10 - Math.abs(rotateX) * 0.8}px 22px var(--neu-shadow-light),
+    inset 1px 1px 0 rgba(255,255,255,0.6)
+  `
+}
+
+function handleTiltLeave(e: MouseEvent, docId: string) {
+  const card = (e.currentTarget as HTMLElement).querySelector('.tilt-card') as HTMLElement
+  if (!card) return
+
+  card.style.transform = 'perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0)'
+  card.style.boxShadow = ''
+}
+
 onMounted(() => {
   loadDocuments()
 })
 </script>
 
 <style scoped>
+/* ============================================================
+   Documents Page — Industrial Neumorphic
+   ============================================================ */
+
 .documents-page {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 32px 28px;
+  padding: 32px 28px 80px;
   height: 100vh;
   overflow-y: auto;
   position: relative;
 }
 
-/* ── Atmospheric Background Blob ──────────────────────── */
+/* ── Atmospheric Background Blob ──────────────────── */
 .documents-page::before {
   content: '';
   position: fixed;
   top: -15%;
   right: -10%;
-  width: 450px;
-  height: 450px;
+  width: 500px;
+  height: 500px;
   border-radius: 50%;
-  background: rgba(79, 70, 229, 0.04);
-  filter: blur(100px);
+  background: rgba(79, 70, 229, 0.03);
+  filter: blur(120px);
   z-index: -1;
   pointer-events: none;
 }
 
+/* ── Page Header ──────────────────────────────────── */
 .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   margin-bottom: 28px;
+  gap: 20px;
+}
+
+.header-left {
+  flex: 1;
 }
 
 .page-title {
@@ -398,79 +549,135 @@ onMounted(() => {
   font-weight: var(--font-weight-medium);
 }
 
-/* ── Search Section ──────────────────────────────────── */
-.search-section {
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
   background: var(--color-surface);
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  box-shadow: var(--shadow-card);
-  border: 1px solid var(--color-border-light);
-  margin-bottom: 24px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--neu-recessed);
+  flex-shrink: 0;
+}
+
+.status-label {
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+/* ── Search Section ──────────────────────────────── */
+.search-section {
+  padding: 22px 24px;
+  margin-bottom: 20px;
 }
 
 .search-bar {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
-.search-bar .el-input {
+.search-bar :deep(.el-input) {
   flex: 1;
 }
 
-.search-btn {
-  background: var(--gradient-primary) !important;
-  border: none !important;
-  color: #fff !important;
-  font-weight: var(--font-weight-semibold) !important;
+.search-bar :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm) !important;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-  min-width: 80px;
-  font-size: var(--font-size-base) !important;
-  box-shadow: var(--shadow-button);
+  box-shadow: none !important;
+  border: 1px solid var(--color-border) !important;
+  background: var(--color-surface);
+  padding: 6px 20px;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
-.search-btn:hover {
-  box-shadow: var(--shadow-button-hover);
+.search-bar :deep(.el-input__wrapper:hover) {
+  border-color: var(--color-primary) !important;
+}
+
+.search-bar :deep(.el-input.is-focus .el-input__wrapper) {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08) !important;
+}
+
+/* Neumorphic 主按钮 */
+.neu-btn-primary {
+  background: var(--gradient-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 12px 28px;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+  transition: all 150ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  font-family: var(--font-family);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.neu-btn-primary:hover {
+  box-shadow: 0 6px 22px rgba(79, 70, 229, 0.5);
   transform: translateY(-1px);
 }
+.neu-btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: inset 3px 3px 8px rgba(0,0,0,0.2), inset -3px -3px 8px rgba(255,255,255,0.1);
+}
 
-/* ── Upload Zone ─────────────────────────────────────── */
+/* ── Upload Zone ─────────────────────────────────── */
 .upload-zone {
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-xl);
-  padding: 48px;
+  padding: 44px;
   text-align: center;
   cursor: pointer;
-  transition: border-color var(--transition-base), background var(--transition-base), box-shadow var(--transition-base);
-  background: var(--color-surface);
-  margin-bottom: 24px;
-  box-shadow: var(--shadow-card);
+  margin-bottom: 20px;
+  border: 2px dashed var(--color-border) !important;
 }
 
 .upload-zone:hover,
 .upload-zone.is-dragover {
-  border-color: var(--color-primary);
-  background: var(--gradient-subtle);
-  box-shadow: var(--shadow-card-hover);
+  border-color: var(--color-primary) !important;
+  box-shadow: var(--neu-card-hover);
+}
+
+.upload-icon-housing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: var(--neu-card);
+  margin-bottom: 16px;
+  transition: box-shadow var(--transition-base), transform var(--transition-base);
+}
+
+.upload-zone:hover .upload-icon-housing,
+.upload-zone.is-dragover .upload-icon-housing {
+  box-shadow: var(--neu-card-hover);
+  transform: translateY(-3px);
 }
 
 .upload-icon {
   color: var(--color-border);
-  margin-bottom: 12px;
-  transition: color var(--transition-base), transform var(--transition-base);
+  transition: color var(--transition-base);
 }
 
 .upload-zone:hover .upload-icon,
 .upload-zone.is-dragover .upload-icon {
   color: var(--color-primary);
-  transform: translateY(-4px);
 }
 
 .upload-text {
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-main);
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 
 .upload-hint {
@@ -485,28 +692,24 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   padding: 12px 18px;
-  background: linear-gradient(135deg, #fffbeb, #fef3c7);
-  border: 1px solid #fcd34d;
+  background: linear-gradient(135deg, #EEF2FF, #F5F3FF);
+  border: 1px solid #C7D2FE;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-base);
-  color: #b45309;
+  color: #4338CA;
   font-weight: var(--font-weight-medium);
 }
 
-/* ── Upload Progress ─────────────────────────────────── */
+/* ── Upload Progress ─────────────────────────────── */
 .upload-progress-section {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .upload-progress-item {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
   padding: 14px 18px;
   margin-bottom: 8px;
-  box-shadow: var(--shadow-sm);
 }
 
 .upload-progress-info {
@@ -547,29 +750,252 @@ onMounted(() => {
   100% { width: 90%; }
 }
 
-/* ── Documents Section ───────────────────────────────── */
+/* ── Documents Section ───────────────────────────── */
 .documents-section {
-  background: var(--color-surface);
-  border-radius: var(--radius-xl);
   padding: 24px;
-  box-shadow: var(--shadow-card);
-  border: 1px solid var(--color-border-light);
 }
 
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
-.section-header h3 {
+.section-header-left {
   font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-main);
+}
+
+.section-header-left strong {
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-primary);
+}
+
+.section-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 视图切换 */
+.view-toggle {
+  display: flex;
+  padding: 4px;
+  border-radius: var(--radius-full);
+  gap: 2px;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 150ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.view-toggle-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--neu-card);
+}
+
+.view-toggle-btn:hover:not(.active) {
+  color: var(--color-text-main);
+}
+
+/* ── Card Grid ──────────────────────────────────── */
+.doc-cards-grid {
+  min-height: 200px;
+}
+
+.doc-cards-wrapper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.doc-empty {
+  grid-column: 1 / -1;
+}
+
+/* 3D Tilt 外层容器 */
+.tilt-container {
+  perspective: 800px;
+  position: relative;
+}
+
+/* 文档卡片 */
+.doc-card {
+  position: relative;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-light);
+  padding: 24px 20px 68px;
+  cursor: pointer;
+  box-shadow: var(--neu-card);
+  will-change: transform;
+  overflow: hidden;
+  height: 210px;
+  transform-style: flat;
+}
+
+.doc-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.4), transparent 60%);
+  pointer-events: none;
+  opacity: 0.6;
+  z-index: 0;
+}
+
+.doc-card-name {
+  font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-main);
-  margin: 0;
+  margin: 0 0 14px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+  position: relative;
+  z-index: 1;
 }
 
+/* 顶部 */
+.doc-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 高级感文件类型徽章 ────────────────────────── */
+.doc-type-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--badge-color, #4F46E5) 15%, white),
+    color-mix(in srgb, var(--badge-color, #4F46E5) 8%, white)
+  );
+  box-shadow:
+    inset 1px 1px 2px rgba(255,255,255,0.7),
+    inset -1px -1px 2px rgba(0,0,0,0.06),
+    2px 2px 6px rgba(0,0,0,0.08);
+  border: 1.5px solid color-mix(in srgb, var(--badge-color, #4F46E5) 25%, transparent);
+}
+
+.doc-type-ring {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  pointer-events: none;
+}
+
+.doc-type-ext {
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--badge-color, #4F46E5);
+  position: relative;
+  z-index: 1;
+}
+
+.doc-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.doc-meta-label {
+  font-family: var(--font-family);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+/* 底部信息条 */
+.doc-card-info {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.doc-info-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.doc-info-chip {
+  font-family: var(--font-family);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.06);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.neu-btn-delete {
+  position: absolute;
+  bottom: 28px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 3px 3px 8px rgba(0,0,0,0.12), -2px -2px 6px rgba(255,255,255,0.9);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  z-index: 10;
+  transition: all 150ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.neu-btn-delete:hover {
+  color: #e74c3c;
+  box-shadow: inset 3px 3px 6px rgba(0,0,0,0.1), inset -3px -3px 6px rgba(255,255,255,0.7);
+  transform: scale(1.1);
+}
+.neu-btn-delete:active {
+  transform: scale(0.95);
+}
+
+/* ── Table View ──────────────────────────────────── */
 .documents-section :deep(.el-table__body-wrapper) {
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
@@ -589,19 +1015,32 @@ onMounted(() => {
   background-color: rgba(79, 70, 229, 0.03) !important;
 }
 
-/* ── File Type Cell ──────────────────────────────────── */
+/* ── Table File Type Badge ───────────────────────── */
 .file-type-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
-.file-type-text {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
+.file-type-badge {
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
 }
 
-/* ── Chunk Dialog ────────────────────────────────────── */
+/* ── Pagination ──────────────────────────────────── */
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 4px;
+}
+
+/* ── Chunk Dialog ────────────────────────────────── */
 .chunk-list {
   max-height: 500px;
   overflow-y: auto;
@@ -609,17 +1048,13 @@ onMounted(() => {
 }
 
 .chunk-item {
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-sm);
   padding: 16px 18px;
   margin-bottom: 12px;
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
-  background: var(--color-surface);
+  transition: box-shadow var(--transition-base);
 }
 
 .chunk-item:hover {
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--neu-card);
 }
 
 .chunk-header {
@@ -643,11 +1078,69 @@ onMounted(() => {
   word-break: break-word;
 }
 
-/* ── Pagination ──────────────────────────────────────── */
-.pagination-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-  padding-top: 4px;
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 1024px) {
+  .doc-cards-wrapper {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .documents-page {
+    padding: 20px 16px 60px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .header-status {
+    align-self: flex-start;
+  }
+
+  .search-bar {
+    flex-direction: column;
+  }
+
+  .neu-btn-primary {
+    width: 100%;
+  }
+
+  .upload-zone {
+    padding: 32px 20px;
+  }
+
+  .doc-cards-wrapper {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .doc-card {
+    padding: 20px 16px 64px;
+  }
+
+  .section-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .section-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 480px) {
+  .doc-card-info {
+    gap: 10px;
+  }
+
+  .doc-info-item {
+    font-size: 11px;
+  }
 }
 </style>
