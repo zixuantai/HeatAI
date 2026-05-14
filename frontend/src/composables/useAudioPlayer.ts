@@ -54,7 +54,6 @@ export function useAudioPlayer() {
     allText = ''
     ttsBuffer = ''
     isStreamComplete = false
-    isAudioMuted.value = false
     isAudioPlaying.value = true
     hasAudio.value = true
   }
@@ -118,6 +117,22 @@ export function useAudioPlayer() {
     synth.speak(utterance)
   }
 
+  const setMuted = (muted: boolean) => {
+    if (isAudioMuted.value === muted) return
+    isAudioMuted.value = muted
+    if (muted) {
+      synth.cancel()
+      isAudioPlaying.value = false
+    } else {
+      if (!isStreamComplete && ttsBuffer.trim()) {
+        isAudioPlaying.value = true
+        const remaining = ttsBuffer
+        ttsBuffer = ''
+        speak(remaining)
+      }
+    }
+  }
+
   const togglePlay = () => {
     console.log('[Audio] togglePlay, isStreamComplete:', isStreamComplete, 'isAudioPlaying:', isAudioPlaying.value)
     if (!hasAudio.value) return
@@ -152,7 +167,6 @@ export function useAudioPlayer() {
     ttsBuffer = ''
     isStreamComplete = false
     isAudioPlaying.value = false
-    isAudioMuted.value = false
     hasAudio.value = false
   }
 
@@ -160,6 +174,7 @@ export function useAudioPlayer() {
     hasAudio,
     isAudioPlaying,
     isAudioMuted,
+    setMuted,
     initAudioStream,
     handleAudioChunk,
     togglePlay,

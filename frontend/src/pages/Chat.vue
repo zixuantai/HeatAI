@@ -640,6 +640,11 @@ function finishStream() {
   streamMsgId = ''
   statusMessage.value = ''
   loading.value = false
+
+  if (isVoiceMode.value && voiceInputRef.value) {
+    voiceInputRef.value.resumeVAD()
+  }
+
   scrollToBottom()
 }
 
@@ -683,6 +688,10 @@ async function handleSend() {
   console.log('[快速模式] 发送消息时 quickMode.value =', quickMode.value)
 
   initAudioStream()
+
+  if (isVoiceMode.value && voiceInputRef.value) {
+    voiceInputRef.value.pauseVAD()
+  }
 
   askStreamApi(content, currentSessionId.value, {
     onChunk(text: string) {

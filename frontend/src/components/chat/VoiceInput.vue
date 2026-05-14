@@ -150,9 +150,33 @@ function handleStop() {
   emit('stop')
 }
 
+function pauseVAD() {
+  if (vad) {
+    try {
+      vad.pause()
+      console.log('[Voice] VAD已暂停')
+    } catch (err) {
+      console.warn('[Voice] VAD暂停失败:', err)
+    }
+  }
+}
+
+function resumeVAD() {
+  if (vad) {
+    try {
+      vad.start()
+      console.log('[Voice] VAD已恢复')
+    } catch (err) {
+      console.warn('[Voice] VAD恢复失败:', err)
+    }
+  }
+}
+
 defineExpose({
   disableVoiceMode,
-  handleStop
+  handleStop,
+  pauseVAD,
+  resumeVAD
 })
 
 onUnmounted(async () => {
