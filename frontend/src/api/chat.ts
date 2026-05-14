@@ -42,7 +42,7 @@ export function isStreaming(): boolean {
   return abortController !== null && !abortController.signal.aborted
 }
 
-export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false, voice: string = 'longanhuan', images: string[] = []): AbortController {
+export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false, voice: string = 'longanhuan', images: string[] = [], personalization: Record<string, number> = {}): AbortController {
   stopStream()
 
   const controller = new AbortController()
@@ -52,7 +52,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
 
   const token = localStorage.getItem('access_token')
 
-  console.log('[快速模式] API层 quickMode =', quickMode, ', images =', images.length, ', 请求体 =', { message: message.slice(0, 30), session_id: sessionId, quick_mode: quickMode, voice })
+  console.log('[快速模式] API层 quickMode =', quickMode, ', images =', images.length, ', personalization =', personalization, ', 请求体 =', { message: message.slice(0, 30), session_id: sessionId, quick_mode: quickMode, voice, personalization })
 
   fetch('/api/chat/stream', {
     method: 'POST',
@@ -60,7 +60,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
       'Content-Type': 'application/json',
       'Authorization': token ? `Bearer ${token}` : ''
     },
-    body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode, voice, images }),
+    body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode, voice, images, personalization }),
     signal: controller.signal
   }).then(async (response) => {
     if (aborted) return

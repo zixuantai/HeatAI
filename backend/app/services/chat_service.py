@@ -134,6 +134,43 @@ VISION_SYSTEM_PROMPT = """你是智慧供热客服助手，具备图片识别能
 5. 回答中不出现代码、函数调用、工具名称等程序化内容"""
 
 
+PERSONALIZATION_CONFIG = {
+    "gentle": {
+        "label": "温柔体贴",
+        "desc": {-1: "请保持专业客观，以事实和数据为重，语气更为严谨。",
+                  1: "请以更友好、更亲近的语气回答，像对待朋友一样提供建议。"}
+    },
+    "enthusiastic": {
+        "label": "热情洋溢",
+        "desc": {-1: "请保持冷静中立，语气平稳，不带过多情绪色彩。",
+                  1: "请更加活力充沛、热情洋溢，用饱满的语言感染用户。"}
+    },
+    "structure": {
+        "label": "标题和列表",
+        "desc": {-1: "请多用段落文本呈现信息，减少列表和标题的使用，保持自然的文章体。",
+                  1: "请多用清晰的标题和列表结构组织内容，让信息一目了然。"}
+    },
+    "emoji": {
+        "label": "表情符号",
+        "desc": {-1: "请尽量减少或避免使用表情符号，保持严肃正式。",
+                  1: "请在回答中适当使用表情符号，增加亲和力和趣味性。"}
+    },
+}
+
+
+def build_personalization_prompt(personalization: dict[str, int] | None) -> str:
+    if not personalization:
+        return ""
+    instructions = []
+    for key, config in PERSONALIZATION_CONFIG.items():
+        val = personalization.get(key, 0)
+        if val != 0 and val in config["desc"]:
+            instructions.append(config["desc"][val])
+    if not instructions:
+        return ""
+    return "\n\n## 对话风格设定\n" + "\n".join(instructions)
+
+
 def build_multimodal_message(text: str, images: list[str]) -> dict:
     content_parts = []
     for img_base64 in images:
@@ -275,6 +312,7 @@ class ChatService:
         message: str,
         history: list[dict] | None = None,
         search_results: list[dict] | None = None,
+        personalization: dict[str, int] | None = None,
     ) -> dict:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
@@ -283,6 +321,9 @@ class ChatService:
             logger.info(f"[RAG 对话] 使用 {len(search_results)} 条搜索结果作为上下文")
 
         system_content = build_rag_system_prompt(search_results or [])
+        pers_prompt = build_personalization_prompt(personalization)
+        if pers_prompt:
+            system_content += pers_prompt
 
         messages = [{"role": "system", "content": system_content}]
         if history:
@@ -359,6 +400,7 @@ class ChatService:
         message: str,
         history: list[dict] | None = None,
         search_results: list[dict] | None = None,
+        personalization: dict[str, int] | None = None,
     ) -> AsyncGenerator[dict, None]:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
@@ -367,6 +409,9 @@ class ChatService:
             logger.info(f"[RAG 对话] 使用 {len(search_results)} 条搜索结果作为上下文")
 
         system_content = build_rag_system_prompt(search_results or [])
+        pers_prompt = build_personalization_prompt(personalization)
+        if pers_prompt:
+            system_content += pers_prompt
 
         messages = [{"role": "system", "content": system_content}]
         if history:
@@ -481,13 +526,19 @@ class ChatService:
     async def quick_ask(
         message: str,
         history: list[dict] | None = None,
+        personalization: dict[str, int] | None = None,
     ) -> dict:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
 
         logger.info(f"[快速模式-非流式] 直接回复，跳过RAG管线")
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT_QUICK}]
+        sys_content = SYSTEM_PROMPT_QUICK
+        pers_prompt = build_personalization_prompt(personalization)
+        if pers_prompt:
+            sys_content += pers_prompt
+
+        messages = [{"role": "system", "content": sys_content}]
         if history:
             messages.extend(history)
         else:
@@ -561,13 +612,19 @@ class ChatService:
     async def stream_quick_ask(
         message: str,
         history: list[dict] | None = None,
+        personalization: dict[str, int] | None = None,
     ) -> AsyncGenerator[dict, None]:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
 
         logger.info(f"[快速模式] 直接回复，跳过RAG管线")
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT_QUICK}]
+        sys_content = SYSTEM_PROMPT_QUICK
+        pers_prompt = build_personalization_prompt(personalization)
+        if pers_prompt:
+            sys_content += pers_prompt
+
+        messages = [{"role": "system", "content": sys_content}]
         if history:
             messages.extend(history)
         else:
@@ -674,13 +731,19 @@ class ChatService:
         message: str,
         images: list[str],
         history: list[dict] | None = None,
+        personalization: dict[str, int] | None = None,
     ) -> AsyncGenerator[dict, None]:
         if not settings.DASHSCOPE_API_KEY:
             raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
 
         logger.info(f"[视觉模式] 图片数量: {len(images)}, 文本: {message[:50] if message else '(无)'}")
 
-        messages = [{"role": "system", "content": [{"text": VISION_SYSTEM_PROMPT}]}]
+        vis_sys = VISION_SYSTEM_PROMPT
+        pers_prompt = build_personalization_prompt(personalization)
+        if pers_prompt:
+            vis_sys += pers_prompt
+
+        messages = [{"role": "system", "content": [{"text": vis_sys}]}]
         if history:
             for h in history:
                 if isinstance(h.get("content"), str):

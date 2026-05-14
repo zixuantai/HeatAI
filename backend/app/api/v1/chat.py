@@ -127,7 +127,7 @@ async def ask(
             except Exception:
                 pass
 
-            result = await chat_service.quick_ask(req.message, history_messages)
+            result = await chat_service.quick_ask(req.message, history_messages, req.personalization)
         else:
             need_kb = query_rewriter.needs_knowledge_base(req.message)
             skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
@@ -172,7 +172,7 @@ async def ask(
 
                 ctx = await ctx_task
 
-            result = await chat_service.ask(req.message, ctx.messages, search_results)
+            result = await chat_service.ask(req.message, ctx.messages, search_results, req.personalization)
 
         await conversation_service.save_message(db, session_id, "assistant", result["answer"])
 
@@ -229,7 +229,7 @@ async def stream_chat(
                     pass
 
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
-                async for event in chat_service.stream_vision_ask(req.message, req.images, history_messages):
+                async for event in chat_service.stream_vision_ask(req.message, req.images, history_messages, req.personalization):
                     event_type = event.get("type", "content")
                     if event_type == "content":
                         collected_content.append(event["content"])
@@ -252,7 +252,7 @@ async def stream_chat(
                 except Exception:
                     pass
 
-                async for event in chat_service.stream_quick_ask(req.message, history_messages):
+                async for event in chat_service.stream_quick_ask(req.message, history_messages, req.personalization):
                     event_type = event.get("type", "content")
                     if event_type == "content":
                         collected_content.append(event["content"])
@@ -301,7 +301,7 @@ async def stream_chat(
                 ctx = await ctx_task
 
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-                async for event in chat_service.stream_ask(req.message, ctx.messages, search_results):
+                async for event in chat_service.stream_ask(req.message, ctx.messages, search_results, req.personalization):
                     event_type = event.get("type", "content")
                     if event_type == "content":
                         collected_content.append(event["content"])

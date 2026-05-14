@@ -223,6 +223,43 @@
             </el-select>
           </div>
         </div>
+
+        <div v-if="activeSettingsNav === 'theme'" class="settings-theme">
+          <div class="settings-theme-desc">选择界面主题外观</div>
+          <el-radio-group v-model="themeMode" class="settings-theme-group" @change="handleThemeChange">
+            <el-radio-button value="light">Light</el-radio-button>
+            <el-radio-button value="dark">Dark</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <div v-if="activeSettingsNav === 'personalization'" class="settings-personalization">
+          <div class="settings-personalization-desc">在基本风格和语调的基础上选择额外的自定义项</div>
+          <div v-for="item in personalizationItems" :key="item.key" class="settings-personalization-item">
+            <div class="settings-personalization-item-header">
+              <span class="settings-personalization-item-label">{{ item.label }}</span>
+              <el-select
+                :model-value="personalizationValues[item.key] ?? 0"
+                placeholder="默认"
+                size="default"
+                class="settings-personalization-select"
+                popper-class="settings-personalization-popper"
+                @change="(val: number) => handlePersonalizationChange(item.key, val)"
+              >
+                <el-option :value="-1" label="减弱">
+                  <div class="personalization-option-label">减弱</div>
+                  <div class="personalization-option-desc">{{ item.descWeaken }}</div>
+                </el-option>
+                <el-option :value="0" label="默认">
+                  <div class="personalization-option-label">默认</div>
+                </el-option>
+                <el-option :value="1" label="增强">
+                  <div class="personalization-option-label">增强</div>
+                  <div class="personalization-option-desc">{{ item.descEnhance }}</div>
+                </el-option>
+              </el-select>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </el-dialog>
@@ -268,7 +305,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -301,7 +338,9 @@ const avatarPreview = ref<string | null>(null)
 let croppieInstance: Croppie | null = null
 
 const settingsNavItems = [
-  { key: 'voice', label: '声音', icon: Headset }
+  { key: 'voice', label: '声音', icon: Headset },
+  { key: 'theme', label: '主题', icon: Sunny },
+  { key: 'personalization', label: '个性化', icon: MagicStick }
 ]
 const activeSettingsNav = ref('voice')
 const currentSettingsLabel = computed(() => {
@@ -317,6 +356,71 @@ const voiceOptions = [
   { label: '阳光顽皮男', value: 'longjielidou_v3' }
 ]
 const voiceType = ref(localStorage.getItem(settingsVoiceTypeKey.value) || 'longanhuan')
+
+const settingsThemeKey = computed(() => `heatai_theme_${authStore.user?.id || ''}`)
+const themeMode = ref(localStorage.getItem(settingsThemeKey.value) || 'light')
+
+const personalizationItems = [
+  {
+    key: 'gentle',
+    label: '温柔体贴',
+    descWeaken: '更专业、事实性更强',
+    descEnhance: '更友好、更亲近'
+  },
+  {
+    key: 'enthusiastic',
+    label: '热情洋溢',
+    descWeaken: '更加冷静中立',
+    descEnhance: '更加活力充沛'
+  },
+  {
+    key: 'structure',
+    label: '标题和列表',
+    descWeaken: '更多段落文本，而非列表结构',
+    descEnhance: '多用清晰格式和列表结构'
+  },
+  {
+    key: 'emoji',
+    label: '表情符号',
+    descWeaken: '尽量少用表情符号',
+    descEnhance: '使用更多表情符号'
+  }
+]
+
+const personalizationKeyPrefix = computed(() => `heatai_personalization_${authStore.user?.id || ''}_`)
+
+const personalizationValues = ref<Record<string, number>>({})
+
+function loadPersonalizationValues() {
+  const values: Record<string, number> = {}
+  for (const item of personalizationItems) {
+    const key = personalizationKeyPrefix.value + item.key
+    const stored = localStorage.getItem(key)
+    values[item.key] = stored !== null ? Number(stored) : 0
+  }
+  personalizationValues.value = values
+}
+
+function handlePersonalizationChange(itemKey: string, val: number) {
+  personalizationValues.value[itemKey] = val
+  localStorage.setItem(personalizationKeyPrefix.value + itemKey, String(val))
+}
+
+function applyTheme(mode: string) {
+  if (mode === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+    document.documentElement.classList.remove('dark')
+  }
+}
+
+function handleThemeChange(mode: string) {
+  themeMode.value = mode
+  localStorage.setItem(settingsThemeKey.value, mode)
+  applyTheme(mode)
+}
 
 const activeSessionId = computed(() => {
   return (route.params.sessionId as string) || null
@@ -445,6 +549,9 @@ function handleSettings() {
 
 function handleSettingsOpen() {
   activeSettingsNav.value = settingsNavItems[0]?.key || 'voice'
+  loadPersonalizationValues()
+  const savedTheme = localStorage.getItem(settingsThemeKey.value) || 'light'
+  themeMode.value = savedTheme
 }
 
 function handleVoiceEnabledChange(val: boolean) {
@@ -662,6 +769,8 @@ function handleClickOutside(e: MouseEvent) {
 
 onMounted(() => {
   loadSessions()
+  loadPersonalizationValues()
+  applyTheme(themeMode.value)
   document.addEventListener('click', handleClickOutside)
 })
 
@@ -1176,6 +1285,44 @@ watch(() => route.path, () => {
 .settings-voice-select {
   width: 180px;
 }
+
+.settings-theme-desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
+}
+
+.settings-theme-group {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-personalization-desc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+.settings-personalization-item {
+  padding: 14px 0;
+}
+
+.settings-personalization-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-personalization-item-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
+}
+
+.settings-personalization-select {
+  width: 140px;
+}
 </style>
 
 <style>
@@ -1430,5 +1577,70 @@ watch(() => route.path, () => {
   color: var(--color-primary) !important;
   background: var(--gradient-subtle) !important;
   font-weight: var(--font-weight-semibold) !important;
+}
+
+.settings-personalization-popper {
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: var(--color-primary);
+  --el-color-primary-light-5: var(--color-primary);
+  --el-color-primary-light-7: #C7D2FE;
+  --el-color-primary-light-8: #E0E7FF;
+  --el-color-primary-light-9: #EEF2FF;
+  --el-fill-color-light: var(--gradient-subtle);
+  background: var(--color-surface) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  border: 1px solid var(--color-border-light) !important;
+}
+
+.settings-personalization-popper .el-select-dropdown__item {
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  height: auto;
+  padding: 8px 16px;
+  line-height: 1.5;
+}
+
+.settings-personalization-popper .el-select-dropdown__item:hover {
+  background: var(--gradient-subtle) !important;
+  color: var(--color-primary) !important;
+}
+
+.settings-personalization-popper .el-select-dropdown__item.is-selected {
+  color: var(--color-primary) !important;
+  background: var(--gradient-subtle) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.personalization-option-label {
+  font-size: var(--font-size-base);
+  color: inherit;
+}
+
+.personalization-option-desc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.settings-theme-group .el-radio-button__inner {
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--color-border) !important;
+}
+
+.settings-theme-group .el-radio-button:first-child .el-radio-button__inner {
+  border-radius: var(--radius-sm) !important;
+}
+
+.settings-theme-group .el-radio-button:last-child .el-radio-button__inner {
+  border-radius: var(--radius-sm) !important;
+}
+
+.settings-theme-group .el-radio-button.is-active .el-radio-button__inner {
+  background: var(--gradient-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-button) !important;
 }
 </style>

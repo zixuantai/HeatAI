@@ -18,6 +18,7 @@ class ChatRequest(BaseModel):
     quick_mode: bool = Field(False, description="快速模式，跳过知识库检索直接回复")
     voice: str = Field("longanhuan", description="TTS音色名称")
     images: list[str] = Field(default_factory=list, description="图片base64列表，用于视觉模型")
+    personalization: dict[str, int] = Field(default_factory=dict, description="个性化参数，key为gentle/enthusiastic/structure/emoji，value为-1减弱/0默认/1增强")
 
 
 class ChatResponse(BaseModel):

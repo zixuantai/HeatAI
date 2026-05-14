@@ -83,6 +83,47 @@
   --transition-very-slow:500ms ease-out;
 }
 
+[data-theme="dark"] {
+  --color-bg:           #0F172A;
+  --color-surface:      #1E293B;
+  --color-primary:      #818CF8;
+  --color-primary-hover:#A5B4FC;
+  --color-secondary:    #A78BFA;
+  --color-text-main:    #F1F5F9;
+  --color-text-muted:   #94A3B8;
+  --color-text-subtle:  #64748B;
+  --color-accent:       #34D399;
+  --color-border:       #334155;
+  --color-border-light: #1E293B;
+
+  --gradient-primary:   linear-gradient(135deg, #6366F1, #8B5CF6);
+  --gradient-primary-hover: linear-gradient(135deg, #818CF8, #A78BFA);
+  --gradient-subtle:    linear-gradient(135deg, #1E1B4B, #312E81);
+  --gradient-dark:      linear-gradient(135deg, #0F172A, #1E293B);
+
+  --shadow-card:        0 4px 20px -2px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover:  0 10px 25px -5px rgba(0, 0, 0, 0.4);
+  --shadow-button:      0 4px 14px 0 rgba(99, 102, 241, 0.4);
+  --shadow-button-hover:0 6px 20px 0 rgba(99, 102, 241, 0.55);
+  --shadow-sm:          0 1px 3px rgba(0, 0, 0, 0.2);
+
+  --neu-shadow-dark:    #0F172A;
+  --neu-shadow-light:   #334155;
+
+  --el-dialog-bg-color: var(--color-surface);
+  --el-overlay-color: rgba(0, 0, 0, 0.6);
+  --el-bg-color: var(--color-surface);
+  --el-bg-color-overlay: var(--color-surface);
+  --el-text-color-primary: var(--color-text-main);
+  --el-text-color-regular: var(--color-text-main);
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border-light);
+  --el-fill-color-blank: var(--color-surface);
+  --el-fill-color: var(--color-border);
+  --el-fill-color-light: rgba(99, 102, 241, 0.15);
+  --el-color-info: var(--color-text-muted);
+}
+
 /* ── Reset & Base ────────────────────────────────────────── */
 *,
 *::before,
@@ -526,6 +567,58 @@ html, body {
 .el-dialog__header {
   font-family: var(--font-family);
   font-weight: var(--font-weight-bold);
+}
+
+[data-theme="dark"] .el-dialog {
+  --el-dialog-bg-color: var(--color-surface);
+  --el-dialog-text-color: var(--color-text-main);
+}
+[data-theme="dark"] .el-dialog__headerbtn .el-dialog__close {
+  color: var(--color-text-muted);
+}
+[data-theme="dark"] .el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--color-text-main);
+}
+[data-theme="dark"] .el-radio-button__inner {
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+}
+[data-theme="dark"] .el-radio-button.is-active .el-radio-button__inner {
+  background: var(--color-primary);
+  color: #fff;
+}
+[data-theme="dark"] .el-switch__core {
+  background: var(--color-border);
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .el-select .el-input__wrapper {
+  background: var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-border) inset !important;
+}
+[data-theme="dark"] .el-input__inner {
+  color: var(--color-text-main);
+}
+[data-theme="dark"] .el-select-dropdown {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+[data-theme="dark"] .el-select-dropdown__item {
+  color: var(--color-text-main);
+}
+[data-theme="dark"] .el-select-dropdown__item:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+[data-theme="dark"] .el-select-dropdown__item.is-selected {
+  color: var(--color-primary);
+}
+[data-theme="dark"] .el-input__wrapper {
+  background: var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-border) inset;
+}
+[data-theme="dark"] .el-popper.is-light {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text-main);
 }
 
 /* Element Plus Tooltip */

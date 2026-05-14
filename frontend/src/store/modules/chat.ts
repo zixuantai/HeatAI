@@ -168,7 +168,14 @@ export const useChatStore = defineStore('chat', () => {
 
     const authStore = useAuthStore()
     const voiceType = localStorage.getItem(`heatai_voice_type_${authStore.user?.id || ''}`) || 'longanhuan'
-    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, voiceType, images)
+    const userId = authStore.user?.id || ''
+    const personalizationKeys = ['gentle', 'enthusiastic', 'structure', 'emoji']
+    const personalization: Record<string, number> = {}
+    for (const k of personalizationKeys) {
+      const stored = localStorage.getItem(`heatai_personalization_${userId}_${k}`)
+      personalization[k] = stored !== null ? Number(stored) : 0
+    }
+    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, voiceType, images, personalization)
     state.abortController = controller
   }
 
