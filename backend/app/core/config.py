@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     DASHSCOPE_API_KEY: str = ""
     DASHSCOPE_MODEL: str = "qwen-max"
+    DASHSCOPE_VL_MODEL: str = "qwen-vl-max"
 
     MILVUS_URI: str = ""
     MILVUS_TOKEN: str = ""

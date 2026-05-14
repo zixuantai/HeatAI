@@ -200,7 +200,7 @@ async def stream_chat(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
-    logger.info(f"[对话] 收到请求，quick_mode={req.quick_mode}, message={req.message[:50]}...")
+    logger.info(f"[对话] 收到请求，quick_mode={req.quick_mode}, message={req.message[:50]}..., images={len(req.images) if req.images else 0}")
     session_id = req.session_id
     if session_id:
         session = await conversation_service.get_session(db, session_id, current_user.id)
@@ -216,7 +216,31 @@ async def stream_chat(
         collected_content = []
         voice_param = req.voice or "longanhuan"
         try:
-            if req.quick_mode:
+            if req.images and len(req.images) > 0:
+                logger.info(f"[视觉模式] 使用视觉模型处理图片，数量: {len(req.images)}")
+                yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
+                yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+
+                history_messages = []
+                try:
+                    ctx = await context_builder.build(db, session_id, current_user.id, req.message)
+                    history_messages = ctx.messages
+                except Exception:
+                    pass
+
+                yield f"data: {json.dumps({'s': 'generating'})}\n\n"
+                async for event in chat_service.stream_vision_ask(req.message, req.images, history_messages):
+                    event_type = event.get("type", "content")
+                    if event_type == "content":
+                        collected_content.append(event["content"])
+                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
+                    elif event_type == "tool_call":
+                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "tool_result":
+                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
+                    elif event_type == "error":
+                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
+            elif req.quick_mode:
                 logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"

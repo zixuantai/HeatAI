@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 from typing import List, Dict, Any, AsyncGenerator
-from dashscope import Generation
+from dashscope import Generation, MultiModalConversation
 from dashscope.aigc.generation import AioGeneration
 from app.core.config import settings
 from app.services.tools import TOOL_DEFINITIONS, tool_executor
@@ -121,6 +121,32 @@ SYSTEM_PROMPT_HEATING_CS = """你是智慧供热客服助手，仅回答供热�
 
 SYSTEM_PROMPT = SYSTEM_PROMPT_HEATING_CS
 
+VISION_SYSTEM_PROMPT = """你是智慧供热客服助手，具备图片识别能力。你可以分析用户上传的图片内容，结合供热知识回答问题。
+
+## 领域边界
+你只回答供热相关领域的问题。如果图片内容与供热无关，请告知用户你只能处理供热相关的图片和问题。
+
+## 回答原则
+1. 优先分析图片中的内容，结合供热专业知识给出直接、实用的建议
+2. 使用 Markdown 输出，结构清晰
+3. 专业术语加粗，步骤类用有序列表
+4. 严禁在回答中提及任何函数名、工具名、API名称（如 query_heating_schedule、report_maintenance 等）——请用自然语言直接给出建议
+5. 回答中不出现代码、函数调用、工具名称等程序化内容"""
+
+
+def build_multimodal_message(text: str, images: list[str]) -> dict:
+    content_parts = []
+    for img_base64 in images:
+        if img_base64.startswith("data:image/"):
+            content_parts.append({"image": img_base64})
+        else:
+            content_parts.append({"image": f"data:image/jpeg;base64,{img_base64}"})
+    if text.strip():
+        content_parts.append({"text": text})
+    else:
+        content_parts.append({"text": "请分析这张图片"})
+    return {"role": "user", "content": content_parts}
+
 
 def build_rag_system_prompt(search_results: List[Dict[str, Any]], max_chunk_chars: int | None = None, max_total_chars: int | None = None) -> str:
     if max_chunk_chars is None:
@@ -223,9 +249,9 @@ class ChatService:
             return ""
 
     @staticmethod
-    async def _call_model(messages: list, stream: bool = False, enable_tools: bool = True, tools: list | None = None):
+    async def _call_model(messages: list, stream: bool = False, enable_tools: bool = True, tools: list | None = None, model: str | None = None):
         kwargs = {
-            "model": settings.DASHSCOPE_MODEL,
+            "model": model or settings.DASHSCOPE_MODEL,
             "messages": messages,
             "result_format": "message",
             "api_key": settings.DASHSCOPE_API_KEY,
@@ -642,6 +668,91 @@ class ChatService:
             return
 
         yield {"type": "content", "content": "抱歉，工具调用次数已达上限，请简化您的问题后再试。"}
+
+    @staticmethod
+    async def stream_vision_ask(
+        message: str,
+        images: list[str],
+        history: list[dict] | None = None,
+    ) -> AsyncGenerator[dict, None]:
+        if not settings.DASHSCOPE_API_KEY:
+            raise ValueError("DashScope API Key 未配置，请在 .env 文件中填写 DASHSCOPE_API_KEY")
+
+        logger.info(f"[视觉模式] 图片数量: {len(images)}, 文本: {message[:50] if message else '(无)'}")
+
+        messages = [{"role": "system", "content": [{"text": VISION_SYSTEM_PROMPT}]}]
+        if history:
+            for h in history:
+                if isinstance(h.get("content"), str):
+                    messages.append({"role": h["role"], "content": [{"text": h["content"]}]})
+                else:
+                    messages.append(h)
+        user_msg = build_multimodal_message(message, images)
+        messages.append(user_msg)
+
+        import threading
+        import queue as sync_queue
+        result_queue: sync_queue.Queue = sync_queue.Queue()
+
+        def _run_stream():
+            try:
+                for response in MultiModalConversation.call(
+                    model=settings.DASHSCOPE_VL_MODEL,
+                    messages=messages,
+                    stream=True,
+                    api_key=settings.DASHSCOPE_API_KEY,
+                    temperature=settings.LLM_TEMPERATURE,
+                    top_p=0.95,
+                ):
+                    result_queue.put_nowait(response)
+            except Exception as exc:
+                result_queue.put_nowait(exc)
+            finally:
+                result_queue.put_nowait(None)
+
+        thread = threading.Thread(target=_run_stream, daemon=True)
+        thread.start()
+
+        previous_text = ""
+
+        while True:
+            response = await asyncio.to_thread(result_queue.get)
+            if response is None:
+                break
+            if isinstance(response, Exception):
+                yield {"type": "error", "content": str(response)}
+                return
+
+            if response.status_code != 200:
+                error_msg = response.message or "视觉模型调用失败"
+                yield {"type": "error", "content": error_msg}
+                return
+
+            choices = response.output.choices
+            if not choices:
+                continue
+
+            msg = choices[0].message
+            content = msg.get("content", "")
+            if not content:
+                continue
+
+            current_text = ""
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict) and "text" in item:
+                        current_text += (item.get("text") or "")
+            elif isinstance(content, str):
+                current_text = content
+
+            if current_text and current_text != previous_text:
+                if current_text.startswith(previous_text):
+                    delta = current_text[len(previous_text):]
+                else:
+                    delta = current_text
+                previous_text = current_text
+                if delta:
+                    yield {"type": "content", "content": delta}
 
 
 chat_service = ChatService()

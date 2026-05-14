@@ -54,6 +54,7 @@ export interface ChatMessage {
   timestamp: number
   toolCalls?: ToolCallInfo[]
   toolResults?: ToolResultInfo[]
+  images?: string[]
 }
 
 export interface ToolCallInfo {

@@ -28,6 +28,15 @@
                 v-html="renderMarkdownCached(msg.content)"
               ></div>
               <div v-else class="message-text">{{ msg.content }}</div>
+              <div v-if="msg.images && msg.images.length > 0" class="message-image-list">
+                <img
+                  v-for="(img, i) in msg.images"
+                  :key="i"
+                  :src="img"
+                  alt="用户上传图片"
+                  class="message-image-thumb"
+                />
+              </div>
             </div>
           </div>
 
@@ -62,7 +71,26 @@
       </div>
 
       <div class="chat-input-area">
-        <div class="input-wrapper" :class="{ 'voice-active': isVoiceMode }">
+        <div class="input-wrapper" :class="{ 'voice-active': isVoiceMode, 'is-expanded': isMultiLine }">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*"
+            multiple
+            hidden
+            @change="handleImageSelect"
+          />
+          <button
+            class="image-upload-btn"
+            :class="{ 'has-images': uploadedImages.length > 0 }"
+            @click="triggerImageUpload"
+            title="上传图片"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
           <el-tooltip
             effect="dark"
             content="快速模式回答质量会低一些哦"
@@ -82,18 +110,30 @@
               <span>快速模式</span>
             </button>
           </el-tooltip>
-          <el-input
-            ref="inputRef"
-            v-model="inputMessage"
-            type="textarea"
-            :rows="1"
-            :autosize="{ minRows: 1, maxRows: 6 }"
-            :placeholder="isVoiceMode ? '' : '有问题，尽管问'"
-            resize="none"
-            class="chat-input"
-            :disabled="isVoiceMode"
-            @keydown.enter.exact.prevent="handleSend"
-          />
+          <div class="input-content-area" @paste="handlePaste">
+            <div v-if="uploadedImages.length > 0" class="inline-image-bar">
+              <div v-for="(img, idx) in uploadedImages" :key="idx" class="inline-image-item">
+                <img :src="img" alt="预览图片" class="inline-image-thumb" />
+                <button class="inline-image-remove" @click="removeImage(idx)" title="移除图片">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <el-input
+              ref="inputRef"
+              v-model="inputMessage"
+              type="textarea"
+              :rows="1"
+              :autosize="{ minRows: 1, maxRows: 6 }"
+              :placeholder="isVoiceMode ? '' : '有问题，尽管问'"
+              resize="none"
+              class="chat-input"
+              :disabled="isVoiceMode"
+              @keydown.enter.exact.prevent="handleSend"
+            />
+          </div>
           <VoiceInput
             ref="voiceInputRef"
             @send="handleVoiceSend"
@@ -112,7 +152,7 @@
           <button
             v-if="!loading"
             class="send-btn"
-            :disabled="!inputMessage.trim()"
+            :disabled="!inputMessage.trim() && uploadedImages.length === 0"
             title="发送消息"
             @click="handleSend"
           >
@@ -220,17 +260,150 @@ const statusMessage = ref('')
 const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
 const inputRef = ref<InstanceType<typeof ElInput>>()
+const fileInputRef = ref<HTMLInputElement>()
 const currentSessionId = ref<string | null>(null)
 const quickMode = ref(false)
 const isVoiceMode = ref(false)
 const isSpeaking = ref(false)
 const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
+const uploadedImages = ref<string[]>([])
+const isMultiLine = ref(false)
 
 const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, handleAudioChunk, togglePlay, finishAudio, cleanup } = useAudioPlayer()
 
 function toggleQuickMode() {
   quickMode.value = !quickMode.value
   console.log('[快速模式] 切换为:', quickMode.value)
+}
+
+function triggerImageUpload() {
+  fileInputRef.value?.click()
+}
+
+function handleImageSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files
+  if (!files || files.length === 0) return
+
+  const maxCount = 5
+  const remaining = maxCount - uploadedImages.value.length
+  if (remaining <= 0) {
+    ElMessage.warning(`最多只能上传 ${maxCount} 张图片`)
+    input.value = ''
+    return
+  }
+
+  const filesToProcess = Math.min(files.length, remaining)
+  let loaded = 0
+  let skipped = 0
+
+  const onAllDone = () => {
+    input.value = ''
+    focusInput()
+  }
+
+  for (let i = 0; i < filesToProcess; i++) {
+    const file = files[i]
+    if (!file.type.startsWith('image/')) {
+      skipped++
+      if (loaded + skipped === filesToProcess) onAllDone()
+      continue
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      ElMessage.warning(`图片 "${file.name}" 超过 10MB，已跳过`)
+      skipped++
+      if (loaded + skipped === filesToProcess) onAllDone()
+      continue
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string
+      if (base64) {
+        uploadedImages.value.push(base64)
+      }
+      loaded++
+      if (loaded + skipped === filesToProcess) {
+        onAllDone()
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  if (files.length > filesToProcess) {
+    ElMessage.warning(`最多上传 ${maxCount} 张，已自动选取前 ${filesToProcess} 张`)
+  }
+}
+
+function removeImage(index: number) {
+  uploadedImages.value.splice(index, 1)
+  focusInput()
+}
+
+function handlePaste(event: ClipboardEvent) {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  const maxCount = 5
+  const remaining = maxCount - uploadedImages.value.length
+  if (remaining <= 0) {
+    ElMessage.warning(`最多只能上传 ${maxCount} 张图片`)
+    return
+  }
+
+  const imageItems: DataTransferItem[] = []
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.type.startsWith('image/')) {
+      imageItems.push(item)
+    }
+  }
+
+  if (imageItems.length === 0) return
+
+  event.preventDefault()
+
+  const toProcess = Math.min(imageItems.length, remaining)
+  let loaded = 0
+  let skipped = 0
+
+  const onAllDone = () => {
+    focusInput()
+  }
+
+  for (let i = 0; i < toProcess; i++) {
+    const file = imageItems[i].getAsFile()
+    if (!file) {
+      skipped++
+      if (loaded + skipped === toProcess) onAllDone()
+      continue
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      ElMessage.warning('图片超过 10MB，已跳过')
+      skipped++
+      if (loaded + skipped === toProcess) onAllDone()
+      continue
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string
+      if (base64) {
+        uploadedImages.value.push(base64)
+      }
+      loaded++
+      if (loaded + skipped === toProcess) {
+        onAllDone()
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  if (imageItems.length > toProcess) {
+    ElMessage.warning(`最多上传 ${maxCount} 张，已自动选取前 ${toProcess} 张`)
+  }
 }
 
 const statusTextMap: Record<string, string> = {
@@ -368,6 +541,18 @@ watch(() => props.sessionId, (newId) => {
   }
 })
 
+watch(inputMessage, () => {
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      const textarea = inputRef.value?.$el?.querySelector('textarea') as HTMLTextAreaElement | null
+      if (textarea) {
+        const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24
+        isMultiLine.value = textarea.scrollHeight > lineHeight * 1.8
+      }
+    })
+  })
+})
+
 function handleStop() {
   stopStream()
   cleanup()
@@ -460,7 +645,8 @@ function finishStream() {
 
 async function handleSend() {
   const content = inputMessage.value.trim()
-  if (!content) return
+  const hasImages = uploadedImages.value.length > 0
+  if (!content && !hasImages) return
 
   if (!authStore.isAuthenticated) {
     sessionStorage.setItem('pending_question', content)
@@ -474,11 +660,15 @@ async function handleSend() {
 
   cleanup()
 
+  const currentImages = [...uploadedImages.value]
+  uploadedImages.value = []
+
   const userMsg: ChatMessage = {
     id: genId(),
     role: 'user',
-    content,
-    timestamp: Date.now()
+    content: content || '',
+    timestamp: Date.now(),
+    images: currentImages.length > 0 ? currentImages : undefined
   }
   messages.value.push(userMsg)
   inputMessage.value = ''
@@ -539,7 +729,7 @@ async function handleSend() {
       ElMessage.error(error || '请求失败，请稍后重试')
       scrollToBottom()
     }
-  }, quickMode.value, 'longanhuan')
+  }, quickMode.value, 'longanhuan', currentImages)
 }
 </script>
 
@@ -891,10 +1081,10 @@ async function handleSend() {
   font-family: var(--font-family);
   white-space: nowrap;
   flex-shrink: 0;
-  align-self: center;
   transition: all var(--transition-base);
   line-height: 1;
   user-select: none;
+  margin-bottom: 2px;
 }
 
 .quick-mode-toggle:hover:not(:disabled) {
@@ -932,19 +1122,188 @@ async function handleSend() {
   fill: rgba(255, 255, 255, 0.3);
 }
 
+.image-upload-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--color-text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all var(--transition-base);
+  padding: 0;
+  margin-bottom: 2px;
+}
+
+.image-upload-btn:hover {
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.image-upload-btn:active {
+  transform: scale(0.9);
+}
+
+.image-upload-btn.has-images {
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.image-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 900px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  padding: 2px 4px;
+  scrollbar-width: none;
+}
+
+.image-preview-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.image-preview-item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.image-preview-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1.5px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.image-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #ef4444;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+  transition: transform var(--transition-fast);
+}
+
+.image-preview-remove:hover {
+  transform: scale(1.15);
+}
+
+.image-preview-remove:active {
+  transform: scale(0.9);
+}
+
+.input-content-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.inline-image-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0 2px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.inline-image-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.inline-image-item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.inline-image-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1.5px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.inline-image-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: #ef4444;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);
+  transition: transform var(--transition-fast);
+}
+
+.inline-image-remove:hover {
+  transform: scale(1.12);
+}
+
+.inline-image-remove:active {
+  transform: scale(0.9);
+}
+
+.message-image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.message-image-thumb {
+  max-width: 120px;
+  max-height: 120px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
 .input-wrapper {
   position: relative;
   display: flex;
   align-items: flex-end;
-  gap: 10px;
+  gap: 7px;
   width: 100%;
   max-width: 900px;
   background: var(--color-surface);
   border-radius: var(--radius-full);
   border: 2px solid var(--color-border);
-  padding: 8px 8px 8px 20px;
+  padding: 8px 8px 8px 12px;
   box-shadow: var(--shadow-card);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base), border-radius var(--transition-base);
+}
+
+.input-wrapper.is-expanded {
+  border-radius: 24px;
 }
 
 .input-wrapper:focus-within {
@@ -1004,12 +1363,12 @@ async function handleSend() {
   border: none !important;
   box-shadow: none !important;
   border-radius: var(--radius-full);
-  padding: 10px 0;
+  padding: 10px 0 10px 4px;
   font-size: var(--font-size-base);
   line-height: 1.6;
   background: transparent;
   resize: none;
-  overflow: hidden;
+  overflow-y: auto;
   font-family: var(--font-family);
   color: var(--color-text-main);
 }
@@ -1025,7 +1384,20 @@ async function handleSend() {
 }
 
 .chat-input :deep(.el-textarea__inner)::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+}
+
+.chat-input :deep(.el-textarea__inner)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-input :deep(.el-textarea__inner)::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+
+.chat-input :deep(.el-textarea__inner)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subtle);
 }
 
 .send-btn {
