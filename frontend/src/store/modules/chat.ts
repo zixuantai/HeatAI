@@ -83,7 +83,7 @@ export const useChatStore = defineStore('chat', () => {
     state.pendingStreamContent = ''
     state.statusMessage = ''
     state.initialized = true
-    state.hasAudio = true
+    state.hasAudio = !!onAudioChunk
 
     let msgIdCounter = state.messages.length
     const streamMsgId = `msg_${Date.now()}_${++msgIdCounter}`
@@ -165,7 +165,7 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, 'longanhuan', images)
+    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, localStorage.getItem('heatai_voice_type') || 'longanhuan', images)
     state.abortController = controller
   }
 

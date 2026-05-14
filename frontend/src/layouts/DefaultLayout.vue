@@ -108,7 +108,7 @@
       <div class="user-area-wrapper" ref="userAreaRef">
         <el-tooltip :content="authStore.isAuthenticated ? (authStore.user?.username || '用户') : '未登录'" placement="right" :disabled="!collapsed" :show-after="300">
           <div class="aside-user" :class="{ 'is-active': popoverVisible }" @click="handleUserAreaClick">
-            <el-avatar :size="36" icon="UserFilled" />
+            <el-avatar :size="36" :src="authStore.user?.avatar || undefined" icon="UserFilled" />
             <div v-show="!collapsed" class="user-info">
               <span class="user-name">{{ authStore.isAuthenticated ? (authStore.user?.username || '用户') : '未登录' }}</span>
               <span class="user-role">{{ authStore.isAuthenticated ? (authStore.isAdmin ? '管理员' : '普通用户') : '' }}</span>
@@ -126,7 +126,7 @@
   <Teleport to="body">
     <div v-if="popoverVisible" class="user-dropdown" :style="dropdownStyle" @click.stop>
       <div class="user-menu-header">
-        <el-avatar :size="28" icon="UserFilled" />
+        <el-avatar :size="28" :src="authStore.user?.avatar || undefined" icon="UserFilled" />
         <span class="user-menu-name">{{ authStore.user?.username || '用户' }}</span>
       </div>
       <div class="user-menu-divider"></div>
@@ -146,7 +146,25 @@
     </div>
   </Teleport>
 
-  <el-dialog v-model="editDialogVisible" title="个人信息" width="440px" :close-on-click-modal="false" destroy-on-close>
+  <el-dialog v-model="editDialogVisible" title="编辑个人资料" width="720px" :close-on-click-modal="false" destroy-on-close @closed="handleEditDialogClosed">
+    <div class="edit-avatar-section">
+      <label class="edit-avatar-upload-area">
+        <input type="file" accept="image/*" class="edit-avatar-input" @change="handleAvatarFileChange" />
+        <div class="edit-avatar-wrapper">
+          <el-avatar :size="160" :src="avatarPreview || undefined" icon="UserFilled" class="edit-avatar-img" />
+          <div class="edit-avatar-camera-badge">
+            <el-icon :size="16"><Camera /></el-icon>
+          </div>
+        </div>
+      </label>
+      <div v-if="croppieVisible" class="edit-avatar-cancel-row">
+        <el-button text type="warning" size="small" @click="cancelCrop">取消裁剪</el-button>
+      </div>
+      <div v-if="croppieVisible" ref="croppieRef" class="flex flex-col justify-center my-4 croppie-container"></div>
+      <div v-if="croppieVisible" class="edit-avatar-crop-actions">
+        <el-button type="primary" size="small" :loading="cropLoading" @click="confirmCrop">确认裁剪</el-button>
+      </div>
+    </div>
     <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="70px" class="edit-form">
       <el-form-item label="用户名" prop="username">
         <el-input v-model="editForm.username" maxlength="20" placeholder="请输入用户名" />
@@ -161,18 +179,52 @@
         <el-input v-model="editForm.phone" maxlength="20" placeholder="请输入手机号" />
       </el-form-item>
     </el-form>
+    <p class="edit-form-tip">你的个人资料有助于大家认出你。</p>
     <template #footer>
       <el-button @click="editDialogVisible = false">取消</el-button>
       <el-button type="primary" :loading="editLoading" @click="handleSaveProfile">保存</el-button>
     </template>
   </el-dialog>
 
-  <el-dialog v-model="settingsDialogVisible" title="设置" width="520px" :close-on-click-modal="false" center destroy-on-close>
-    <div class="settings-body">
-    </div>
-    <template #footer>
-      <el-button @click="settingsDialogVisible = false">关闭</el-button>
+  <el-dialog v-model="settingsDialogVisible" width="680px" :close-on-click-modal="false" destroy-on-close :show-close="true" class="settings-dialog" @open="handleSettingsOpen">
+    <template #header>
+      <span></span>
     </template>
+    <div class="settings-layout">
+      <div class="settings-nav">
+        <div
+          v-for="item in settingsNavItems"
+          :key="item.key"
+          class="settings-nav-item"
+          :class="{ active: activeSettingsNav === item.key }"
+          @click="activeSettingsNav = item.key"
+        >
+          <el-icon :size="18"><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-section-title">{{ currentSettingsLabel }}</div>
+        <div v-if="activeSettingsNav === 'voice'" class="settings-voice">
+          <div class="settings-voice-item">
+            <div class="settings-voice-item-info">
+              <span class="settings-voice-item-label">语音播放</span>
+              <span class="settings-voice-item-desc">开启后，大模型输出内容时将自动语音播报</span>
+            </div>
+            <el-switch v-model="voiceEnabled" @change="handleVoiceEnabledChange" />
+          </div>
+          <div class="settings-voice-item">
+            <div class="settings-voice-item-info">
+              <span class="settings-voice-item-label">音色选择</span>
+              <span class="settings-voice-item-desc">选择语音播报的音色</span>
+            </div>
+            <el-select v-model="voiceType" placeholder="请选择音色" size="default" class="settings-voice-select" popper-class="settings-voice-popper" @change="handleVoiceTypeChange">
+              <el-option v-for="v in voiceOptions" :key="v.value" :label="v.label" :value="v.value" />
+            </el-select>
+          </div>
+        </div>
+      </div>
+    </div>
   </el-dialog>
 
   <el-dialog v-model="searchDialogVisible" title="搜索对话" width="620px" :close-on-click-modal="false" destroy-on-close @opened="handleSearchDialogOpened">
@@ -216,11 +268,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
 import type { SessionInfo } from '@/types'
+import Croppie from 'croppie'
+import 'croppie/croppie.css'
+
+const SETTINGS_VOICE_ENABLED = 'heatai_voice_enabled'
+const SETTINGS_VOICE_TYPE = 'heatai_voice_type'
 
 const router = useRouter()
 const route = useRoute()
@@ -237,6 +294,29 @@ const sessions = ref<SessionInfo[]>([])
 const searchDialogVisible = ref(false)
 const searchKeyword = ref('')
 const searchInputRef = ref<any>()
+const croppieRef = ref<HTMLElement | null>(null)
+const croppieVisible = ref(false)
+const cropLoading = ref(false)
+const avatarPreview = ref<string | null>(null)
+let croppieInstance: Croppie | null = null
+
+const settingsNavItems = [
+  { key: 'voice', label: '声音', icon: Headset }
+]
+const activeSettingsNav = ref('voice')
+const currentSettingsLabel = computed(() => {
+  const item = settingsNavItems.find(i => i.key === activeSettingsNav.value)
+  return item?.label || ''
+})
+
+const voiceEnabled = ref(localStorage.getItem(SETTINGS_VOICE_ENABLED) !== 'false')
+const voiceOptions = [
+  { label: '阳光大男孩', value: 'longanyang' },
+  { label: '欢脱元气女', value: 'longanhuan' },
+  { label: '天真烂漫女童', value: 'longhuhu_v3' },
+  { label: '阳光顽皮男', value: 'longjielidou_v3' }
+]
+const voiceType = ref(localStorage.getItem(SETTINGS_VOICE_TYPE) || 'longanhuan')
 
 const activeSessionId = computed(() => {
   return (route.params.sessionId as string) || null
@@ -352,12 +432,87 @@ function handleEditProfile() {
   editForm.nickname = user?.nickname || ''
   editForm.email = user?.email || ''
   editForm.phone = user?.phone || ''
+  avatarPreview.value = user?.avatar || null
+  croppieVisible.value = false
   editDialogVisible.value = true
 }
 
 function handleSettings() {
   popoverVisible.value = false
+  activeSettingsNav.value = settingsNavItems[0]?.key || 'voice'
   settingsDialogVisible.value = true
+}
+
+function handleSettingsOpen() {
+  activeSettingsNav.value = settingsNavItems[0]?.key || 'voice'
+}
+
+function handleVoiceEnabledChange(val: boolean) {
+  localStorage.setItem(SETTINGS_VOICE_ENABLED, String(val))
+}
+
+function handleVoiceTypeChange(val: string) {
+  localStorage.setItem(SETTINGS_VOICE_TYPE, val)
+}
+
+function handleAvatarFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    const photo = reader.result as string
+    croppieVisible.value = true
+    nextTick(() => {
+      initCroppie(photo)
+    })
+  }
+  reader.readAsDataURL(file)
+  ;(e.target as HTMLInputElement).value = ''
+}
+
+function initCroppie(photo: string) {
+  destroyCroppie()
+  if (!croppieRef.value) return
+  croppieInstance = new Croppie(croppieRef.value, {
+    viewport: { width: 200, height: 200, type: 'square' },
+    boundary: { width: 300, height: 300 },
+    enableOrientation: true,
+    enforceBoundary: true,
+  })
+  croppieInstance.bind({ url: photo })
+}
+
+function destroyCroppie() {
+  croppieInstance?.destroy()
+  croppieInstance = null
+}
+
+function cancelCrop() {
+  destroyCroppie()
+  croppieVisible.value = false
+}
+
+async function confirmCrop() {
+  if (!croppieInstance) return
+  cropLoading.value = true
+  try {
+    const result = await croppieInstance.result({
+      type: 'base64',
+      size: 'viewport',
+    })
+    avatarPreview.value = result
+    destroyCroppie()
+    croppieVisible.value = false
+  } catch {
+    ElMessage.error('图片裁剪失败')
+  } finally {
+    cropLoading.value = false
+  }
+}
+
+function handleEditDialogClosed() {
+  destroyCroppie()
+  croppieVisible.value = false
 }
 
 async function handleSaveProfile() {
@@ -370,7 +525,8 @@ async function handleSaveProfile() {
       username: editForm.username,
       nickname: editForm.nickname || null,
       email: editForm.email || null,
-      phone: editForm.phone || null
+      phone: editForm.phone || null,
+      avatar: avatarPreview.value || null
     })
     ElMessage.success('个人信息修改成功')
     editDialogVisible.value = false
@@ -511,6 +667,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  destroyCroppie()
 })
 
 watch(() => route.path, () => {
@@ -857,6 +1014,79 @@ watch(() => route.path, () => {
   padding-top: 10px;
 }
 
+.edit-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.edit-avatar-upload-area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.edit-avatar-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.edit-avatar-img {
+  flex-shrink: 0;
+}
+
+.edit-avatar-img :deep(.el-icon) {
+  font-size: 64px;
+}
+
+.edit-avatar-camera-badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+  border: 2px solid #fff;
+}
+
+.edit-avatar-input {
+  display: none;
+}
+
+.edit-avatar-cancel-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.croppie-container {
+  transition: none !important;
+}
+
+.croppie-container * {
+  transition: none !important;
+}
+
+.edit-avatar-crop-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.edit-form-tip {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: 16px;
+}
+
 .settings-body {
   min-height: 200px;
   display: flex;
@@ -864,6 +1094,87 @@ watch(() => route.path, () => {
   justify-content: center;
   color: var(--color-text-muted);
   font-size: var(--font-size-base);
+}
+
+.settings-layout {
+  display: flex;
+  min-height: 280px;
+}
+
+.settings-nav {
+  width: 160px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  padding: 8px 0;
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 0 8px 2px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-main);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-nav-item:hover {
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
+}
+
+.settings-nav-item.active {
+  background: var(--gradient-subtle);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-content {
+  flex: 1;
+  padding: 0 8px 0 24px;
+}
+
+.settings-section-title {
+  font-size: 18px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-main);
+  margin-bottom: 24px;
+}
+
+.settings-voice-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.settings-voice-item + .settings-voice-item {
+  border-top: 1px solid var(--color-border-light);
+}
+
+.settings-voice-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-voice-item-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
+}
+
+.settings-voice-item-desc {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.settings-voice-select {
+  width: 180px;
 }
 </style>
 
@@ -1060,5 +1371,64 @@ watch(() => route.path, () => {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   flex-shrink: 0;
+}
+
+/* ── Settings Dialog Overrides ──────────────────────── */
+.settings-dialog {
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: var(--color-primary);
+  --el-color-primary-light-5: var(--color-primary);
+  --el-color-primary-light-7: #C7D2FE;
+  --el-color-primary-light-8: #E0E7FF;
+  --el-color-primary-light-9: #EEF2FF;
+  --el-fill-color-light: var(--gradient-subtle);
+}
+
+.settings-dialog .el-switch.is-checked .el-switch__core {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.settings-dialog .el-select .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--color-border) inset !important;
+}
+
+.settings-dialog .el-select .el-input__wrapper:hover {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+.settings-dialog .el-select .el-input.is-focus .el-input__wrapper {
+  box-shadow: 0 0 0 1px var(--color-primary) inset !important;
+}
+
+.settings-voice-popper {
+  --el-color-primary: var(--color-primary);
+  --el-color-primary-light-3: var(--color-primary);
+  --el-color-primary-light-5: var(--color-primary);
+  --el-color-primary-light-7: #C7D2FE;
+  --el-color-primary-light-8: #E0E7FF;
+  --el-color-primary-light-9: #EEF2FF;
+  --el-fill-color-light: var(--gradient-subtle);
+  background: var(--color-surface) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  border: 1px solid var(--color-border-light) !important;
+}
+
+.settings-voice-popper .el-select-dropdown__item {
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-voice-popper .el-select-dropdown__item:hover {
+  background: var(--gradient-subtle) !important;
+  color: var(--color-primary) !important;
+}
+
+.settings-voice-popper .el-select-dropdown__item.is-selected {
+  color: var(--color-primary) !important;
+  background: var(--gradient-subtle) !important;
+  font-weight: var(--font-weight-semibold) !important;
 }
 </style>

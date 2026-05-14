@@ -83,6 +83,7 @@ async def get_me(current_user: CurrentUser):
             "email": user.email,
             "phone": user.phone,
             "nickname": user.nickname,
+            "avatar": user.avatar,
             "role": user.role,
             "status": user.status,
             "created_at": user.created_at.isoformat() if user.created_at else ""
@@ -99,7 +100,7 @@ async def update_me(
     try:
         user = await auth_service.update_user_profile(
             db, current_user,
-            req.username, req.email, req.phone, req.nickname
+            req.username, req.email, req.phone, req.nickname, req.avatar
         )
         return {
             "code": 0,
@@ -110,6 +111,7 @@ async def update_me(
                 "email": user.email,
                 "phone": user.phone,
                 "nickname": user.nickname,
+                "avatar": user.avatar,
                 "role": user.role,
                 "status": user.status,
                 "created_at": user.created_at.isoformat() if user.created_at else ""

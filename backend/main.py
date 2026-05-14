@@ -34,6 +34,7 @@ from contextlib import asynccontextmanager
 import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from app.core.database import engine, Base
 from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
@@ -79,6 +80,8 @@ def _startup_init():
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT"))
+        await conn.commit()
 
     await asyncio.get_running_loop().run_in_executor(None, _startup_init)
 

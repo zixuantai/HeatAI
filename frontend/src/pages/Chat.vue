@@ -689,7 +689,10 @@ async function handleSend() {
   focusInput()
   scrollToBottom()
 
-  initAudioStream()
+  const enableVoice = localStorage.getItem('heatai_voice_enabled') !== 'false'
+  if (enableVoice) {
+    initAudioStream()
+  }
 
   if (isVoiceMode.value && voiceInputRef.value) {
     voiceInputRef.value.pauseVAD()
@@ -701,9 +704,9 @@ async function handleSend() {
     content || '',
     currentImages,
     quickMode.value,
-    (text: string) => {
+    enableVoice ? (text: string) => {
       handleAudioChunk(text)
-    },
+    } : undefined,
     (newSessionId: string) => {
       if (!props.sessionId) {
         streamCreatedSessionId.value = newSessionId

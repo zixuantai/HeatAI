@@ -115,7 +115,7 @@ class AuthService:
         return result.scalar_one_or_none() is not None
 
     @staticmethod
-    async def update_user_profile(db: AsyncSession, user: User, username: str | None, email: str | None, phone: str | None, nickname: str | None) -> User:
+    async def update_user_profile(db: AsyncSession, user: User, username: str | None, email: str | None, phone: str | None, nickname: str | None, avatar: str | None = None) -> User:
         if username is not None and username != user.username:
             result = await db.execute(select(User).where(User.username == username))
             existing = result.scalar_one_or_none()
@@ -146,6 +146,9 @@ class AuthService:
 
         if nickname is not None:
             user.nickname = nickname
+
+        if avatar is not None:
+            user.avatar = avatar
 
         await db.commit()
         await db.refresh(user)

@@ -31,6 +31,7 @@ class UserInfo(BaseModel):
     email: str | None = None
     phone: str | None = None
     nickname: str | None = None
+    avatar: str | None = None
     role: str
     status: str
     created_at: str
@@ -44,3 +45,4 @@ class UserUpdateRequest(BaseModel):
     email: str | None = Field(None, max_length=100, description="邮箱")
     phone: str | None = Field(None, max_length=20, description="手机号")
     nickname: str | None = Field(None, max_length=50, description="昵称")
+    avatar: str | None = Field(None, description="头像(base64)")

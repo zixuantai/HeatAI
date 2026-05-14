@@ -5,6 +5,7 @@ export interface UserInfo {
   email: string | null
   phone: string | null
   nickname: string | null
+  avatar: string | null
   role: string
   status: string
   created_at: string
@@ -15,6 +16,7 @@ export interface UpdateUserRequest {
   email?: string | null
   phone?: string | null
   nickname?: string | null
+  avatar?: string | null
 }
 
 export interface LoginRequest {
