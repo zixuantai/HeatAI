@@ -131,9 +131,14 @@
       </div>
       <div class="user-menu-divider"></div>
       <div class="user-menu-item" @click="handleEditProfile">
-        <el-icon><Edit /></el-icon>
-        <span>修改信息</span>
+        <el-icon><User /></el-icon>
+        <span>个人信息</span>
       </div>
+      <div class="user-menu-item" @click="handleSettings">
+        <el-icon><Setting /></el-icon>
+        <span>设置</span>
+      </div>
+      <div class="user-menu-divider"></div>
       <div class="user-menu-item user-menu-item--danger" @click="handleLogoutClick">
         <el-icon><SwitchButton /></el-icon>
         <span>退出登录</span>
@@ -141,7 +146,7 @@
     </div>
   </Teleport>
 
-  <el-dialog v-model="editDialogVisible" title="修改个人信息" width="440px" :close-on-click-modal="false" destroy-on-close>
+  <el-dialog v-model="editDialogVisible" title="个人信息" width="440px" :close-on-click-modal="false" destroy-on-close>
     <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="70px" class="edit-form">
       <el-form-item label="用户名" prop="username">
         <el-input v-model="editForm.username" maxlength="20" placeholder="请输入用户名" />
@@ -159,6 +164,14 @@
     <template #footer>
       <el-button @click="editDialogVisible = false">取消</el-button>
       <el-button type="primary" :loading="editLoading" @click="handleSaveProfile">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="settingsDialogVisible" title="设置" width="520px" :close-on-click-modal="false" center destroy-on-close>
+    <div class="settings-body">
+    </div>
+    <template #footer>
+      <el-button @click="settingsDialogVisible = false">关闭</el-button>
     </template>
   </el-dialog>
 
@@ -203,7 +216,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -219,6 +232,7 @@ const dropdownStyle = ref<Record<string, string>>({})
 const sessionMenuVisible = ref<Record<string, boolean>>({})
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
+const settingsDialogVisible = ref(false)
 const sessions = ref<SessionInfo[]>([])
 const searchDialogVisible = ref(false)
 const searchKeyword = ref('')
@@ -339,6 +353,11 @@ function handleEditProfile() {
   editForm.email = user?.email || ''
   editForm.phone = user?.phone || ''
   editDialogVisible.value = true
+}
+
+function handleSettings() {
+  popoverVisible.value = false
+  settingsDialogVisible.value = true
 }
 
 async function handleSaveProfile() {
@@ -836,6 +855,15 @@ watch(() => route.path, () => {
 
 .edit-form {
   padding-top: 10px;
+}
+
+.settings-body {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
 }
 </style>
 
