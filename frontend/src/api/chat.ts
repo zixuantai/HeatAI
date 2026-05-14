@@ -139,6 +139,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
   }).catch((err) => {
     if (err.name === 'AbortError') {
       aborted = true
+      onDone()
     } else if (!aborted) {
       onError(String(err))
     }

@@ -170,6 +170,12 @@ export function useAudioPlayer() {
     hasAudio.value = false
   }
 
+  const stopPlayback = () => {
+    console.log('[Audio] 仅停止播放')
+    synth.cancel()
+    isAudioPlaying.value = false
+  }
+
   return {
     hasAudio,
     isAudioPlaying,
@@ -179,6 +185,7 @@ export function useAudioPlayer() {
     handleAudioChunk,
     togglePlay,
     finishAudio,
+    stopPlayback,
     cleanup
   }
 }

@@ -189,16 +189,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { ElInput } from 'element-plus'
-import { askStreamApi, stopStream, stopVoiceStream, getSessionDetailApi } from '@/api/chat'
+import { stopVoiceStream, getSessionDetailApi } from '@/api/chat'
 import { sendVoiceToBackend } from '@/api/voice'
 import type { ChatMessage } from '@/types'
 import { marked } from 'marked'
 import hljs from 'highlight.js'
 import { useAuthStore } from '@/store/modules/auth'
+import { useChatStore } from '@/store/modules/chat'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
 import { useAudioPlayer } from '@/composables/useAudioPlayer'
 
@@ -208,6 +209,7 @@ const props = defineProps<{
 
 const router = useRouter()
 const authStore = useAuthStore()
+const chatStore = useChatStore()
 
 marked.setOptions({
   breaks: true,
@@ -254,22 +256,47 @@ function renderMarkdown(text: string): string {
 }
 
 const inputMessage = ref('')
-const loading = ref(false)
-const streamingContent = ref('')
-const statusMessage = ref('')
-const messages = ref<ChatMessage[]>([])
 const messagesContainer = ref<HTMLElement>()
 const inputRef = ref<InstanceType<typeof ElInput>>()
 const fileInputRef = ref<HTMLInputElement>()
-const currentSessionId = ref<string | null>(null)
 const quickMode = ref(false)
 const isVoiceMode = ref(false)
 const isSpeaking = ref(false)
 const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
 const uploadedImages = ref<string[]>([])
 const isMultiLine = ref(false)
+const streamCreatedSessionId = ref<string | null>(null)
 
-const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, handleAudioChunk, togglePlay, finishAudio, cleanup } = useAudioPlayer()
+const NEW_SESSION_KEY = '__new__'
+
+const sessionKey = computed(() => props.sessionId || NEW_SESSION_KEY)
+
+const messages = computed(() => {
+  const s = chatStore.sessions[sessionKey.value]
+  return s ? s.messages : []
+})
+const loading = ref(false)
+const streamingContent = ref('')
+const statusMessage = ref('')
+
+watch(() => {
+  const s = chatStore.sessions[sessionKey.value]
+  if (!s) return { loading: false, streamingContent: '', statusMessage: '' }
+  return { loading: s.loading, streamingContent: s.streamingContent, statusMessage: s.statusMessage }
+}, (data) => {
+  loading.value = data.loading
+  streamingContent.value = data.streamingContent
+  statusMessage.value = data.statusMessage
+}, { immediate: true, deep: true })
+
+const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, handleAudioChunk, togglePlay, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
+
+watch(() => {
+  const s = chatStore.sessions[sessionKey.value]
+  return s ? s.hasAudio : false
+}, (val) => {
+  hasAudio.value = val
+}, { immediate: true })
 
 function toggleQuickMode() {
   quickMode.value = !quickMode.value
@@ -406,49 +433,6 @@ function handlePaste(event: ClipboardEvent) {
   }
 }
 
-const statusTextMap: Record<string, string> = {
-  analyzing: '正在分析您的问题...',
-  retrieving: '正在检索相关知识...',
-  generating: '正在生成回答...',
-}
-
-let msgIdCounter = 0
-let streamMsgId = ''
-let sessionLoadedFromStream = false
-
-let streamRafId: number | null = null
-let pendingStreamContent = ''
-
-function flushStreamRender() {
-  if (streamRafId !== null) {
-    cancelAnimationFrame(streamRafId)
-    streamRafId = null
-  }
-  if (pendingStreamContent) {
-    const msg = messages.value.find(m => m.id === streamMsgId)
-    if (msg) {
-      msg.content = pendingStreamContent
-    }
-    pendingStreamContent = ''
-  }
-}
-
-function scheduleStreamRender(content: string) {
-  pendingStreamContent = content
-  if (streamRafId === null) {
-    streamRafId = requestAnimationFrame(() => {
-      streamRafId = null
-      if (!pendingStreamContent) return
-      const msg = messages.value.find(m => m.id === streamMsgId)
-      if (msg) {
-        msg.content = pendingStreamContent
-      }
-      pendingStreamContent = ''
-      scrollToBottom()
-    })
-  }
-}
-
 const markdownCache = new Map<string, string>()
 function renderMarkdownCached(text: string): string {
   const cached = markdownCache.get(text)
@@ -465,6 +449,7 @@ const quickQuestions = [
   '报修流程是怎样的？'
 ]
 
+let msgIdCounter = 0
 function genId() {
   return `msg_${Date.now()}_${++msgIdCounter}`
 }
@@ -484,16 +469,26 @@ function scrollToBottom() {
 }
 
 async function loadSessionMessages(sessionId: string) {
+  const existing = chatStore.sessions[sessionId]
+  if (existing && (existing.messages.length > 0 || existing.loading)) {
+    nextTick(() => scrollToBottom())
+    return
+  }
+
   try {
     const detail = await getSessionDetailApi(sessionId)
     if (detail && detail.messages) {
-      messages.value = detail.messages.map(m => ({
+      const msgs: ChatMessage[] = detail.messages.map(m => ({
         id: m.id,
         role: m.role as 'user' | 'assistant',
         content: m.content,
         timestamp: new Date(m.created_at).getTime()
       }))
-      currentSessionId.value = sessionId
+      const cur = chatStore.sessions[sessionId]
+      if (cur && cur.loading) {
+        return
+      }
+      chatStore.initSession(sessionId, msgs)
       nextTick(() => scrollToBottom())
     }
   } catch {
@@ -511,6 +506,15 @@ function handleQuickQuestion(question: string) {
   handleSend()
 }
 
+let pendingScrollRafId: number | null = null
+function scheduleScrollToBottom() {
+  if (pendingScrollRafId !== null) return
+  pendingScrollRafId = requestAnimationFrame(() => {
+    pendingScrollRafId = null
+    scrollToBottom()
+  })
+}
+
 onMounted(() => {
   const pendingQuestion = sessionStorage.getItem('pending_question')
   if (pendingQuestion) {
@@ -518,26 +522,55 @@ onMounted(() => {
     sessionStorage.removeItem('pending_question')
   }
   if (props.sessionId) {
-    loadSessionMessages(props.sessionId)
+    const existing = chatStore.sessions[props.sessionId]
+    if (existing && (existing.messages.length > 0 || existing.loading)) {
+      nextTick(() => scrollToBottom())
+    } else {
+      loadSessionMessages(props.sessionId)
+    }
   } else {
+    inputMessage.value = ''
     focusInput()
   }
 })
 
-watch(() => props.sessionId, (newId) => {
+onBeforeUnmount(() => {
+  if (pendingScrollRafId !== null) {
+    cancelAnimationFrame(pendingScrollRafId)
+    pendingScrollRafId = null
+  }
+  cleanup()
+})
+
+watch(() => props.sessionId, (newId, oldId) => {
+  if (streamCreatedSessionId.value && newId === streamCreatedSessionId.value) {
+    streamCreatedSessionId.value = null
+    return
+  }
+
+  stopPlayback()
+
+  inputMessage.value = ''
+
   if (newId) {
-    if (sessionLoadedFromStream) {
-      sessionLoadedFromStream = false
+    const existing = chatStore.sessions[newId]
+    if (existing && (existing.messages.length > 0 || existing.loading)) {
+      nextTick(() => scrollToBottom())
       return
     }
+
     loadSessionMessages(newId)
   } else {
-    messages.value = []
-    currentSessionId.value = null
     if (voiceInputRef.value) {
       voiceInputRef.value.disableVoiceMode()
     }
     focusInput()
+  }
+})
+
+watch(streamingContent, (newVal) => {
+  if (newVal) {
+    scheduleScrollToBottom()
   }
 })
 
@@ -553,30 +586,32 @@ watch(inputMessage, () => {
   })
 })
 
-function handleStop() {
-  stopStream()
+function doStop(sessionId: string) {
+  chatStore.stopStreamForSession(sessionId)
   cleanup()
-  flushStreamRender()
-  finishStream()
+  finishAudio()
+  if (isVoiceMode.value && voiceInputRef.value) {
+    voiceInputRef.value.resumeVAD()
+  }
+}
+
+function handleStop() {
+  doStop(sessionKey.value)
 }
 
 function handleTotalStop() {
-  stopStream()
   stopVoiceStream()
   cleanup()
   if (voiceInputRef.value) {
     voiceInputRef.value.handleStop()
   }
-  flushStreamRender()
-  finishStream()
+  doStop(sessionKey.value)
 }
 
 function handleVoiceStop() {
-  stopStream()
   stopVoiceStream()
   cleanup()
-  flushStreamRender()
-  finishStream()
+  doStop(sessionKey.value)
 }
 
 function onVoiceModeChange(value: boolean) {
@@ -617,37 +652,6 @@ function handleVoiceSend(audioBase64: string) {
   })
 }
 
-function finishStream() {
-  if (streamRafId !== null) {
-    cancelAnimationFrame(streamRafId)
-    streamRafId = null
-  }
-  if (pendingStreamContent) {
-    const lastMsg = messages.value.find(m => m.id === streamMsgId)
-    if (lastMsg) {
-      lastMsg.content = pendingStreamContent
-    }
-    pendingStreamContent = ''
-  }
-  if (streamingContent.value) {
-    const lastMsg = messages.value.find(m => m.id === streamMsgId)
-    if (lastMsg) {
-      lastMsg.content = streamingContent.value
-    }
-  }
-  finishAudio()
-  streamingContent.value = ''
-  streamMsgId = ''
-  statusMessage.value = ''
-  loading.value = false
-
-  if (isVoiceMode.value && voiceInputRef.value) {
-    voiceInputRef.value.resumeVAD()
-  }
-
-  scrollToBottom()
-}
-
 async function handleSend() {
   const content = inputMessage.value.trim()
   const hasImages = uploadedImages.value.length > 0
@@ -668,6 +672,9 @@ async function handleSend() {
   const currentImages = [...uploadedImages.value]
   uploadedImages.value = []
 
+  const sid = sessionKey.value
+  const state = chatStore.getOrCreate(sid)
+
   const userMsg: ChatMessage = {
     id: genId(),
     role: 'user',
@@ -675,17 +682,12 @@ async function handleSend() {
     timestamp: Date.now(),
     images: currentImages.length > 0 ? currentImages : undefined
   }
-  messages.value.push(userMsg)
+
+  state.messages.push(userMsg)
+
   inputMessage.value = ''
   focusInput()
   scrollToBottom()
-  loading.value = true
-  streamingContent.value = ''
-  pendingStreamContent = ''
-
-  streamMsgId = genId()
-  let placeholderPushed = false
-  console.log('[快速模式] 发送消息时 quickMode.value =', quickMode.value)
 
   initAudioStream()
 
@@ -693,52 +695,25 @@ async function handleSend() {
     voiceInputRef.value.pauseVAD()
   }
 
-  askStreamApi(content, currentSessionId.value, {
-    onChunk(text: string) {
-      streamingContent.value += text
+  chatStore.startStream(
+    sid,
+    props.sessionId || null,
+    content || '',
+    currentImages,
+    quickMode.value,
+    (text: string) => {
       handleAudioChunk(text)
-      if (!placeholderPushed) {
-        placeholderPushed = true
-        messages.value.push({
-          id: streamMsgId,
-          role: 'assistant',
-          content: '',
-          timestamp: Date.now()
-        })
-      }
-      scheduleStreamRender(streamingContent.value)
     },
-    onSessionId(sessionId: string) {
-      if (!currentSessionId.value) {
-        currentSessionId.value = sessionId
-        sessionLoadedFromStream = true
-        router.replace(`/chat/${sessionId}`)
+    (newSessionId: string) => {
+      if (!props.sessionId) {
+        streamCreatedSessionId.value = newSessionId
+        router.replace(`/chat/${newSessionId}`)
       }
     },
-    onStatus(status: string) {
-      statusMessage.value = statusTextMap[status] || status
-    },
-    onDone() {
-      finishStream()
-    },
-    onError(error: string) {
-      flushStreamRender()
-      if (!placeholderPushed) {
-        loading.value = false
-        ElMessage.error(error || '请求失败，请稍后重试')
-        return
-      }
-      const msg = messages.value.find(m => m.id === streamMsgId)
-      if (msg) {
-        msg.content = streamingContent.value
-      }
-      streamingContent.value = ''
-      streamMsgId = ''
-      loading.value = false
+    (error: string) => {
       ElMessage.error(error || '请求失败，请稍后重试')
-      scrollToBottom()
     }
-  }, quickMode.value, 'longanhuan', currentImages)
+  )
 }
 </script>
 
