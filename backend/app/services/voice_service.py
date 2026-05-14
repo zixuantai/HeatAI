@@ -104,18 +104,18 @@ class VoiceService:
                 pass
 
     @staticmethod
-    async def text_to_speech_stream(text: str) -> AsyncGenerator[str, None]:
+    async def text_to_speech_stream(text: str, voice: str = "longanhuan") -> AsyncGenerator[str, None]:
         VoiceService._ensure_api_key()
 
-        logger.info(f"[TTS] 开始合成, 文本长度: {len(text)}")
+        logger.info(f"[TTS] 开始合成, 文本长度: {len(text)}, 音色: {voice}")
 
         try:
             loop = asyncio.get_running_loop()
             callback = TTSCallback()
             synthesizer = SpeechSynthesizer(
                 model='cosyvoice-v1',
-                voice='longxiaochun',
-                format=AudioFormat.WAV_16000HZ_MONO_16BIT,
+                voice=voice,
+                format=AudioFormat.MP3_16000HZ_MONO_128KBPS,
                 callback=callback
             )
 

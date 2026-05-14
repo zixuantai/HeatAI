@@ -41,6 +41,23 @@
               </span>
             </div>
           </div>
+
+          <div v-if="hasAudio" class="audio-control-bar">
+            <button
+              class="audio-toggle-btn"
+              :class="{ muted: !isAudioPlaying || isAudioMuted }"
+              @click="togglePlay"
+            >
+              <div v-if="isAudioPlaying && !isAudioMuted" class="audio-wave-icon">
+                <span v-for="i in 4" :key="i" class="audio-wave-bar" :style="{ animationDelay: `${i * 0.15}s` }"></span>
+              </div>
+              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                <line x1="23" y1="9" x2="17" y2="15" />
+                <line x1="17" y1="9" x2="23" y2="15" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -143,6 +160,7 @@ import { marked } from 'marked'
 import hljs from 'highlight.js'
 import { useAuthStore } from '@/store/modules/auth'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
+import { useAudioPlayer } from '@/composables/useAudioPlayer'
 
 const props = defineProps<{
   sessionId?: string
@@ -207,6 +225,8 @@ const quickMode = ref(false)
 const isVoiceMode = ref(false)
 const isSpeaking = ref(false)
 const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
+
+const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, handleAudioChunk, togglePlay, finishAudio, cleanup } = useAudioPlayer()
 
 function toggleQuickMode() {
   quickMode.value = !quickMode.value
@@ -350,6 +370,7 @@ watch(() => props.sessionId, (newId) => {
 
 function handleStop() {
   stopStream()
+  cleanup()
   flushStreamRender()
   finishStream()
 }
@@ -357,6 +378,7 @@ function handleStop() {
 function handleTotalStop() {
   stopStream()
   stopVoiceStream()
+  cleanup()
   if (voiceInputRef.value) {
     voiceInputRef.value.handleStop()
   }
@@ -367,6 +389,7 @@ function handleTotalStop() {
 function handleVoiceStop() {
   stopStream()
   stopVoiceStream()
+  cleanup()
   flushStreamRender()
   finishStream()
 }
@@ -427,6 +450,7 @@ function finishStream() {
       lastMsg.content = streamingContent.value
     }
   }
+  finishAudio()
   streamingContent.value = ''
   streamMsgId = ''
   statusMessage.value = ''
@@ -448,6 +472,8 @@ async function handleSend() {
     handleStop()
   }
 
+  cleanup()
+
   const userMsg: ChatMessage = {
     id: genId(),
     role: 'user',
@@ -466,9 +492,12 @@ async function handleSend() {
   let placeholderPushed = false
   console.log('[快速模式] 发送消息时 quickMode.value =', quickMode.value)
 
+  initAudioStream()
+
   askStreamApi(content, currentSessionId.value, {
     onChunk(text: string) {
       streamingContent.value += text
+      handleAudioChunk(text)
       if (!placeholderPushed) {
         placeholderPushed = true
         messages.value.push({
@@ -510,7 +539,7 @@ async function handleSend() {
       ElMessage.error(error || '请求失败，请稍后重试')
       scrollToBottom()
     }
-  }, quickMode.value)
+  }, quickMode.value, 'longanhuan')
 }
 </script>
 
@@ -720,6 +749,74 @@ async function handleSend() {
   color: var(--color-text-main);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border-light);
+}
+
+.audio-control-bar {
+  display: flex;
+  align-items: center;
+  padding: 4px 0 4px 0;
+}
+
+.audio-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-primary);
+  padding: 0;
+}
+
+.audio-toggle-btn:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.25);
+  transform: scale(1.1);
+}
+
+.audio-toggle-btn:active {
+  transform: scale(0.9);
+}
+
+.audio-toggle-btn.muted {
+  color: var(--color-text-subtle);
+  border-color: var(--color-border);
+  background: var(--color-bg);
+}
+
+.audio-wave-icon {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 14px;
+}
+
+.audio-wave-bar {
+  width: 2.5px;
+  height: 4px;
+  border-radius: 1.5px;
+  background: var(--color-primary);
+  animation: audio-wave-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.audio-toggle-btn.muted .audio-wave-bar {
+  background: var(--color-text-subtle);
+}
+
+@keyframes audio-wave-pulse {
+  0% {
+    height: 4px;
+    opacity: 0.3;
+  }
+  100% {
+    height: 14px;
+    opacity: 1;
+  }
 }
 
 /* ── Thinking Indicator ──────────────────────────────── */

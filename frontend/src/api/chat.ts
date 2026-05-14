@@ -18,6 +18,7 @@ export interface StreamCallbacks {
   onStatus?: (status: string) => void
   onToolCall?: (info: ToolCallInfo) => void
   onToolResult?: (info: ToolResultInfo) => void
+  onAudio?: (audioBase64: string) => void
 }
 
 let abortController: AbortController | null = null
@@ -41,17 +42,17 @@ export function isStreaming(): boolean {
   return abortController !== null && !abortController.signal.aborted
 }
 
-export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false): AbortController {
+export function askStreamApi(message: string, sessionId: string | null, callbacks: StreamCallbacks, quickMode: boolean = false, voice: string = 'longanhuan'): AbortController {
   stopStream()
 
   const controller = new AbortController()
   abortController = controller
-  const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult } = callbacks
+  const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult, onAudio } = callbacks
   let aborted = false
 
   const token = localStorage.getItem('access_token')
 
-  console.log('[快速模式] API层 quickMode =', quickMode, ', 请求体 =', { message: message.slice(0, 30), session_id: sessionId, quick_mode: quickMode })
+  console.log('[快速模式] API层 quickMode =', quickMode, ', 请求体 =', { message: message.slice(0, 30), session_id: sessionId, quick_mode: quickMode, voice })
 
   fetch('/api/chat/stream', {
     method: 'POST',
@@ -59,7 +60,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
       'Content-Type': 'application/json',
       'Authorization': token ? `Bearer ${token}` : ''
     },
-    body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode }),
+    body: JSON.stringify({ message, session_id: sessionId, quick_mode: quickMode, voice }),
     signal: controller.signal
   }).then(async (response) => {
     if (aborted) return
@@ -126,6 +127,9 @@ export function askStreamApi(message: string, sessionId: string | null, callback
           }
           if (parsed.c != null) {
             onChunk(parsed.c)
+          }
+          if (parsed.a && onAudio) {
+            onAudio(parsed.a)
           }
         } catch {
           // skip unparseable lines

@@ -19,6 +19,7 @@ from app.services.bm25_service import bm25_service
 from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
 from app.services.milvus_service import milvus_service
 from app.services.tools import tool_executor
+from app.services.voice_service import voice_service
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,7 @@ async def stream_chat(
 
     async def event_generator():
         collected_content = []
+        voice_param = req.voice or "longanhuan"
         try:
             if req.quick_mode:
                 logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
@@ -291,6 +293,17 @@ async def stream_chat(
             async with async_session() as save_db:
                 await conversation_service.save_message(save_db, session_id, "assistant", full_answer)
                 await conversation_service.extract_and_save_long_term(save_db, current_user.id, session_id)
+
+            if full_answer.strip():
+                logger.info(f"[TTS] 开始合成完整回答, 文本长度: {len(full_answer)}")
+                try:
+                    chunk_count = 0
+                    async for chunk in voice_service.text_to_speech_stream(full_answer, voice_param):
+                        chunk_count += 1
+                        yield f"data: {json.dumps({'a': chunk})}\n\n"
+                    logger.info(f"[TTS] 合成完成, 共 {chunk_count} 个音频块")
+                except Exception as e:
+                    logger.error(f"[TTS] 合成失败: {e}")
 
             yield "data: [DONE]\n\n"
         except ValueError as e:
