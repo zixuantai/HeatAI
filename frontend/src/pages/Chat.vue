@@ -689,7 +689,7 @@ async function handleSend() {
   focusInput()
   scrollToBottom()
 
-  const enableVoice = localStorage.getItem('heatai_voice_enabled') !== 'false'
+  const enableVoice = localStorage.getItem(`heatai_voice_enabled_${authStore.user?.id || ''}`) !== 'false'
   if (enableVoice) {
     initAudioStream()
   }

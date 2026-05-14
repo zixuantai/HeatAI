@@ -276,8 +276,8 @@ import type { SessionInfo } from '@/types'
 import Croppie from 'croppie'
 import 'croppie/croppie.css'
 
-const SETTINGS_VOICE_ENABLED = 'heatai_voice_enabled'
-const SETTINGS_VOICE_TYPE = 'heatai_voice_type'
+const settingsVoiceEnabledKey = computed(() => `heatai_voice_enabled_${authStore.user?.id || ''}`)
+const settingsVoiceTypeKey = computed(() => `heatai_voice_type_${authStore.user?.id || ''}`)
 
 const router = useRouter()
 const route = useRoute()
@@ -309,14 +309,14 @@ const currentSettingsLabel = computed(() => {
   return item?.label || ''
 })
 
-const voiceEnabled = ref(localStorage.getItem(SETTINGS_VOICE_ENABLED) !== 'false')
+const voiceEnabled = ref(localStorage.getItem(settingsVoiceEnabledKey.value) !== 'false')
 const voiceOptions = [
   { label: '阳光大男孩', value: 'longanyang' },
   { label: '欢脱元气女', value: 'longanhuan' },
   { label: '天真烂漫女童', value: 'longhuhu_v3' },
   { label: '阳光顽皮男', value: 'longjielidou_v3' }
 ]
-const voiceType = ref(localStorage.getItem(SETTINGS_VOICE_TYPE) || 'longanhuan')
+const voiceType = ref(localStorage.getItem(settingsVoiceTypeKey.value) || 'longanhuan')
 
 const activeSessionId = computed(() => {
   return (route.params.sessionId as string) || null
@@ -448,11 +448,11 @@ function handleSettingsOpen() {
 }
 
 function handleVoiceEnabledChange(val: boolean) {
-  localStorage.setItem(SETTINGS_VOICE_ENABLED, String(val))
+  localStorage.setItem(settingsVoiceEnabledKey.value, String(val))
 }
 
 function handleVoiceTypeChange(val: string) {
-  localStorage.setItem(SETTINGS_VOICE_TYPE, val)
+  localStorage.setItem(settingsVoiceTypeKey.value, val)
 }
 
 function handleAvatarFileChange(e: Event) {

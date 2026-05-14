@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import type { ChatMessage } from '@/types'
 import { askStreamApi, stopStream as stopStreamApi } from '@/api/chat'
 import type { StreamCallbacks } from '@/api/chat'
+import { useAuthStore } from '@/store/modules/auth'
 
 const NEW_SESSION_KEY = '__new__'
 
@@ -165,7 +166,9 @@ export const useChatStore = defineStore('chat', () => {
       }
     }
 
-    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, localStorage.getItem('heatai_voice_type') || 'longanhuan', images)
+    const authStore = useAuthStore()
+    const voiceType = localStorage.getItem(`heatai_voice_type_${authStore.user?.id || ''}`) || 'longanhuan'
+    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, voiceType, images)
     state.abortController = controller
   }
 
