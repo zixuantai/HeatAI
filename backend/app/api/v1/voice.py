@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.core.dependencies import CurrentUser
 from app.schemas.voice import VoiceASRRequest, VoiceTTSRequest
-from app.services.voice_service import voice_service
+from app.services.chat import voice_service
 
 logger = logging.getLogger(__name__)
 

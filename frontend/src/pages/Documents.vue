@@ -264,38 +264,39 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
   Grid, List, Coin, Clock
 } from '@element-plus/icons-vue'
-import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
-import type { DocumentInfo, ChunkInfo } from '@/types'
+import type { DocumentInfo } from '@/types'
+import { useDocuments } from '@/composables/documents/useDocuments'
 
 const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)
-const loading = ref(false)
-const chunkLoading = ref(false)
-const documents = ref<DocumentInfo[]>([])
-const total = ref(0)
-const chunks = ref<ChunkInfo[]>([])
-const chunkDialogVisible = ref(false)
-const chunkDialogTitle = ref('')
+
+const {
+  loading,
+  chunkLoading,
+  documents,
+  total,
+  chunks,
+  chunkDialogVisible,
+  chunkDialogTitle,
+  uploadingFiles,
+  loadDocuments,
+  uploadFile: _uploadFile,
+  deleteDocument: _deleteDocument,
+  loadDocumentChunks,
+  refresh: _refresh
+} = useDocuments()
+
+const currentPage = ref(1)
+const pageSize = ref(12)
 
 const searchQuery = ref('')
 const isSearching = ref(false)
 const viewMode = ref<'card' | 'table'>('card')
-
-interface UploadingFile {
-  name: string
-  status: 'uploading' | 'success' | 'error'
-  error?: string
-}
-
-const uploadingFiles = ref<UploadingFile[]>([])
-
-const currentPage = ref(1)
-const pageSize = ref(12)
 
 const pageSizes = computed(() => {
   return viewMode.value === 'card'
@@ -340,40 +341,12 @@ function formatDateShort(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-async function loadDocuments(search?: string) {
-  loading.value = true
-  try {
-    const offset = (currentPage.value - 1) * pageSize.value
-    const res = await getDocumentsApi(pageSize.value, offset, search)
-    documents.value = res.items
-    total.value = res.total
-  } catch {
-    // ignore
-  } finally {
-    loading.value = false
-  }
+async function handleLoad(search?: string) {
+  await loadDocuments(pageSize.value, currentPage.value, search)
 }
 
 async function uploadFile(file: File) {
-  const uf: UploadingFile = { name: file.name, status: 'uploading' }
-  uploadingFiles.value.push(uf)
-
-  try {
-    await uploadDocumentApi(file)
-    uf.status = 'success'
-    ElMessage.success(`"${file.name}" 上传并处理成功`)
-    currentPage.value = 1
-    await loadDocuments()
-  } catch (e: unknown) {
-    const errMsg = (e as { message?: string })?.message || '处理失败'
-    ElMessage.error(`"${file.name}" 上传失败: ${errMsg}，请重试`)
-    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== uf.name)
-    return
-  }
-
-  setTimeout(() => {
-    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== uf.name)
-  }, 3000)
+  await _uploadFile(file, pageSize.value, currentPage.value)
 }
 
 function handleDrop(e: DragEvent) {
@@ -403,38 +376,14 @@ async function handleDeleteClick(doc: DocumentInfo) {
       '删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    await handleDelete(doc.id)
+    await _deleteDocument(doc.id, pageSize.value, currentPage.value, isSearching.value, searchQuery.value.trim())
   } catch {
     // 用户取消
   }
 }
 
-async function handleDelete(id: string) {
-  try {
-    await deleteDocumentApi(id)
-    ElMessage.success('文档已删除')
-    if (documents.value.length === 1 && currentPage.value > 1) {
-      currentPage.value--
-    }
-    await loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
-  } catch (e: unknown) {
-    const msg = (e as { message?: string })?.message || '删除失败'
-    ElMessage.error(msg)
-  }
-}
-
 async function handleRowClick(row: DocumentInfo) {
-  chunkDialogTitle.value = `${row.original_filename} - 分块详情`
-  chunkDialogVisible.value = true
-  chunkLoading.value = true
-  try {
-    const res = await getDocumentChunksApi(row.id)
-    chunks.value = res.chunks
-  } catch {
-    chunks.value = []
-  } finally {
-    chunkLoading.value = false
-  }
+  await loadDocumentChunks(row)
 }
 
 async function handleSearch() {
@@ -442,7 +391,7 @@ async function handleSearch() {
   if (q) {
     isSearching.value = true
     currentPage.value = 1
-    await loadDocuments(q)
+    await handleLoad(q)
   }
 }
 
@@ -450,22 +399,22 @@ async function handleClearSearch() {
   searchQuery.value = ''
   isSearching.value = false
   currentPage.value = 1
-  await loadDocuments()
+  await handleLoad()
 }
 
 function handleRefresh() {
-  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
+  _refresh(pageSize.value, currentPage.value, isSearching.value, searchQuery.value.trim())
 }
 
 function handlePageChange(page: number) {
   currentPage.value = page
-  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
+  handleLoad(isSearching.value ? searchQuery.value.trim() : undefined)
 }
 
 function handleSizeChange(size: number) {
   pageSize.value = size
   currentPage.value = 1
-  loadDocuments(isSearching.value ? searchQuery.value.trim() : undefined)
+  handleLoad(isSearching.value ? searchQuery.value.trim() : undefined)
 }
 
 // ── 3D Tilt 倾斜效果 ──────────────────────────────
@@ -500,7 +449,7 @@ function handleTiltLeave(e: MouseEvent, docId: string) {
 }
 
 onMounted(() => {
-  loadDocuments()
+  handleLoad()
 })
 </script>
 

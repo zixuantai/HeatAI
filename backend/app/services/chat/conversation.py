@@ -163,7 +163,7 @@ class ConversationService:
 
     @staticmethod
     async def _generate_title_via_llm(user_message: str) -> str:
-        from app.services.chat_service import ChatService
+        from app.services.chat import ChatService, extract_content
         from app.core.config import settings
 
         prompt = f"""根据以下用户问题，生成一个简洁的对话标题（10个字以内），直接返回标题文本，不要包含引号、标点或任何额外解释。
@@ -179,7 +179,7 @@ class ConversationService:
         )
 
         if response.status_code == 200:
-            title = ChatService._extract_content(response).strip()
+            title = extract_content(response).strip()
             title = title.strip('"\'""''「」《》【】[]() （）\n\r\t ,.，。！!？?：:；;、')
             if title:
                 return title[:30]

@@ -196,12 +196,12 @@ import type { ElInput } from 'element-plus'
 import { stopVoiceStream, getSessionDetailApi } from '@/api/chat'
 import { sendVoiceToBackend } from '@/api/voice'
 import type { ChatMessage } from '@/types'
-import { marked } from 'marked'
-import hljs from 'highlight.js'
 import { useAuthStore } from '@/store/modules/auth'
 import { useChatStore } from '@/store/modules/chat'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
-import { useAudioPlayer } from '@/composables/useAudioPlayer'
+import { useAudioPlayer } from '@/composables/chat/useAudioPlayer'
+import { renderMarkdownCached } from '@/composables/chat/useMarkdown'
+import { useImageUpload } from '@/composables/chat/useImageUpload'
 
 const props = defineProps<{
   sessionId?: string
@@ -211,50 +211,6 @@ const router = useRouter()
 const authStore = useAuthStore()
 const chatStore = useChatStore()
 
-marked.setOptions({
-  breaks: true,
-  gfm: true
-})
-
-const langLabel: Record<string, string> = {
-  plaintext: '文本', python: 'Python', py: 'Python',
-  cpp: 'C++', cc: 'C++', cxx: 'C++', c: 'C',
-  javascript: 'JavaScript', js: 'JavaScript', typescript: 'TypeScript', ts: 'TypeScript',
-  java: 'Java', go: 'Go', rust: 'Rust', rs: 'Rust',
-  html: 'HTML', css: 'CSS', sql: 'SQL',
-  bash: 'Bash', shell: 'Shell', sh: 'Shell', zsh: 'Shell',
-  json: 'JSON', xml: 'XML', yaml: 'YAML', yml: 'YAML',
-  markdown: 'Markdown', md: 'Markdown', php: 'PHP',
-  ruby: 'Ruby', rb: 'Ruby', swift: 'Swift', kotlin: 'Kotlin',
-}
-
-function getLangLabel(lang: string): string {
-  return langLabel[lang] || lang
-}
-
-const renderer = new marked.Renderer()
-renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
-  const validLang = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
-  const highlighted = hljs.highlight(text, { language: validLang }).value
-  const displayName = getLangLabel(validLang)
-  return `
-    <div class="code-block-wrapper">
-      <div class="code-block-header">
-        <span class="code-lang-label">${displayName}</span>
-        <button class="code-copy-btn" onclick="(function(btn){var p=btn.parentElement.nextElementSibling;var t=p.innerText;navigator.clipboard.writeText(t).then(function(){btn.textContent='已复制';setTimeout(function(){btn.textContent='复制'},2000)})})(this)">复制</button>
-      </div>
-      <pre><code class="hljs language-${validLang}">${highlighted}</code></pre>
-    </div>`
-}
-renderer.codespan = function ({ text }: { text: string }) {
-  return `<code class="inline-code">${text}</code>`
-}
-marked.setOptions({ renderer })
-
-function renderMarkdown(text: string): string {
-  return marked.parse(text) as string
-}
-
 const inputMessage = ref('')
 const messagesContainer = ref<HTMLElement>()
 const inputRef = ref<InstanceType<typeof ElInput>>()
@@ -263,9 +219,10 @@ const quickMode = ref(false)
 const isVoiceMode = ref(false)
 const isSpeaking = ref(false)
 const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
-const uploadedImages = ref<string[]>([])
 const isMultiLine = ref(false)
 const streamCreatedSessionId = ref<string | null>(null)
+
+const { uploadedImages, handleImageSelect: _handleImageSelect, handlePaste: _handlePaste, removeImage: _removeImage } = useImageUpload()
 
 const NEW_SESSION_KEY = '__new__'
 
@@ -308,138 +265,15 @@ function triggerImageUpload() {
 }
 
 function handleImageSelect(event: Event) {
-  const input = event.target as HTMLInputElement
-  const files = input.files
-  if (!files || files.length === 0) return
-
-  const maxCount = 5
-  const remaining = maxCount - uploadedImages.value.length
-  if (remaining <= 0) {
-    ElMessage.warning(`最多只能上传 ${maxCount} 张图片`)
-    input.value = ''
-    return
-  }
-
-  const filesToProcess = Math.min(files.length, remaining)
-  let loaded = 0
-  let skipped = 0
-
-  const onAllDone = () => {
-    input.value = ''
-    focusInput()
-  }
-
-  for (let i = 0; i < filesToProcess; i++) {
-    const file = files[i]
-    if (!file.type.startsWith('image/')) {
-      skipped++
-      if (loaded + skipped === filesToProcess) onAllDone()
-      continue
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      ElMessage.warning(`图片 "${file.name}" 超过 10MB，已跳过`)
-      skipped++
-      if (loaded + skipped === filesToProcess) onAllDone()
-      continue
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const base64 = e.target?.result as string
-      if (base64) {
-        uploadedImages.value.push(base64)
-      }
-      loaded++
-      if (loaded + skipped === filesToProcess) {
-        onAllDone()
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  if (files.length > filesToProcess) {
-    ElMessage.warning(`最多上传 ${maxCount} 张，已自动选取前 ${filesToProcess} 张`)
-  }
+  _handleImageSelect(event, focusInput)
 }
 
 function removeImage(index: number) {
-  uploadedImages.value.splice(index, 1)
-  focusInput()
+  _removeImage(index, focusInput)
 }
 
 function handlePaste(event: ClipboardEvent) {
-  const items = event.clipboardData?.items
-  if (!items) return
-
-  const maxCount = 5
-  const remaining = maxCount - uploadedImages.value.length
-  if (remaining <= 0) {
-    ElMessage.warning(`最多只能上传 ${maxCount} 张图片`)
-    return
-  }
-
-  const imageItems: DataTransferItem[] = []
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]
-    if (item.type.startsWith('image/')) {
-      imageItems.push(item)
-    }
-  }
-
-  if (imageItems.length === 0) return
-
-  event.preventDefault()
-
-  const toProcess = Math.min(imageItems.length, remaining)
-  let loaded = 0
-  let skipped = 0
-
-  const onAllDone = () => {
-    focusInput()
-  }
-
-  for (let i = 0; i < toProcess; i++) {
-    const file = imageItems[i].getAsFile()
-    if (!file) {
-      skipped++
-      if (loaded + skipped === toProcess) onAllDone()
-      continue
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      ElMessage.warning('图片超过 10MB，已跳过')
-      skipped++
-      if (loaded + skipped === toProcess) onAllDone()
-      continue
-    }
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const base64 = e.target?.result as string
-      if (base64) {
-        uploadedImages.value.push(base64)
-      }
-      loaded++
-      if (loaded + skipped === toProcess) {
-        onAllDone()
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  if (imageItems.length > toProcess) {
-    ElMessage.warning(`最多上传 ${maxCount} 张，已自动选取前 ${toProcess} 张`)
-  }
-}
-
-const markdownCache = new Map<string, string>()
-function renderMarkdownCached(text: string): string {
-  const cached = markdownCache.get(text)
-  if (cached !== undefined) return cached
-  const html = marked.parse(text) as string
-  markdownCache.set(text, html)
-  return html
+  _handlePaste(event, focusInput)
 }
 
 const quickQuestions = [

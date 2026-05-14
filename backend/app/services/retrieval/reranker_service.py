@@ -7,10 +7,10 @@ import numpy as np
 
 from app.core.config import settings
 from app.core.utils import min_max_normalize
-from app.services.bm25_service import bm25_service
-from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
-from app.services.milvus_service import milvus_service
-from app.services.cross_reranker_service import cross_reranker_service
+from app.services.retrieval.bm25_service import bm25_service
+from app.services.retrieval.embedding import embedding_service, BGE_QUERY_INSTRUCTION
+from app.services.retrieval.milvus_service import milvus_service
+from app.services.retrieval.cross_reranker_service import cross_reranker_service
 
 logger = logging.getLogger(__name__)
 

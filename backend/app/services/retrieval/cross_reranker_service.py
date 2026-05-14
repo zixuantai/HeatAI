@@ -7,7 +7,7 @@ from app.core.tokenizer_patch import apply_tokenizer_patch
 
 apply_tokenizer_patch()
 
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 _MODELS_DIR = os.path.join(_PROJECT_ROOT, "models")
 os.environ.setdefault("HF_HUB_CACHE", _MODELS_DIR)
 os.environ.setdefault("TRANSFORMERS_CACHE", os.path.join(_MODELS_DIR, "transformers"))

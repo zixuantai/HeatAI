@@ -45,18 +45,18 @@ logger = logging.getLogger(__name__)
 
 
 def _preload_model():
-    from app.services.embedding import embedding_service
+    from app.services.retrieval.embedding import embedding_service
     logger.info("正在加载 Embedding 模型到内存...")
     embedding_service.ensure_loaded()
 
-    from app.services.cross_reranker_service import cross_reranker_service
+    from app.services.retrieval.cross_reranker_service import cross_reranker_service
     logger.info("正在加载 Cross-Encoder Reranker 模型到内存...")
     cross_reranker_service.ensure_loaded()
 
 
 def _rebuild_bm25_from_milvus():
-    from app.services.milvus_service import milvus_service
-    from app.services.bm25_service import bm25_service
+    from app.services.retrieval.milvus_service import milvus_service
+    from app.services.retrieval.bm25_service import bm25_service
 
     logger.info("正在检查 BM25 索引状态...")
     if bm25_service.chunk_count > 0:

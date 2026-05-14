@@ -6,97 +6,25 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_session
-from app.core.config import settings
 from app.core.dependencies import CurrentUser
 from app.schemas.chat import ChatRequest
 from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate, SessionPinUpdate
-from app.services.chat_service import chat_service
-from app.services.conversation_service import conversation_service
+from app.services.chat import chat_service, chat_pipeline, conversation_service, voice_service, query_rewriter
 from app.services.memory.context_builder import context_builder
-from app.services.reranker_service import reranker_service
-from app.services.query_rewriter import query_rewriter
-from app.services.bm25_service import bm25_service
-from app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
-from app.services.milvus_service import milvus_service
-from app.services.tools import tool_executor
-from app.services.voice_service import voice_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["对话"])
 
-
-async def _kb_search_fn(query: str) -> list:
-    results = await asyncio.to_thread(reranker_service.search_and_rerank, query)
-    return results
+chat_pipeline.bind_kb_search()
 
 
-tool_executor.set_search_fn(_kb_search_fn)
+def _log_rewrite(rewrite_result: dict):
+    chat_pipeline.log_rewrite_result(rewrite_result)
 
 
-def _log_rewrite_result(rewrite_result: dict):
-    logger.info("=" * 60)
-    logger.info(f"[Query改写] 原始查询: {rewrite_result['original_query']}")
-    logger.info(f"[Query改写] 改写查询: {rewrite_result['rewritten_query']}")
-    expanded = rewrite_result.get("expanded_queries", [])
-    if expanded:
-        for i, eq in enumerate(expanded):
-            logger.info(f"[Query改写] 扩展查询{i + 1}: {eq}")
-    else:
-        logger.info("[Query改写] 无扩展查询")
-    logger.info("=" * 60)
-
-
-async def _merge_expanded_results(main_results: list, rewrite_result: dict) -> list:
-    expanded_queries = rewrite_result.get("expanded_queries", [])
-    if not expanded_queries:
-        return main_results
-
-    seen_keys = set()
-    for r in main_results:
-        key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
-        seen_keys.add(key)
-
-    threshold = settings.SIMILARITY_THRESHOLD
-
-    async def _search_one_expanded(eq: str):
-        try:
-            bm25_res = await asyncio.to_thread(bm25_service.search, eq, 3)
-            bm25_res = reranker_service.filter_by_threshold(bm25_res, threshold)
-            query_emb = await asyncio.to_thread(
-                embedding_service.encode_single, BGE_QUERY_INSTRUCTION + eq
-            )
-            vector_res = await asyncio.to_thread(milvus_service.search, query_emb, 3)
-            vector_res = reranker_service.filter_by_threshold(vector_res, threshold)
-            for r in vector_res:
-                r["retriever"] = "vector_expanded"
-            merged = list(bm25_res)
-            bm25_keys = {f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}" for r in bm25_res}
-            for r in vector_res:
-                key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
-                if key not in bm25_keys:
-                    merged.append(r)
-            return merged
-        except Exception as e:
-            logger.warning(f"[Query改写] 扩展查询 '{eq}' 检索失败: {e}")
-            return []
-
-    all_expanded_results = await asyncio.gather(*[_search_one_expanded(eq) for eq in expanded_queries])
-
-    merged = list(main_results)
-    for exp_results in all_expanded_results:
-        for r in exp_results:
-            key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
-            if key not in seen_keys:
-                seen_keys.add(key)
-                if "retriever" not in r:
-                    r["retriever"] = "bm25_expanded"
-                merged.append(r)
-
-    if len(merged) > len(main_results):
-        logger.info(f"[Query改写] 扩展查询新增 {len(merged) - len(main_results)} 条召回结果，合并后共 {len(merged)} 条")
-
-    return merged
+async def _merge_expanded(main_results: list, rewrite_result: dict) -> list:
+    return await chat_pipeline.merge_expanded_results(main_results, rewrite_result)
 
 
 @router.post("/ask")
@@ -119,63 +47,42 @@ async def ask(
 
         if req.quick_mode:
             logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
-
             history_messages = []
             try:
                 ctx = await context_builder.build(db, session_id, current_user.id, req.message)
                 history_messages = ctx.messages
             except Exception:
                 pass
-
             result = await chat_service.quick_ask(req.message, history_messages, req.personalization)
         else:
-            need_kb = query_rewriter.needs_knowledge_base(req.message)
-            skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
+            need_kb, skip_rewrite = chat_pipeline.should_search_kb(req.message)
+            rewrite_result = chat_pipeline.build_rewrite_result(req.message, skip_rewrite)
 
-            if skip_rewrite:
-                logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
-                rewrite_result = {
-                    "original_query": req.message,
-                    "rewritten_query": req.message,
-                    "expanded_queries": []
-                }
-                _log_rewrite_result(rewrite_result)
-
+            if rewrite_result is not None:
+                _log_rewrite(rewrite_result)
                 if need_kb:
-                    search_results = await asyncio.to_thread(
-                        reranker_service.search_and_rerank, req.message
-                    )
-                    if search_results:
-                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                    search_results = await chat_pipeline.search_knowledge_base(req.message)
                 else:
                     search_results = []
-
                 ctx = await context_builder.build(db, session_id, current_user.id, req.message)
             else:
                 ctx_task = asyncio.create_task(
                     context_builder.build(db, session_id, current_user.id, req.message)
                 )
-
                 rewrite_result = await query_rewriter.rewrite(req.message)
-                _log_rewrite_result(rewrite_result)
+                _log_rewrite(rewrite_result)
 
                 if need_kb:
                     search_query = rewrite_result["rewritten_query"]
-                    search_results = await asyncio.to_thread(
-                        reranker_service.search_and_rerank, search_query
-                    )
-                    search_results = await _merge_expanded_results(search_results, rewrite_result)
-                    if search_results:
-                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                    search_results = await chat_pipeline.search_knowledge_base(search_query)
+                    search_results = await _merge_expanded(search_results, rewrite_result)
                 else:
                     search_results = []
-
                 ctx = await ctx_task
 
             result = await chat_service.ask(req.message, ctx.messages, search_results, req.personalization)
 
         await conversation_service.save_message(db, session_id, "assistant", result["answer"])
-
         await conversation_service.extract_and_save_long_term(db, current_user.id, session_id)
 
         return {
@@ -230,16 +137,9 @@ async def stream_chat(
 
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
                 async for event in chat_service.stream_vision_ask(req.message, req.images, history_messages, req.personalization):
-                    event_type = event.get("type", "content")
-                    if event_type == "content":
+                    if event["type"] == "content":
                         collected_content.append(event["content"])
-                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
-                    elif event_type == "tool_call":
-                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "tool_result":
-                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "error":
-                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
+                    yield f"data: {json.dumps(_event_to_sse(event))}\n\n"
             elif req.quick_mode:
                 logger.info(f"[快速模式] 跳过RAG管线，直接回复: {req.message}")
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
@@ -253,45 +153,27 @@ async def stream_chat(
                     pass
 
                 async for event in chat_service.stream_quick_ask(req.message, history_messages, req.personalization):
-                    event_type = event.get("type", "content")
-                    if event_type == "content":
+                    if event["type"] == "content":
                         collected_content.append(event["content"])
-                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
-                    elif event_type == "tool_call":
-                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "tool_result":
-                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "error":
-                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
+                    yield f"data: {json.dumps(_event_to_sse(event))}\n\n"
             else:
-                need_kb = query_rewriter.needs_knowledge_base(req.message)
-                skip_rewrite = query_rewriter.should_skip_rewrite(req.message)
+                need_kb, skip_rewrite = chat_pipeline.should_search_kb(req.message)
 
                 ctx_task = asyncio.create_task(
                     context_builder.build(db, session_id, current_user.id, req.message)
                 )
 
-                if skip_rewrite:
-                    logger.info(f"[Query改写] 检测到简单/工具类查询，跳过 LLM 改写: {req.message}")
-                    rewrite_result = {
-                        "original_query": req.message,
-                        "rewritten_query": req.message,
-                        "expanded_queries": []
-                    }
-                else:
+                rewrite_result = chat_pipeline.build_rewrite_result(req.message, skip_rewrite)
+                if rewrite_result is None:
                     yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
                     rewrite_result = await query_rewriter.rewrite(req.message)
-                _log_rewrite_result(rewrite_result)
+                _log_rewrite(rewrite_result)
 
                 if need_kb:
                     yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
                     search_query = rewrite_result["rewritten_query"]
-                    search_results = await asyncio.to_thread(
-                        reranker_service.search_and_rerank, search_query
-                    )
-                    search_results = await _merge_expanded_results(search_results, rewrite_result)
-                    if search_results:
-                        logger.info(f"[对话] 检索到 {len(search_results)} 条相关文档")
+                    search_results = await chat_pipeline.search_knowledge_base(search_query)
+                    search_results = await _merge_expanded(search_results, rewrite_result)
                 else:
                     logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
                     search_results = []
@@ -302,16 +184,9 @@ async def stream_chat(
 
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
                 async for event in chat_service.stream_ask(req.message, ctx.messages, search_results, req.personalization):
-                    event_type = event.get("type", "content")
-                    if event_type == "content":
+                    if event["type"] == "content":
                         collected_content.append(event["content"])
-                        yield f"data: {json.dumps({'c': event['content']})}\n\n"
-                    elif event_type == "tool_call":
-                        yield f"data: {json.dumps({'tc': {'tool_name': event['tool_name'], 'tool_args': event['tool_args'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "tool_result":
-                        yield f"data: {json.dumps({'tr': {'tool_name': event['tool_name'], 'result': event['result'], 'tool_call_id': event['tool_call_id']}})}\n\n"
-                    elif event_type == "error":
-                        yield f"data: {json.dumps({'error': event['content']})}\n\n"
+                    yield f"data: {json.dumps(_event_to_sse(event))}\n\n"
 
             full_answer = "".join(collected_content)
             async with async_session() as save_db:
@@ -345,6 +220,19 @@ async def stream_chat(
             "X-Accel-Buffering": "no",
         }
     )
+
+
+def _event_to_sse(event: dict) -> dict:
+    event_type = event.get("type", "content")
+    if event_type == "content":
+        return {"c": event["content"]}
+    elif event_type == "tool_call":
+        return {"tc": {"tool_name": event["tool_name"], "tool_args": event["tool_args"], "tool_call_id": event["tool_call_id"]}}
+    elif event_type == "tool_result":
+        return {"tr": {"tool_name": event["tool_name"], "result": event["result"], "tool_call_id": event["tool_call_id"]}}
+    elif event_type == "error":
+        return {"error": event["content"]}
+    return {}
 
 
 @router.get("/sessions", response_model=dict)

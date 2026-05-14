@@ -10,13 +10,13 @@ from sqlalchemy import select, func
 
 from app.core.config import settings
 from app.models.document import Document
-from app.services.parser import document_parser
-from app.services.text_cleaner import text_cleaner
-from app.services.chunker import text_chunker
-from app.services.bm25_service import bm25_service
-from app.services.embedding import embedding_service
-from app.services.reranker_service import reranker_service
-from app.services.milvus_service import milvus_service
+from app.services.processing.parser import document_parser
+from app.services.processing.text_cleaner import text_cleaner
+from app.services.processing.chunker import text_chunker
+from app.services.retrieval.bm25_service import bm25_service
+from app.services.retrieval.embedding import embedding_service
+from app.services.retrieval.reranker_service import reranker_service
+from app.services.retrieval.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
 
