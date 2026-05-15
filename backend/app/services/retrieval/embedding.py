@@ -79,33 +79,12 @@ class EmbeddingService:
 
             local_path = _resolve_local_model(settings.MODELS_DIR, model_name)
 
-            use_fp16 = settings.EMBEDDING_USE_FP16 and device != "cpu"
-
-            if use_fp16:
-                try:
-                    import torch
-                    logger.info(f"加载 Embedding 模型: {local_path} (device={device}, fp16=True)")
-                    self._model = SentenceTransformer(
-                        local_path,
-                        device=device,
-                        local_files_only=True,
-                        model_kwargs={"torch_dtype": torch.float16},
-                    )
-                except Exception:
-                    logger.warning("float16 加载失败，回退到 float32")
-                    logger.info(f"加载 Embedding 模型: {local_path} (device={device}, fp32)")
-                    self._model = SentenceTransformer(
-                        local_path,
-                        device=device,
-                        local_files_only=True,
-                    )
-            else:
-                logger.info(f"加载 Embedding 模型: {local_path} (device={device}, fp32)")
-                self._model = SentenceTransformer(
-                    local_path,
-                    device=device,
-                    local_files_only=True,
-                )
+            logger.info(f"加载 Embedding 模型: {local_path} (device={device})")
+            self._model = SentenceTransformer(
+                local_path,
+                device=device,
+                local_files_only=True,
+            )
             self._loaded = True
             logger.info("Embedding 模型加载完成")
 
@@ -120,11 +99,8 @@ class EmbeddingService:
         self._load_model()
         tokenizer = self._model.tokenizer
         from app.core.config import settings
-        model_max = getattr(self._model, 'max_seq_length', 512)
         max_tokens = getattr(settings, 'BGE_MAX_TOKENS', 450)
-        if max_tokens >= model_max:
-            max_tokens = model_max - 50
-            logger.info(f"[向量化] BGE_MAX_TOKENS={settings.BGE_MAX_TOKENS} >= model_max={model_max}, 自动调整为 {max_tokens}")
+        model_max = getattr(self._model, 'max_seq_length', 512)
 
         over_count = 0
         max_found = 0

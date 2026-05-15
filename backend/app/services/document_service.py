@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import os
 import time
@@ -13,7 +15,10 @@ from app.models.document import Document
 from app.services.processing.parser import document_parser
 from app.services.processing.text_cleaner import text_cleaner
 from app.services.processing.chunker import text_chunker
-from app.services.processing.dedup_service import minhash_dedup_service
+<<<<<<< HEAD
+=======
+from app.services.processing.dedup_service import MinHashDedupService
+>>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
 from app.services.retrieval.bm25_service import bm25_service
 from app.services.retrieval.embedding import embedding_service
 from app.services.retrieval.reranker_service import reranker_service
@@ -23,21 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentService:
-
-    @staticmethod
-    def _build_big_context(
-        full_text: str, para_start: int, para_end: int, small_chunk: str
-    ) -> str:
-        paragraphs = full_text.split("\n\n")
-        ctx_start = max(0, para_start - 1)
-        ctx_end = min(len(paragraphs), para_end + 2)
-        context_parts = []
-        for p_idx in range(ctx_start, ctx_end):
-            p_text = paragraphs[p_idx].strip()
-            if p_text:
-                context_parts.append(p_text)
-        big = "\n\n".join(context_parts)
-        return big if len(big) > len(small_chunk) else small_chunk
 
     @staticmethod
     async def upload_and_process(
@@ -58,7 +48,9 @@ class DocumentService:
         )
         existing = result.scalars().first()
         if existing:
-            raise ValueError("该文件已上传过，内容相同的文件不能重复上传")
+            raise ValueError(
+                f"该文件已上传过（内容与「{existing.original_filename}」相同），不能重复上传"
+            )
 
         doc_record = Document(
             user_id=user_id,
@@ -116,12 +108,20 @@ class DocumentService:
             if not chunks:
                 raise ValueError("文本切块结果为空")
 
+<<<<<<< HEAD
+=======
             before_dedup = len(chunks)
-            chunks = minhash_dedup_service.deduplicate(chunks)
+            dedup_service = MinHashDedupService(
+                threshold=settings.MINHASH_THRESHOLD,
+                num_perm=settings.MINHASH_NUM_PERM,
+            )
+            chunks = dedup_service.deduplicate(chunks)
+            if not chunks:
+                raise ValueError("文档内去重后无有效内容，文档可能包含大量重复文本")
             if len(chunks) < before_dedup:
                 logger.info(f"[去重] 文档内去重: {before_dedup} → {len(chunks)} chunks")
-            minhash_dedup_service.reset()
 
+>>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
             for i, chunk in enumerate(chunks):
                 content_len = len(chunk["content"])
                 content_preview = chunk["content"][:80].replace("\n", "\\n")
@@ -139,6 +139,8 @@ class DocumentService:
             embed_start = time.time()
             logger.info(f"[向量化] 开始编码 {len(chunk_texts)} 个文本块...")
             embeddings = embedding_service.encode(chunk_texts)
+            if not embeddings:
+                raise RuntimeError("向量编码结果为空，请检查 Embedding 模型是否正常加载")
             embed_time = time.time() - embed_start
             vector_dim = len(embeddings[0]) if embeddings else 0
             logger.info(f"[向量化] ✅ 编码完成: 向量维度={vector_dim}, 数量={len(embeddings)}, 耗时={embed_time:.2f}s")
@@ -148,13 +150,6 @@ class DocumentService:
 
             for i, chunk in enumerate(chunks):
                 chunk["metadata"]["chunk_id"] = str(uuid.uuid4())
-                if settings.SMALL_TO_BIG_ENABLED and cleaned_text:
-                    para_start = chunk["metadata"].get("paragraph_start", 0)
-                    para_end = chunk["metadata"].get("paragraph_end", para_start)
-                    big_ctx = DocumentService._build_big_context(
-                        cleaned_text, para_start, para_end, chunk["content"]
-                    )
-                    chunk["metadata"]["big_context"] = big_ctx
 
             insert_start = time.time()
             logger.info(f"[Milvus 插入] 准备插入 {len(chunks)} 条向量...")
@@ -192,6 +187,20 @@ class DocumentService:
             doc_record.error_message = str(e)
             await db.commit()
             await db.refresh(doc_record)
+
+            try:
+                deleted_count = milvus_service.delete_by_document_id(doc_record.id)
+                if deleted_count > 0:
+                    logger.info(f"[回滚] 已清理 Milvus 中 {doc_record.id} 的 {deleted_count} 条向量")
+            except Exception as cleanup_err:
+                logger.warning(f"[回滚] Milvus 清理失败 ({doc_record.id}): {cleanup_err}")
+
+            try:
+                bm25_service.remove_by_document_id(doc_record.id)
+                logger.info(f"[回滚] 已清理 BM25 中 {doc_record.id} 的索引")
+            except Exception as cleanup_err:
+                logger.warning(f"[回滚] BM25 清理失败 ({doc_record.id}): {cleanup_err}")
+
             raise
 
     @staticmethod
@@ -222,6 +231,20 @@ class DocumentService:
         return documents, total
 
     @staticmethod
+    async def list_all_document_ids(
+        db: AsyncSession,
+        user_id: str,
+        search: str | None = None,
+    ) -> list[str]:
+        conditions = [Document.user_id == user_id]
+        if search:
+            conditions.append(Document.original_filename.ilike(f"%{search}%"))
+        result = await db.execute(
+            select(Document.id).where(*conditions).order_by(Document.created_at.desc())
+        )
+        return [row[0] for row in result.all()]
+
+    @staticmethod
     async def get_document(db: AsyncSession, document_id: str, user_id: str) -> Document | None:
         result = await db.execute(
             select(Document).where(
@@ -232,42 +255,79 @@ class DocumentService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def delete_document(db: AsyncSession, document_id: str, user_id: str) -> bool:
+    async def delete_document(db: AsyncSession, document_id: str, user_id: str) -> tuple[bool, str | None]:
         document = await DocumentService.get_document(db, document_id, user_id)
         if not document:
-            return False
+            return False, None
 
-        file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), document.filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
-        milvus_service.delete_by_document_id(document_id)
-        bm25_service.remove_by_document_id(document_id)
+        filename = document.filename
 
         await db.delete(document)
         await db.commit()
-        return True
+
+        return True, filename
 
     @staticmethod
-    async def delete_documents_batch(db: AsyncSession, document_ids: list[str], user_id: str) -> int:
+    def cleanup_document_resources(document_id: str, filename: str):
+        try:
+            file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            logger.warning(f"删除文件失败 [{document_id}]: {e}")
+
+        try:
+            milvus_service.delete_by_document_id(document_id)
+        except Exception as e:
+            logger.warning(f"Milvus 删除失败 [{document_id}]: {e}")
+
+        try:
+            bm25_service.remove_by_document_id(document_id)
+        except Exception as e:
+            logger.warning(f"BM25 删除失败 [{document_id}]: {e}")
+
+        logger.info(f"文档 {document_id} 资源清理完成")
+
+    @staticmethod
+    async def delete_documents_batch(db: AsyncSession, document_ids: list[str], user_id: str) -> tuple[int, list[tuple[str, str]]]:
+        cleanup_list: list[tuple[str, str]] = []
         deleted_count = 0
         for document_id in document_ids:
             document = await DocumentService.get_document(db, document_id, user_id)
             if not document:
                 continue
 
-            file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), document.filename)
-            if os.path.exists(file_path):
-                os.remove(file_path)
-
-            milvus_service.delete_by_document_id(document_id)
-            bm25_service.remove_by_document_id(document_id)
+            filename = document.filename
+            cleanup_list.append((document_id, filename))
 
             await db.delete(document)
             deleted_count += 1
 
         await db.commit()
-        return deleted_count
+        return deleted_count, cleanup_list
+
+    @staticmethod
+    def cleanup_documents_batch(cleanup_list: list[tuple[str, str]]):
+        for document_id, filename in cleanup_list:
+            try:
+                file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logger.warning(f"删除文件失败 [{document_id}]: {e}")
+
+            try:
+                milvus_service.delete_by_document_id(document_id)
+            except Exception as e:
+                logger.warning(f"Milvus 删除失败 [{document_id}]: {e}")
+
+        bm25_removed_ids = [did for did, _ in cleanup_list]
+        try:
+            bm25_service.remove_by_document_ids(bm25_removed_ids)
+        except Exception as e:
+            logger.warning(f"BM25 批量删除失败: {e}")
+
+        logger.info(f"批量清理完成: {len(cleanup_list)} 个文档")
 
     @staticmethod
     async def get_chunks(db: AsyncSession, document_id: str, user_id: str) -> List[Dict[str, Any]]:

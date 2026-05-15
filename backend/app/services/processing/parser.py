@@ -1,8 +1,5 @@
 import io
-import logging
 from typing import List, Tuple
-
-logger = logging.getLogger(__name__)
 
 
 class DocumentParser:
@@ -30,8 +27,6 @@ class DocumentParser:
         import pdfplumber
 
         texts: List[str] = []
-        total_text_len = 0
-
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for i, page in enumerate(pdf.pages):
                 page_parts: List[str] = []
@@ -41,7 +36,6 @@ class DocumentParser:
                 page_text = page.extract_text()
                 if page_text:
                     page_parts.append(page_text)
-                    total_text_len += len(page_text)
 
                 tables = page.extract_tables()
                 if tables:
@@ -73,66 +67,9 @@ class DocumentParser:
 
                 texts.append("\n".join(page_parts))
 
-        avg_text_per_page = total_text_len / max(len(texts), 1)
-        if avg_text_per_page < 50:
-            logger.warning(
-                f"[PDF解析] 平均每页仅 {avg_text_per_page:.0f} 字符，可能是扫描件，尝试 OCR..."
-            )
-            ocr_texts = DocumentParser._ocr_pdf(file_bytes)
-            if ocr_texts:
-                texts = ocr_texts
-
         full_text = "\n\n".join(texts)
         title = filename.rsplit(".", 1)[0]
         return full_text, title
-
-    @staticmethod
-    def _ocr_pdf(file_bytes: bytes) -> List[str]:
-        try:
-            from app.core.config import settings
-            if not settings.PADDLEOCR_ENABLED:
-                logger.info("[OCR] PADDLEOCR_ENABLED=False, 跳过")
-                return []
-
-            from paddleocr import PaddleOCR
-            ocr = PaddleOCR(lang=settings.PADDLEOCR_LANG, det_db_thresh=0.3, use_angle_cls=True)
-
-            import fitz
-            import numpy as np
-            from PIL import Image
-
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            texts: List[str] = []
-
-            for page_idx in range(doc.page_count):
-                page = doc[page_idx]
-                pix = page.get_pixmap(dpi=200)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                img_array = np.array(img)
-
-                result = ocr.ocr(img_array)
-                if not result or not result[0]:
-                    texts.append(f"[第{page_idx + 1}页] (OCR无结果)")
-                    continue
-
-                lines = []
-                for line_info in result[0]:
-                    text = line_info[1][0]
-                    lines.append(text)
-
-                page_text = f"[第{page_idx + 1}页] " + " ".join(lines)
-                texts.append(page_text)
-
-            doc.close()
-            logger.info(f"[OCR] 成功提取 {len(texts)} 页文字")
-            return texts
-
-        except ImportError as e:
-            logger.warning(f"[OCR] 依赖未安装: {e}。安装: pip install paddleocr paddlepaddle PyMuPDF")
-            return []
-        except Exception as e:
-            logger.warning(f"[OCR] 失败: {e}")
-            return []
 
     @staticmethod
     def _parse_docx(file_bytes: bytes, filename: str) -> Tuple[str, str]:
@@ -167,7 +104,20 @@ class DocumentParser:
     def _parse_html(file_bytes: bytes, filename: str) -> Tuple[str, str]:
         from bs4 import BeautifulSoup
 
-        soup = BeautifulSoup(file_bytes, "lxml")
+        encoding = DocumentParser._detect_encoding(file_bytes)
+        logger.info(f"[HTML解析] 检测到编码: {encoding}, 文件名: {filename}")
+
+        html_content = file_bytes.decode(encoding, errors="replace")
+
+        meta_encoding = DocumentParser._extract_html_charset(html_content)
+        if meta_encoding and meta_encoding.lower() != encoding.lower():
+            try:
+                html_content = file_bytes.decode(meta_encoding, errors="replace")
+                logger.info(f"[HTML解析] 使用HTML声明的编码: {meta_encoding}")
+            except (UnicodeDecodeError, LookupError):
+                logger.warning(f"[HTML解析] HTML声明编码 {meta_encoding} 无效, 回退到 {encoding}")
+
+        soup = BeautifulSoup(html_content, "lxml")
 
         for tag in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
             tag.decompose()
@@ -181,7 +131,27 @@ class DocumentParser:
         else:
             text = soup.get_text(separator="\n", strip=True)
 
+        if not text or not text.strip():
+            text = soup.get_text(separator="\n")
+            text = "\n".join(line.strip() for line in text.split("\n") if line.strip())
+
+        if not text or not text.strip():
+            logger.warning(f"[HTML解析] 文档解析后内容为空，可能为SPA动态渲染页面: {filename}")
+            return "", title
+
         return text, title
+
+    @staticmethod
+    def _extract_html_charset(html: str) -> str | None:
+        import re
+        meta_pattern = re.compile(
+            r'<meta[^>]+charset\s*=\s*["\']?([\w\-\d]+)["\']?',
+            re.IGNORECASE,
+        )
+        match = meta_pattern.search(html[:4096])
+        if match:
+            return match.group(1)
+        return None
 
     @staticmethod
     def _detect_encoding(file_bytes: bytes) -> str:

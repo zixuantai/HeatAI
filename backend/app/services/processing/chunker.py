@@ -1,10 +1,6 @@
 import re
-import logging
-import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from app.core.config import settings
-
-logger = logging.getLogger(__name__)
 
 
 class TextChunker:
@@ -78,75 +74,6 @@ class TextChunker:
             chunk["metadata"]["chunk_index"] = idx
 
         return sent_chunks
-
-    def _semantic_segments(self, text: str) -> List[str]:
-        paragraphs = self._split_paragraphs(text)
-        if len(paragraphs) <= 1:
-            return [text]
-
-        try:
-            from sentence_transformers import SentenceTransformer
-            from app.core.config import settings
-            import os
-
-            model_name = settings.EMBEDDING_MODEL
-            models_dir = os.path.abspath(settings.MODELS_DIR)
-            model_slug = model_name.split("/")[-1]
-            local_path = os.path.join(models_dir, model_slug)
-            if not os.path.isdir(local_path):
-                logger.info("[语义分块] 无本地 embedding 模型，跳过语义边界检测")
-                return [text]
-
-            model = SentenceTransformer(local_path, local_files_only=True)
-            embeddings = model.encode(paragraphs, normalize_embeddings=True, show_progress_bar=False)
-            seg_threshold = getattr(settings, 'SEMANTIC_CHUNK_SIMILARITY', 0.6)
-
-            similarities = []
-            for i in range(len(embeddings) - 1):
-                sim = float(np.dot(embeddings[i], embeddings[i + 1]))
-                similarities.append(sim)
-
-            boundaries: List[int] = []
-            for i, sim in enumerate(similarities):
-                if sim < seg_threshold:
-                    boundaries.append(i)
-            boundaries.append(len(paragraphs) - 1)
-
-            segments: List[str] = []
-            start = 0
-            for boundary in boundaries:
-                segment = "\n\n".join(paragraphs[start:boundary + 1])
-                if segment.strip():
-                    segments.append(segment)
-                start = boundary + 1
-
-            if len(segments) > 1:
-                avg_sim = sum(similarities) / len(similarities) if similarities else 1.0
-                logger.info(
-                    f"[语义分块] 原文 {len(paragraphs)} 段 → {len(segments)} 个语义区域 "
-                    f"(阈值={seg_threshold}, 平均相似度={avg_sim:.3f}, "
-                    f"断点={boundaries[:-1] if len(boundaries) > 1 else 'none'})"
-                )
-            return segments
-        except Exception as e:
-            logger.warning(f"[语义分块] 失败, 回退到原始文本: {e}")
-            return [text]
-
-    def semantic_chunk(self, text: str, metadata: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
-        base_meta = metadata or {}
-        segments = self._semantic_segments(text)
-
-        all_chunks: List[Dict[str, Any]] = []
-        for seg_idx, segment in enumerate(segments):
-            segment_chunks = self.chunk(segment, base_meta)
-            for c in segment_chunks:
-                c["metadata"]["semantic_segment"] = seg_idx
-            all_chunks.extend(segment_chunks)
-
-        for idx, chunk in enumerate(all_chunks):
-            chunk["metadata"]["chunk_index"] = idx
-
-        return all_chunks
 
     def _split_paragraphs(self, text: str) -> List[str]:
         paragraphs = re.split(r"\n\s*\n", text)

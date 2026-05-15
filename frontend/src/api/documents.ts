@@ -9,6 +9,14 @@ export function getDocumentsApi(limit = 50, offset = 0, search?: string): Promis
   })
 }
 
+export function getAllDocumentIdsApi(search?: string): Promise<{ ids: string[]; total: number }> {
+  return request<{ ids: string[]; total: number }>({
+    method: 'GET',
+    url: '/documents/ids',
+    params: search ? { search } : undefined
+  })
+}
+
 export function getDocumentApi(documentId: string): Promise<DocumentInfo> {
   return request<DocumentInfo>({
     method: 'GET',
@@ -51,6 +59,10 @@ export function uploadDocumentApi(file: File): Promise<DocumentInfo> {
   formData.append('file', file)
 
   const token = localStorage.getItem('access_token')
+  const controller = new AbortController()
+  const uploadTimeout = 180000
+
+  const timeoutId = setTimeout(() => controller.abort(), uploadTimeout)
 
   return new Promise((resolve, reject) => {
     fetch('/api/documents/upload', {
@@ -58,8 +70,10 @@ export function uploadDocumentApi(file: File): Promise<DocumentInfo> {
       headers: {
         'Authorization': token ? `Bearer ${token}` : ''
       },
-      body: formData
+      body: formData,
+      signal: controller.signal
     }).then(async (response) => {
+      clearTimeout(timeoutId)
       if (!response.ok) {
         let errorText = '上传失败'
         try {
@@ -78,6 +92,13 @@ export function uploadDocumentApi(file: File): Promise<DocumentInfo> {
       }
       const data = await response.json()
       resolve(data)
-    }).catch(reject)
+    }).catch((err: Error) => {
+      clearTimeout(timeoutId)
+      if (err.name === 'AbortError') {
+        reject(new Error('上传超时（3分钟），文档处理时间过长，请检查后端服务是否正常'))
+      } else {
+        reject(err)
+      }
+    })
   })
 }

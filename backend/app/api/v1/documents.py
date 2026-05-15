@@ -50,9 +50,17 @@ async def upload_document(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        error_msg = str(e)
+        logger.exception(f"文档上传运行时异常: {file.filename} - {error_msg}")
+        raise HTTPException(status_code=500, detail=f"文档处理失败: {error_msg}")
+    except TimeoutError as e:
+        logger.exception(f"文档上传超时: {file.filename}")
+        raise HTTPException(status_code=504, detail="文档处理超时，请检查后端服务(Milvus/Embedding)是否正常运行")
     except Exception as e:
-        logger.exception(f"文档上传处理异常: {file.filename}")
-        raise HTTPException(status_code=500, detail="文档处理失败，请稍后重试")
+        error_msg = str(e)
+        logger.exception(f"文档上传处理异常: {file.filename} - {error_msg}")
+        raise HTTPException(status_code=500, detail=f"文档处理失败: {error_msg}")
 
     return document
 
@@ -86,14 +94,30 @@ async def list_documents(
     }
 
 
-@router.delete("/batch", response_model=dict)
+@router.delete("/batch")
 async def delete_documents_batch(
     body: BatchDeleteRequest,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    deleted_count = await document_service.delete_documents_batch(db, body.ids, str(current_user.id))
+    deleted_count, cleanup_list = await document_service.delete_documents_batch(db, body.ids, str(current_user.id))
+    if cleanup_list:
+        document_service.cleanup_documents_batch(cleanup_list)
     return {"code": 0, "message": f"已删除 {deleted_count} 个文档", "data": {"deleted_count": deleted_count}}
+
+
+@router.get("/ids")
+async def list_all_document_ids(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    search: str | None = Query(default=None, max_length=200),
+):
+    ids = await document_service.list_all_document_ids(
+        db=db,
+        user_id=str(current_user.id),
+        search=search,
+    )
+    return {"code": 0, "message": "success", "data": {"ids": ids, "total": len(ids)}}
 
 
 @router.get("/{document_id}", response_model=dict)
@@ -112,15 +136,17 @@ async def get_document(
     }
 
 
-@router.delete("/{document_id}", response_model=dict)
+@router.delete("/{document_id}")
 async def delete_document(
     document_id: str,
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    success = await document_service.delete_document(db, document_id, str(current_user.id))
+    success, filename = await document_service.delete_document(db, document_id, str(current_user.id))
     if not success:
         raise HTTPException(status_code=404, detail="文档不存在")
+    if filename:
+        document_service.cleanup_document_resources(document_id, filename)
     return {"code": 0, "message": "文档已删除", "data": None}
 
 

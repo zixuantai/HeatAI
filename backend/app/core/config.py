@@ -37,34 +37,14 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
     EMBEDDING_DEVICE: str = "cpu"
     EMBEDDING_DIM: int = 1024
-    EMBEDDING_USE_FP16: bool = True
-    EMBEDDING_BGE_M3_ENABLED: bool = False
 
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RERANKER_DEVICE: str = "cpu"
 
     CHUNK_SIZE: int = 300
     CHUNK_OVERLAP: int = 60
-    SEMANTIC_CHUNK_ENABLED: bool = False
-    SEMANTIC_CHUNK_SIMILARITY: float = 0.6
-
-    SMALL_TO_BIG_ENABLED: bool = False
-    SMALL_CHUNK_SIZE: int = 150
 
     BGE_MAX_TOKENS: int = 450
-
-    RRF_K: int = 60
-
-    MMR_LAMBDA: float = 0.7
-
-    MINHASH_ENABLED: bool = True
-    MINHASH_THRESHOLD: float = 0.85
-    MINHASH_NUM_PERM: int = 128
-
-    JIEBA_DICT_DIR: str = os.path.join(os.path.dirname(__file__), "..", "services", "processing", "dicts")
-
-    PADDLEOCR_LANG: str = "ch"
-    PADDLEOCR_ENABLED: bool = False
 
     BM25_RETRIEVAL_TOP_K: int = 50
     HYBRID_BM25_WEIGHT: float = 0.4

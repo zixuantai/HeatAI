@@ -42,15 +42,84 @@
 
     <!-- ── 上传进度 ────────────────────────────── -->
     <div v-if="uploadingFiles.length > 0" class="upload-progress-section">
-      <div v-for="uf in uploadingFiles" :key="uf.name" class="upload-progress-item neu-recessed">
-        <div class="upload-progress-info">
-          <el-icon><Document /></el-icon>
-          <span class="upload-progress-name">{{ uf.name }}</span>
-          <el-tag v-if="uf.status === 'uploading'" type="warning" size="small">处理中</el-tag>
-          <el-tag v-else type="success" size="small">完成</el-tag>
+      <div class="upload-progress-summary neu-card" @click="uploadProgressCollapsed = !uploadProgressCollapsed">
+        <div class="summary-left">
+          <div class="summary-icon-housing" :class="{ 'is-done': uploadStats.allDone }">
+            <el-icon :size="18" class="summary-icon" :class="{ 'is-loading': !uploadStats.allDone }">
+              <component :is="uploadStats.allDone ? 'CircleCheckFilled' : 'Loading'" />
+            </el-icon>
+          </div>
+          <span class="summary-text">
+            <template v-if="uploadStats.active > 0">
+              正在处理 <strong>{{ uploadStats.uploading }}</strong> 个
+              <template v-if="uploadStats.pending > 0">
+                ，排队等待 <strong class="text-pending">{{ uploadStats.pending }}</strong> 个
+              </template>
+            </template>
+            <template v-else>
+              全部处理完成
+            </template>
+            <template v-if="uploadStats.completed > 0">
+              ，已完成 <strong class="text-success">{{ uploadStats.completed }}</strong> 个
+            </template>
+            <template v-if="uploadStats.failed > 0">
+              ，失败 <strong class="text-danger">{{ uploadStats.failed }}</strong> 个
+            </template>
+          </span>
         </div>
-        <div v-if="uf.status === 'uploading'" class="upload-progress-bar">
-          <div class="upload-progress-fill"></div>
+        <div class="summary-right">
+          <el-button
+            v-if="uploadStats.allDone"
+            text
+            size="small"
+            type="info"
+            @click.stop="clearCompletedUploads"
+          >
+            <el-icon :size="14"><Close /></el-icon>
+            清除记录
+          </el-button>
+          <el-icon :size="16" class="collapse-icon" :class="{ 'is-collapsed': uploadProgressCollapsed }">
+            <ArrowDown />
+          </el-icon>
+        </div>
+      </div>
+
+      <div v-show="!uploadProgressCollapsed" class="upload-progress-list neu-recessed">
+        <div v-for="uf in pagedUploadingFiles" :key="uf.name" class="upload-progress-item">
+          <div class="upload-progress-info">
+            <el-icon :class="{ 'is-error': uf.status === 'error' }">
+              <component :is="uf.status === 'success' ? 'CircleCheck' : uf.status === 'error' ? 'CircleClose' : uf.status === 'pending' ? 'Clock' : 'Document'" />
+            </el-icon>
+            <span class="upload-progress-name" :title="uf.error || uf.name">{{ uf.name }}</span>
+            <el-tag v-if="uf.status === 'pending'" type="info" size="small">排队中</el-tag>
+            <el-tag v-else-if="uf.status === 'uploading'" type="warning" size="small">处理中</el-tag>
+            <el-tag v-else-if="uf.status === 'success'" type="success" size="small">完成</el-tag>
+            <el-tag v-else type="danger" size="small">失败</el-tag>
+            <el-button
+              v-if="uf.status === 'success' || uf.status === 'error'"
+              text
+              size="small"
+              type="info"
+              @click.stop="removeUploadRecord(uf.name)"
+            >
+              <el-icon :size="12"><Close /></el-icon>
+            </el-button>
+          </div>
+          <div v-if="uf.status === 'uploading'" class="upload-progress-bar">
+            <div class="upload-progress-fill"></div>
+          </div>
+        </div>
+
+        <div v-if="activeUploadingFiles.length > uploadProgressPageSize" class="upload-progress-pagination">
+          <span class="pagination-count">共 {{ activeUploadingFiles.length }} 项</span>
+          <el-pagination
+            v-model:current-page="uploadProgressPage"
+            :page-size="uploadProgressPageSize"
+            :total="activeUploadingFiles.length"
+            layout="total, prev, pager, next"
+            size="small"
+            background
+          />
         </div>
       </div>
     </div>
@@ -122,14 +191,25 @@
       <!-- 批量操作栏 -->
       <div v-if="batchMode" class="batch-action-bar neu-recessed">
         <div class="batch-action-left">
-          <el-checkbox
-            v-model="selectAll"
-            :indeterminate="isIndeterminate"
-            size="large"
-            @change="toggleSelectAll"
-          >
-            全选
-          </el-checkbox>
+          <span class="batch-check-group">
+            <el-checkbox
+              :model-value="selectAllPage"
+              :indeterminate="isIndeterminatePage"
+              size="large"
+              @change="toggleSelectAllPage"
+            >
+              全选本页
+            </el-checkbox>
+            <el-checkbox
+              :model-value="selectAllKB"
+              :indeterminate="isIndeterminateKB"
+              :disabled="allKbIdsLoading"
+              size="large"
+              @change="toggleSelectAllKB"
+            >
+              全选知识库
+            </el-checkbox>
+          </span>
           <span class="batch-selected-count">
             已选 <strong>{{ selectedIds.size }}</strong> 项
           </span>
@@ -192,7 +272,13 @@
         </el-table-column>
         <el-table-column label="操作" width="80" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="danger" text size="small" @click.stop="handleDeleteClick(row)">
+            <el-button
+              type="danger"
+              text
+              size="small"
+              :loading="deletingIds.has(row.id)"
+              @click.stop="handleDeleteClick(row)"
+            >
               <el-icon><Delete /></el-icon>
             </el-button>
           </template>
@@ -272,8 +358,14 @@
             </div>
 
             <!-- 操作按钮：在卡片外部，不受 3D transform 影响 -->
-            <button class="neu-btn-delete" @click.stop="handleDeleteClick(doc)">
-              <el-icon :size="14"><Delete /></el-icon>
+            <button
+              class="neu-btn-delete"
+              :class="{ 'is-deleting': deletingIds.has(doc.id) }"
+              :disabled="deletingIds.has(doc.id)"
+              @click.stop="handleDeleteClick(doc)"
+            >
+              <el-icon v-if="!deletingIds.has(doc.id)" :size="14"><Delete /></el-icon>
+              <el-icon v-else :size="14" class="is-loading"><Loading /></el-icon>
             </button>
           </div>
 
@@ -327,10 +419,11 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
-  Grid, List, Coin, Clock, Close
+  Grid, List, Coin, Clock, Close, CircleCheckFilled, Loading, CircleCheck, CircleClose, ArrowDown
 } from '@element-plus/icons-vue'
 import type { DocumentInfo } from '@/types'
 import { useDocuments } from '@/composables/documents/useDocuments'
+import { getAllDocumentIdsApi } from '@/api/documents'
 
 const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)
@@ -338,18 +431,28 @@ const isDragOver = ref(false)
 const {
   loading,
   chunkLoading,
+  deletingIds,
   documents,
   total,
   chunks,
   chunkDialogVisible,
   chunkDialogTitle,
   uploadingFiles,
+  activeUploadingFiles,
+  pagedUploadingFiles,
+  uploadStats,
+  uploadProgressCollapsed,
+  uploadProgressPage,
+  uploadProgressPageSize,
   loadDocuments,
-  uploadFile: _uploadFile,
+  uploadFile,
+  uploadFiles,
   deleteDocument: _deleteDocument,
   deleteDocumentsBatch: _deleteDocumentsBatch,
   loadDocumentChunks,
-  refresh: _refresh
+  refresh: _refresh,
+  removeUploadRecord,
+  clearCompletedUploads,
 } = useDocuments()
 
 const currentPage = ref(1)
@@ -362,24 +465,40 @@ const viewMode = ref<'card' | 'table'>('card')
 // 批量删除状态
 const batchMode = ref(false)
 const selectedIds = ref<Set<string>>(new Set())
+const allKbIds = ref<string[]>([])
+const allKbIdsLoading = ref(false)
+const isPageAllSelected = ref(false)
 
-const selectAll = computed({
-  get: () => batchMode.value && documents.value.length > 0 && selectedIds.value.size === documents.value.length,
-  set: () => {}
+const selectAllPage = computed(() =>
+  batchMode.value && documents.value.length > 0 && isPageAllSelected.value
+)
+
+const isIndeterminatePage = computed(() =>
+  batchMode.value && documents.value.some(d => selectedIds.value.has(d.id)) && !documents.value.every(d => selectedIds.value.has(d.id))
+)
+
+const selectAllKB = computed(() => {
+  if (!batchMode.value || allKbIds.value.length === 0) return false
+  return allKbIds.value.every(id => selectedIds.value.has(id))
 })
 
-const isIndeterminate = computed(() =>
-  batchMode.value && selectedIds.value.size > 0 && selectedIds.value.size < documents.value.length
-)
+const isIndeterminateKB = computed(() => {
+  if (!batchMode.value || allKbIds.value.length === 0) return false
+  return allKbIds.value.some(id => selectedIds.value.has(id)) && !allKbIds.value.every(id => selectedIds.value.has(id))
+})
 
 function enterBatchMode() {
   batchMode.value = true
   selectedIds.value = new Set()
+  allKbIds.value = []
+  isPageAllSelected.value = false
 }
 
 function exitBatchMode() {
   batchMode.value = false
   selectedIds.value = new Set()
+  allKbIds.value = []
+  isPageAllSelected.value = false
 }
 
 function toggleSelect(doc: DocumentInfo) {
@@ -390,13 +509,39 @@ function toggleSelect(doc: DocumentInfo) {
     newSet.add(doc.id)
   }
   selectedIds.value = newSet
+  isPageAllSelected.value = documents.value.length > 0 && documents.value.every(d => newSet.has(d.id))
 }
 
-function toggleSelectAll(val: boolean) {
+function toggleSelectAllPage(val: boolean) {
+  isPageAllSelected.value = val
   if (val) {
-    selectedIds.value = new Set(documents.value.map(d => d.id))
+    const newSet = new Set(selectedIds.value)
+    documents.value.forEach(d => newSet.add(d.id))
+    selectedIds.value = newSet
+  } else {
+    const newSet = new Set(selectedIds.value)
+    documents.value.forEach(d => newSet.delete(d.id))
+    selectedIds.value = newSet
+  }
+}
+
+async function toggleSelectAllKB(val: boolean) {
+  if (val) {
+    allKbIdsLoading.value = true
+    try {
+      const res = await getAllDocumentIdsApi(isSearching.value ? searchQuery.value.trim() : undefined)
+      const ids = res.ids || []
+      allKbIds.value = ids
+      selectedIds.value = new Set(ids)
+    } catch {
+      allKbIds.value = []
+    } finally {
+      allKbIdsLoading.value = false
+    }
   } else {
     selectedIds.value = new Set()
+    allKbIds.value = []
+    isPageAllSelected.value = false
   }
 }
 
@@ -408,14 +553,16 @@ async function handleBatchDelete() {
       '批量删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    await _deleteDocumentsBatch(
-      Array.from(selectedIds.value),
+    const ids = Array.from(selectedIds.value)
+    exitBatchMode()
+    const newPage = await _deleteDocumentsBatch(
+      ids,
       pageSize.value,
       currentPage.value,
       isSearching.value,
       searchQuery.value.trim()
     )
-    selectedIds.value = new Set()
+    currentPage.value = newPage
   } catch {
     // 用户取消
   }
@@ -468,25 +615,19 @@ async function handleLoad(search?: string) {
   await loadDocuments(pageSize.value, currentPage.value, search)
 }
 
-async function uploadFile(file: File) {
-  await _uploadFile(file, pageSize.value, currentPage.value)
-}
-
-function handleDrop(e: DragEvent) {
+async function handleDrop(e: DragEvent) {
   isDragOver.value = false
   const files = e.dataTransfer?.files
-  if (!files) return
-  for (let i = 0; i < files.length; i++) {
-    uploadFile(files[i])
-  }
+  if (!files || files.length === 0) return
+  currentPage.value = 1
+  uploadFiles(Array.from(files), pageSize.value, currentPage.value)
 }
 
 function handleFileSelect() {
   const files = fileInputRef.value?.files
-  if (!files) return
-  for (let i = 0; i < files.length; i++) {
-    uploadFile(files[i])
-  }
+  if (!files || files.length === 0) return
+  currentPage.value = 1
+  uploadFiles(Array.from(files), pageSize.value, currentPage.value)
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
   }
@@ -499,7 +640,8 @@ async function handleDeleteClick(doc: DocumentInfo) {
       '删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
-    await _deleteDocument(doc.id, pageSize.value, currentPage.value, isSearching.value, searchQuery.value.trim())
+    const newPage = await _deleteDocument(doc.id, pageSize.value, currentPage.value, isSearching.value, searchQuery.value.trim())
+    currentPage.value = newPage
   } catch {
     // 用户取消
   }
@@ -843,16 +985,127 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.upload-progress-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  cursor: pointer;
+  user-select: none;
+  transition: box-shadow var(--transition-base);
+}
+
+.upload-progress-summary:hover {
+  box-shadow: var(--neu-card-hover);
+}
+
+.summary-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.summary-icon-housing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(79, 70, 229, 0.08);
+  flex-shrink: 0;
+  transition: all var(--transition-base);
+}
+
+.summary-icon-housing.is-done {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.summary-icon {
+  color: var(--color-primary);
+  transition: color var(--transition-base);
+}
+
+.summary-icon-housing.is-done .summary-icon {
+  color: #22c55e;
+}
+
+.summary-icon-housing:not(.is-done) {
+  animation: processing-pulse 2s ease-in-out infinite;
+}
+
+@keyframes processing-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(79, 70, 229, 0); }
+}
+
+.summary-text {
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+}
+
+.summary-text strong {
+  font-weight: var(--font-weight-extrabold);
+}
+
+.summary-text .text-success {
+  color: #22c55e;
+}
+
+.summary-text .text-danger {
+  color: #ef4444;
+}
+
+.summary-text .text-pending {
+  color: #f59e0b;
+}
+
+.summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collapse-icon {
+  transition: transform 200ms ease;
+  color: var(--color-text-muted);
+}
+
+.collapse-icon.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.upload-progress-list {
+  margin-top: 4px;
+  padding: 12px 14px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
 .upload-progress-item {
-  padding: 14px 18px;
-  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background var(--transition-fast);
+}
+
+.upload-progress-item:last-child {
+  border-bottom: none;
 }
 
 .upload-progress-info {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+}
+
+.upload-progress-info .el-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.upload-progress-info .el-icon.is-error {
+  color: #ef4444;
 }
 
 .upload-progress-name {
@@ -865,11 +1118,24 @@ onMounted(() => {
   font-weight: var(--font-weight-medium);
 }
 
+.upload-error-msg {
+  margin-top: 6px;
+  margin-left: 28px;
+  font-size: var(--font-size-xs);
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  word-break: break-all;
+}
+
 .upload-progress-bar {
   height: 4px;
   background: var(--color-border);
   border-radius: var(--radius-full);
   overflow: hidden;
+  margin-top: 6px;
+  margin-left: 28px;
 }
 
 .upload-progress-fill {
@@ -878,6 +1144,24 @@ onMounted(() => {
   background: var(--gradient-primary);
   border-radius: var(--radius-full);
   animation: progress 1.8s ease-in-out infinite;
+}
+
+.upload-progress-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light);
+  margin-top: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pagination-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 @keyframes progress {
@@ -1214,9 +1498,19 @@ onMounted(() => {
  }
 
  .batch-action-left {
-   display: flex;
-   align-items: center;
-  gap: 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.batch-check-group {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.batch-check-group :deep(.el-checkbox) {
+  margin-right: 10px;
 }
 
 .batch-action-left :deep(.el-checkbox__label) {

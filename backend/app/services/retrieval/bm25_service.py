@@ -13,9 +13,9 @@ class BM25Service:
     _instance = None
     _searcher = None
     _corpus_chunks: List[Dict[str, Any]] = []
+    _tokenized_corpus: List[List[str]] = []
     _chunk_ids: List[str] = []
     _lock = threading.Lock()
-    _dict_loaded = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -24,9 +24,6 @@ class BM25Service:
 
     def _lazy_import_jieba(self):
         import jieba
-        if not self._dict_loaded:
-            self._load_thermal_dict()
-            self.__class__._dict_loaded = True
         return jieba
 
     def _get_jieba(self):
@@ -36,8 +33,10 @@ class BM25Service:
         except ImportError:
             return None
 
+<<<<<<< HEAD
+=======
     def _load_thermal_dict(self):
-        jieba = self._lazy_import_jieba()
+        import jieba
         dict_path = os.path.join(settings.JIEBA_DICT_DIR, "thermal_terms.txt")
         if os.path.isfile(dict_path):
             try:
@@ -54,6 +53,7 @@ class BM25Service:
         else:
             logger.info(f"jieba 供热行业词典不存在: {dict_path}, 跳过")
 
+>>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
     def _tokenize(self, text: str) -> List[str]:
         jieba = self._lazy_import_jieba()
         tokens = jieba.lcut(text)
@@ -72,6 +72,7 @@ class BM25Service:
         if not chunks:
             self._searcher = None
             self._corpus_chunks = []
+            self._tokenized_corpus = []
             self._chunk_ids = []
             return
 
@@ -84,6 +85,7 @@ class BM25Service:
             tokens = self._tokenize(content)
             tokenized_corpus.append(tokens)
 
+        self._tokenized_corpus = tokenized_corpus
         self._searcher = BM25Okapi(tokenized_corpus)
         logger.info(f"BM25 index built with {len(chunks)} documents")
 
@@ -132,24 +134,26 @@ class BM25Service:
         if not chunks:
             return
         self._corpus_chunks.extend(chunks)
-        new_chunks = chunks
-        tokenized_new = []
-        for c in new_chunks:
-            content = c.get("content", "")
-            tokens = self._tokenize(content)
-            tokenized_new.append(tokens)
-        if self._searcher is not None:
-            self._searcher = self._searcher.__class__(
-                self._searcher.corpus + tokenized_new
-            )
-        else:
-            from rank_bm25 import BM25Okapi
-            self._searcher = BM25Okapi(tokenized_new)
-        self._chunk_ids = [c.get("id", str(i)) for i, c in enumerate(self._corpus_chunks)]
+        self.build_index(self._corpus_chunks)
         logger.info(f"BM25 index: added {len(chunks)} chunks, total: {len(self._corpus_chunks)}")
 
     def remove_by_document_id(self, document_id: str):
         self.delete_document_index(document_id)
+
+    def remove_by_document_ids(self, document_ids: list[str]):
+        if not self._corpus_chunks or not document_ids:
+            return
+        ids_set = set(document_ids)
+        before = len(self._corpus_chunks)
+        self._corpus_chunks = [c for c in self._corpus_chunks if c.get("document_id") not in ids_set]
+        self._chunk_ids = [c.get("id", str(i)) for i, c in enumerate(self._corpus_chunks)]
+        if self._corpus_chunks:
+            self.build_index(self._corpus_chunks)
+        else:
+            self._searcher = None
+            self._tokenized_corpus = []
+        after = len(self._corpus_chunks)
+        logger.info(f"BM25 index: removed {before - after} chunks for {len(document_ids)} documents")
 
     def delete_document_index(self, document_id: str):
         if not self._corpus_chunks:
@@ -161,6 +165,7 @@ class BM25Service:
             self.build_index(self._corpus_chunks)
         else:
             self._searcher = None
+            self._tokenized_corpus = []
         after = len(self._corpus_chunks)
         logger.info(f"BM25 index: removed {before - after} chunks for document {document_id}")
 
