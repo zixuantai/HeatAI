@@ -114,11 +114,20 @@ class MilvusService:
 
         try:
             index_params = self._client.prepare_index_params()
-            index_params.add_index(field_name="vector", index_type="IVF_FLAT", metric_type="COSINE", params={"nlist": 128})
+            index_params.add_index(
+                field_name="vector",
+                index_type="HNSW",
+                metric_type="COSINE",
+                params={
+                    "M": settings.MILVUS_HNSW_M,
+                    "efConstruction": settings.MILVUS_HNSW_EF_CONSTRUCTION,
+                },
+            )
             self._client.create_index(
                 collection_name=collection_name,
                 index_params=index_params,
             )
+            logger.info(f"向量索引 HNSW 创建成功 (M={settings.MILVUS_HNSW_M}, efConstruction={settings.MILVUS_HNSW_EF_CONSTRUCTION})")
         except Exception as e:
             logger.warning(f"向量索引创建跳过 (可能已被自动创建): {e}")
 
@@ -210,6 +219,7 @@ class MilvusService:
                 data=[query_embedding],
                 limit=top_k,
                 output_fields=["content", "source", "title", "document_id", "chunk_index", "created_at", "version"],
+                search_params={"ef": settings.MILVUS_HNSW_EF_SEARCH},
             )
         except Exception as e:
             logger.error(f"[Milvus 检索] ❌ 检索失败: {type(e).__name__}: {e}")

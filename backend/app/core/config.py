@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     MILVUS_TOKEN: str = ""
     MILVUS_COLLECTION_NAME: str = "knowledge_base"
 
+    MILVUS_HNSW_M: int = 16
+    MILVUS_HNSW_EF_CONSTRUCTION: int = 200
+    MILVUS_HNSW_EF_SEARCH: int = 64
+
     MODELS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "..", "..", "models")
 
     EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"
@@ -37,8 +41,10 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RERANKER_DEVICE: str = "cpu"
 
-    CHUNK_SIZE: int = 400
-    CHUNK_OVERLAP: int = 80
+    CHUNK_SIZE: int = 300
+    CHUNK_OVERLAP: int = 60
+
+    BGE_MAX_TOKENS: int = 450
 
     BM25_RETRIEVAL_TOP_K: int = 50
     HYBRID_BM25_WEIGHT: float = 0.4

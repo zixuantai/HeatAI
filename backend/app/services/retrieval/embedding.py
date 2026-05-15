@@ -95,8 +95,44 @@ class EmbeddingService:
     def is_loaded(self) -> bool:
         return self._loaded
 
+    def _validate_token_lengths(self, texts: List[str]) -> None:
+        self._load_model()
+        tokenizer = self._model.tokenizer
+        from app.core.config import settings
+        max_tokens = getattr(settings, 'BGE_MAX_TOKENS', 450)
+        model_max = getattr(self._model, 'max_seq_length', 512)
+
+        over_count = 0
+        max_found = 0
+
+        for i, text in enumerate(texts):
+            tokens = tokenizer.encode(text, add_special_tokens=True)
+            token_count = len(tokens)
+            if token_count > max_found:
+                max_found = token_count
+            if token_count > max_tokens:
+                over_count += 1
+                if over_count <= 3:
+                    content_preview = text[:60].replace("\n", "\\n")
+                    logger.warning(
+                        f"[向量化] ⚠️ 文本块 #{i} token数={token_count} 超过阈值{max_tokens} "
+                        f"(模型上限={model_max})，将被截断。"
+                        f"建议减小 CHUNK_SIZE。内容预览: {content_preview}..."
+                    )
+
+        if over_count > 0:
+            logger.warning(
+                f"[向量化] ⚠️ {over_count}/{len(texts)} 个文本块 token 超限 "
+                f"(阈值={max_tokens}, 最大={max_found}, 模型上限={model_max})"
+            )
+        else:
+            logger.info(
+                f"[向量化] ✅ token 验证通过 ({len(texts)}个, 最大token={max_found}/{max_tokens})"
+            )
+
     def encode(self, texts: List[str]) -> List[List[float]]:
         self._load_model()
+        self._validate_token_lengths(texts)
         embeddings = self._model.encode(
             texts,
             normalize_embeddings=True,

@@ -29,10 +29,43 @@ class DocumentParser:
         texts: List[str] = []
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for i, page in enumerate(pdf.pages):
+                page_parts: List[str] = []
+                header = f"[第{i + 1}页]"
+                page_parts.append(header)
+
                 page_text = page.extract_text()
                 if page_text:
-                    header = f"[第{i + 1}页] "
-                    texts.append(header + page_text)
+                    page_parts.append(page_text)
+
+                tables = page.extract_tables()
+                if tables:
+                    page_parts.append("")
+                    for ti, table in enumerate(tables):
+                        if not table:
+                            continue
+                        page_parts.append(f"[表格 {ti + 1}]")
+
+                        filtered_rows = []
+                        for row in table:
+                            filtered = [str(c).strip() if c is not None else "" for c in row]
+                            if any(filtered):
+                                filtered_rows.append(filtered)
+                        if not filtered_rows:
+                            continue
+
+                        header_row = filtered_rows[0]
+                        col_count = len(header_row)
+                        header_str = " | ".join(header_row)
+                        sep_str = " | ".join("---" for _ in range(col_count))
+                        page_parts.append(header_str)
+                        page_parts.append(sep_str)
+
+                        for row in filtered_rows[1:]:
+                            padded = row + [""] * (col_count - len(row))
+                            page_parts.append(" | ".join(padded[:col_count]))
+                        page_parts.append("")
+
+                texts.append("\n".join(page_parts))
 
         full_text = "\n\n".join(texts)
         title = filename.rsplit(".", 1)[0]
