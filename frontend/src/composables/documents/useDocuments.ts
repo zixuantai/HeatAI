@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getDocumentsApi, deleteDocumentApi, deleteDocumentsBatchApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
 import type { DocumentInfo, ChunkInfo } from '@/types'
@@ -11,6 +11,106 @@ interface UploadingFile {
 
 const MAX_CONCURRENT_UPLOADS = 1
 
+export const uploadingFiles = ref<UploadingFile[]>([])
+export const uploadProgressCollapsed = ref(false)
+export const uploadProgressPage = ref(1)
+export const uploadProgressPageSize = ref(5)
+
+export const uploadStats = computed(() => {
+  const total = uploadingFiles.value.length
+  const pending = uploadingFiles.value.filter(f => f.status === 'pending').length
+  const uploading = uploadingFiles.value.filter(f => f.status === 'uploading').length
+  const completed = uploadingFiles.value.filter(f => f.status === 'success').length
+  const failed = uploadingFiles.value.filter(f => f.status === 'error').length
+  const active = pending + uploading
+  const allDone = total > 0 && active === 0
+  return { total, pending, uploading, completed, failed, active, allDone }
+})
+
+export const activeUploadingFiles = computed(() =>
+  uploadingFiles.value.filter(f => f.status === 'pending' || f.status === 'uploading')
+)
+
+export const pagedUploadingFiles = computed(() => {
+  const start = (uploadProgressPage.value - 1) * uploadProgressPageSize.value
+  return activeUploadingFiles.value.slice(start, start + uploadProgressPageSize.value)
+})
+
+export function removeUploadRecord(name: string) {
+  uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== name)
+}
+
+export function clearCompletedUploads() {
+  uploadingFiles.value = uploadingFiles.value.filter(
+    f => f.status === 'pending' || f.status === 'uploading'
+  )
+  uploadProgressPage.value = 1
+  uploadProgressCollapsed.value = false
+}
+
+let _onUploadSuccess: (() => Promise<void>) | null = null
+
+export function setOnUploadSuccess(cb: (() => Promise<void>) | null) {
+  _onUploadSuccess = cb
+}
+
+export function useUploadLifecycle(refreshFn: () => Promise<void>) {
+  onMounted(() => {
+    setOnUploadSuccess(refreshFn)
+  })
+  onUnmounted(() => {
+    setOnUploadSuccess(null)
+  })
+}
+
+async function uploadFile(file: File, uf: UploadingFile) {
+  uf.status = 'uploading'
+  uploadProgressCollapsed.value = false
+
+  try {
+    await uploadDocumentApi(file)
+    uf.status = 'success'
+    if (_onUploadSuccess) {
+      await _onUploadSuccess()
+    }
+  } catch (e: unknown) {
+    const errMsg = (e as { message?: string })?.message || '处理失败'
+    console.error(`[文档上传失败] "${file.name}":`, errMsg)
+    uf.status = 'error'
+    uf.error = errMsg
+    if (errMsg.includes('已上传过') || errMsg.includes('重复上传')) {
+      ElMessage.warning(`"${file.name}" 已上传过，无需重复上传`)
+    } else {
+      ElMessage.error(`"${file.name}" 上传失败`)
+    }
+  }
+
+  if (uploadStats.value.allDone) {
+    setTimeout(() => {
+      uploadProgressCollapsed.value = true
+    }, 5000)
+  }
+}
+
+export async function uploadFiles(files: File[]) {
+  const startIdx = uploadingFiles.value.length
+  const items = files.map(f => ({
+    name: f.name,
+    status: 'pending' as const,
+  }))
+  uploadingFiles.value.push(...items)
+  uploadProgressCollapsed.value = false
+  uploadProgressPage.value = 1
+
+  for (let i = 0; i < files.length; i += MAX_CONCURRENT_UPLOADS) {
+    const batchFiles = files.slice(i, i + MAX_CONCURRENT_UPLOADS)
+    const batchItems = uploadingFiles.value.slice(startIdx + i, startIdx + i + MAX_CONCURRENT_UPLOADS)
+    await Promise.all(
+      batchFiles.map((f, idx) => uploadFile(f, batchItems[idx]))
+    )
+  }
+}
+
 export function useDocuments() {
   const loading = ref(false)
   const chunkLoading = ref(false)
@@ -20,42 +120,6 @@ export function useDocuments() {
   const chunks = ref<ChunkInfo[]>([])
   const chunkDialogVisible = ref(false)
   const chunkDialogTitle = ref('')
-  const uploadingFiles = ref<UploadingFile[]>([])
-  const uploadProgressCollapsed = ref(false)
-  const uploadProgressPage = ref(1)
-  const uploadProgressPageSize = ref(5)
-
-  const uploadStats = computed(() => {
-    const total = uploadingFiles.value.length
-    const pending = uploadingFiles.value.filter(f => f.status === 'pending').length
-    const uploading = uploadingFiles.value.filter(f => f.status === 'uploading').length
-    const completed = uploadingFiles.value.filter(f => f.status === 'success').length
-    const failed = uploadingFiles.value.filter(f => f.status === 'error').length
-    const active = pending + uploading
-    const allDone = total > 0 && active === 0
-    return { total, pending, uploading, completed, failed, active, allDone }
-  })
-
-  const activeUploadingFiles = computed(() =>
-    uploadingFiles.value.filter(f => f.status === 'pending' || f.status === 'uploading')
-  )
-
-  const pagedUploadingFiles = computed(() => {
-    const start = (uploadProgressPage.value - 1) * uploadProgressPageSize.value
-    return activeUploadingFiles.value.slice(start, start + uploadProgressPageSize.value)
-  })
-
-  function removeUploadRecord(name: string) {
-    uploadingFiles.value = uploadingFiles.value.filter(f => f.name !== name)
-  }
-
-  function clearCompletedUploads() {
-    uploadingFiles.value = uploadingFiles.value.filter(
-      f => f.status === 'pending' || f.status === 'uploading'
-    )
-    uploadProgressPage.value = 1
-    uploadProgressCollapsed.value = false
-  }
 
   async function loadDocuments(pageSize: number, currentPage: number, search?: string) {
     loading.value = true
@@ -68,52 +132,6 @@ export function useDocuments() {
       // ignore
     } finally {
       loading.value = false
-    }
-  }
-
-  async function uploadFile(file: File, uf: UploadingFile, pageSize: number, currentPage: number) {
-    uf.status = 'uploading'
-    uploadProgressCollapsed.value = false
-
-    try {
-      await uploadDocumentApi(file)
-      uf.status = 'success'
-      await loadDocuments(pageSize, 1)
-    } catch (e: unknown) {
-      const errMsg = (e as { message?: string })?.message || '处理失败'
-      console.error(`[文档上传失败] "${file.name}":`, errMsg)
-      uf.status = 'error'
-      uf.error = errMsg
-      if (errMsg.includes('已上传过') || errMsg.includes('重复上传')) {
-        ElMessage.warning(`"${file.name}" 已上传过，无需重复上传`)
-      } else {
-        ElMessage.error(`"${file.name}" 上传失败`)
-      }
-    }
-
-    if (uploadStats.value.allDone) {
-      setTimeout(() => {
-        uploadProgressCollapsed.value = true
-      }, 5000)
-    }
-  }
-
-  async function uploadFiles(files: File[], pageSize: number, currentPage: number) {
-    const startIdx = uploadingFiles.value.length
-    const items = files.map(f => ({
-      name: f.name,
-      status: 'pending' as const,
-    }))
-    uploadingFiles.value.push(...items)
-    uploadProgressCollapsed.value = false
-    uploadProgressPage.value = 1
-
-    for (let i = 0; i < files.length; i += MAX_CONCURRENT_UPLOADS) {
-      const batchFiles = files.slice(i, i + MAX_CONCURRENT_UPLOADS)
-      const batchItems = uploadingFiles.value.slice(startIdx + i, startIdx + i + MAX_CONCURRENT_UPLOADS)
-      await Promise.all(
-        batchFiles.map((f, idx) => uploadFile(f, batchItems[idx], pageSize, currentPage))
-      )
     }
   }
 
@@ -201,21 +219,10 @@ export function useDocuments() {
     chunks,
     chunkDialogVisible,
     chunkDialogTitle,
-    uploadingFiles,
-    activeUploadingFiles,
-    pagedUploadingFiles,
-    uploadStats,
-    uploadProgressCollapsed,
-    uploadProgressPage,
-    uploadProgressPageSize,
     loadDocuments,
-    uploadFile,
-    uploadFiles,
     deleteDocument,
     deleteDocumentsBatch,
     loadDocumentChunks,
     refresh,
-    removeUploadRecord,
-    clearCompletedUploads,
   }
 }

@@ -424,6 +424,19 @@ import {
 import type { DocumentInfo } from '@/types'
 import { useDocuments } from '@/composables/documents/useDocuments'
 import { getAllDocumentIdsApi } from '@/api/documents'
+import {
+  uploadingFiles,
+  activeUploadingFiles,
+  pagedUploadingFiles,
+  uploadStats,
+  uploadProgressCollapsed,
+  uploadProgressPage,
+  uploadProgressPageSize,
+  uploadFiles,
+  removeUploadRecord,
+  clearCompletedUploads,
+  useUploadLifecycle,
+} from '@/composables/documents/useDocuments'
 
 const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)
@@ -437,23 +450,16 @@ const {
   chunks,
   chunkDialogVisible,
   chunkDialogTitle,
-  uploadingFiles,
-  activeUploadingFiles,
-  pagedUploadingFiles,
-  uploadStats,
-  uploadProgressCollapsed,
-  uploadProgressPage,
-  uploadProgressPageSize,
   loadDocuments,
-  uploadFile,
-  uploadFiles,
   deleteDocument: _deleteDocument,
   deleteDocumentsBatch: _deleteDocumentsBatch,
   loadDocumentChunks,
   refresh: _refresh,
-  removeUploadRecord,
-  clearCompletedUploads,
 } = useDocuments()
+
+useUploadLifecycle(async () => {
+  await loadDocuments(pageSize.value, 1)
+})
 
 const currentPage = ref(1)
 const pageSize = ref(12)
@@ -620,14 +626,14 @@ async function handleDrop(e: DragEvent) {
   const files = e.dataTransfer?.files
   if (!files || files.length === 0) return
   currentPage.value = 1
-  uploadFiles(Array.from(files), pageSize.value, currentPage.value)
+  uploadFiles(Array.from(files))
 }
 
 function handleFileSelect() {
   const files = fileInputRef.value?.files
   if (!files || files.length === 0) return
   currentPage.value = 1
-  uploadFiles(Array.from(files), pageSize.value, currentPage.value)
+  uploadFiles(Array.from(files))
   if (fileInputRef.value) {
     fileInputRef.value.value = ''
   }
