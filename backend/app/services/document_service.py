@@ -13,6 +13,7 @@ from app.models.document import Document
 from app.services.processing.parser import document_parser
 from app.services.processing.text_cleaner import text_cleaner
 from app.services.processing.chunker import text_chunker
+from app.services.processing.dedup_service import minhash_dedup_service
 from app.services.retrieval.bm25_service import bm25_service
 from app.services.retrieval.embedding import embedding_service
 from app.services.retrieval.reranker_service import reranker_service
@@ -22,6 +23,21 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentService:
+
+    @staticmethod
+    def _build_big_context(
+        full_text: str, para_start: int, para_end: int, small_chunk: str
+    ) -> str:
+        paragraphs = full_text.split("\n\n")
+        ctx_start = max(0, para_start - 1)
+        ctx_end = min(len(paragraphs), para_end + 2)
+        context_parts = []
+        for p_idx in range(ctx_start, ctx_end):
+            p_text = paragraphs[p_idx].strip()
+            if p_text:
+                context_parts.append(p_text)
+        big = "\n\n".join(context_parts)
+        return big if len(big) > len(small_chunk) else small_chunk
 
     @staticmethod
     async def upload_and_process(
@@ -100,6 +116,12 @@ class DocumentService:
             if not chunks:
                 raise ValueError("文本切块结果为空")
 
+            before_dedup = len(chunks)
+            chunks = minhash_dedup_service.deduplicate(chunks)
+            if len(chunks) < before_dedup:
+                logger.info(f"[去重] 文档内去重: {before_dedup} → {len(chunks)} chunks")
+            minhash_dedup_service.reset()
+
             for i, chunk in enumerate(chunks):
                 content_len = len(chunk["content"])
                 content_preview = chunk["content"][:80].replace("\n", "\\n")
@@ -126,6 +148,13 @@ class DocumentService:
 
             for i, chunk in enumerate(chunks):
                 chunk["metadata"]["chunk_id"] = str(uuid.uuid4())
+                if settings.SMALL_TO_BIG_ENABLED and cleaned_text:
+                    para_start = chunk["metadata"].get("paragraph_start", 0)
+                    para_end = chunk["metadata"].get("paragraph_end", para_start)
+                    big_ctx = DocumentService._build_big_context(
+                        cleaned_text, para_start, para_end, chunk["content"]
+                    )
+                    chunk["metadata"]["big_context"] = big_ctx
 
             insert_start = time.time()
             logger.info(f"[Milvus 插入] 准备插入 {len(chunks)} 条向量...")

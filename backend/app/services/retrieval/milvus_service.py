@@ -59,7 +59,7 @@ class MilvusService:
     def _check_collection_compatible(self, collection_name: str) -> bool:
         from pymilvus import DataType
         desc = self._client.describe_collection(collection_name)
-        required_fields = {"id": DataType.VARCHAR, "created_at": DataType.VARCHAR, "version": DataType.INT64}
+        required_fields = {"id": DataType.VARCHAR, "created_at": DataType.VARCHAR, "version": DataType.INT64, "big_context": DataType.VARCHAR}
         existing_fields = {f["name"]: f["type"] for f in desc.get("fields", [])}
         for field_name, field_type in required_fields.items():
             if field_name not in existing_fields:
@@ -98,6 +98,7 @@ class MilvusService:
             FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=dim),
             FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=65535),
+            FieldSchema(name="big_context", dtype=DataType.VARCHAR, max_length=65535),
             FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="title", dtype=DataType.VARCHAR, max_length=512),
             FieldSchema(name="document_id", dtype=DataType.VARCHAR, max_length=64),
@@ -163,6 +164,7 @@ class MilvusService:
                 "id": chunk_id,
                 "vector": emb,
                 "content": chunk["content"],
+                "big_context": chunk["metadata"].get("big_context", chunk["content"]),
                 "source": chunk["metadata"].get("source", ""),
                 "title": chunk["metadata"].get("title", ""),
                 "document_id": chunk["metadata"].get("document_id", ""),
@@ -218,7 +220,7 @@ class MilvusService:
                 collection_name=settings.MILVUS_COLLECTION_NAME,
                 data=[query_embedding],
                 limit=top_k,
-                output_fields=["content", "source", "title", "document_id", "chunk_index", "created_at", "version"],
+                output_fields=["content", "big_context", "source", "title", "document_id", "chunk_index", "created_at", "version"],
                 search_params={"ef": settings.MILVUS_HNSW_EF_SEARCH},
             )
         except Exception as e:
@@ -234,6 +236,7 @@ class MilvusService:
             entity = hit.get("entity", {})
             formatted.append({
                 "content": entity.get("content", ""),
+                "big_context": entity.get("big_context", entity.get("content", "")),
                 "source": entity.get("source", ""),
                 "title": entity.get("title", ""),
                 "document_id": entity.get("document_id", ""),
@@ -265,7 +268,7 @@ class MilvusService:
         res = self._client.query(
             collection_name=settings.MILVUS_COLLECTION_NAME,
             filter=expr,
-            output_fields=["id", "content", "chunk_index", "title", "source", "created_at", "version"],
+            output_fields=["id", "content", "big_context", "chunk_index", "title", "source", "created_at", "version"],
             limit=10000,
         )
 
@@ -282,7 +285,7 @@ class MilvusService:
             res = self._client.query(
                 collection_name=settings.MILVUS_COLLECTION_NAME,
                 filter="id != ''",
-                output_fields=["id", "content", "chunk_index", "title", "source", "document_id", "created_at", "version"],
+                output_fields=["id", "content", "big_context", "chunk_index", "title", "source", "document_id", "created_at", "version"],
                 limit=batch_size,
                 offset=offset,
             )

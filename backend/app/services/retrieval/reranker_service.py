@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Tuple
 import numpy as np
 
 from app.core.config import settings
-from app.core.utils import min_max_normalize
+from app.core.utils import min_max_normalize, reciprocal_rank_fusion, mmr_diversify
 from app.services.retrieval.bm25_service import bm25_service
 from app.services.retrieval.embedding import embedding_service, BGE_QUERY_INSTRUCTION
 from app.services.retrieval.milvus_service import milvus_service
@@ -67,7 +67,7 @@ class RerankerService:
     @staticmethod
     def _format_candidate_text(candidate: Dict[str, Any]) -> str:
         title = candidate.get("title", "")
-        content = candidate.get("content", "")
+        content = candidate.get("big_context", candidate.get("content", ""))
         if title:
             return f"标题: {title}\n{content}"
         return content
@@ -267,18 +267,45 @@ class RerankerService:
         fine_scores, fine_elapsed = self._fine_rank(query, coarse_results)
         _log_stage("fine", f"cross-encoder {len(fine_scores)} pairs scored  |  {_fmt_time(fine_elapsed)}")
 
-        results: List[Dict[str, Any]] = []
-        for rank, (orig_idx, cross_score) in enumerate(fine_scores[:effective_top_k]):
-            entry = dict(coarse_results[orig_idx])
-            entry["score"] = round(cross_score, 6)
-            entry["retriever"] = "rerank"
-            results.append(entry)
-            _log_result_item(
-                rank + 1,
-                entry.get("document_id", ""),
-                entry.get("title", ""),
-                cross_score,
+        mmr_start = time.time()
+        if len(fine_scores) > effective_top_k and query_embedding is not None:
+            fine_docs = [coarse_results[orig_idx] for orig_idx, _ in fine_scores]
+            mmr_indices = mmr_diversify(
+                candidates=fine_docs,
+                query_embedding=query_embedding,
+                lambda_param=settings.MMR_LAMBDA,
+                top_k=effective_top_k,
+                get_embedding_fn=lambda text: embedding_service.encode_single(text),
             )
+            _log_stage("mmr", f"diversity λ={settings.MMR_LAMBDA} -> {len(mmr_indices)} selected  |  {_fmt_time(time.time() - mmr_start)}")
+
+            results: List[Dict[str, Any]] = []
+            for rank, mmr_idx in enumerate(mmr_indices):
+                orig_idx, cross_score = fine_scores[mmr_idx]
+                entry = dict(coarse_results[orig_idx])
+                entry["score"] = round(cross_score, 6)
+                entry["retriever"] = "rerank"
+                results.append(entry)
+                _log_result_item(
+                    rank + 1,
+                    entry.get("document_id", ""),
+                    entry.get("title", ""),
+                    cross_score,
+                )
+        else:
+            _log_stage("mmr", f"skipped (candidates <= final_top_k)")
+            results: List[Dict[str, Any]] = []
+            for rank, (orig_idx, cross_score) in enumerate(fine_scores[:effective_top_k]):
+                entry = dict(coarse_results[orig_idx])
+                entry["score"] = round(cross_score, 6)
+                entry["retriever"] = "rerank"
+                results.append(entry)
+                _log_result_item(
+                    rank + 1,
+                    entry.get("document_id", ""),
+                    entry.get("title", ""),
+                    cross_score,
+                )
 
         total_elapsed = time.time() - total_start
         _log_foot(total_elapsed, len(results))
@@ -371,28 +398,22 @@ class RerankerService:
         vector_results = self.filter_by_threshold(vector_results)
         _log_stage("vector", f"{len(vector_results)} hits  |  {_fmt_time(time.time() - t0)}")
 
+        candidates_list = reciprocal_rank_fusion(
+            result_lists=[bm25_results, vector_results],
+            doc_key_fn=self._chunk_key,
+            k=settings.RRF_K,
+        )
+
         bm25_score_map: Dict[str, float] = {}
         for r in bm25_results:
             key = self._chunk_key(r)
             bm25_score_map[key] = r["score"]
 
-        all_candidates: Dict[str, Dict[str, Any]] = {}
-        for r in bm25_results:
-            key = self._chunk_key(r)
-            if key not in all_candidates:
-                all_candidates[key] = r
-
-        for r in vector_results:
-            key = self._chunk_key(r)
-            if key not in all_candidates:
-                all_candidates[key] = r
-
-        candidates_list = list(all_candidates.values())
         for c in candidates_list:
             key = self._chunk_key(c)
             c["bm25_raw_score"] = bm25_score_map.get(key, 0.0)
 
-        _log_stage("merge", f"{len(candidates_list)} unique candidates")
+        _log_stage("merge", f"{len(candidates_list)} unique candidates (RRF k={settings.RRF_K})")
 
         if not candidates_list:
             logger.info("  \033[1;36m│\033[0m  \033[1;31mNO RESULTS\033[0m - both recall paths returned empty")

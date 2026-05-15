@@ -15,6 +15,7 @@ class BM25Service:
     _corpus_chunks: List[Dict[str, Any]] = []
     _chunk_ids: List[str] = []
     _lock = threading.Lock()
+    _dict_loaded = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -23,6 +24,9 @@ class BM25Service:
 
     def _lazy_import_jieba(self):
         import jieba
+        if not self._dict_loaded:
+            self._load_thermal_dict()
+            self.__class__._dict_loaded = True
         return jieba
 
     def _get_jieba(self):
@@ -31,6 +35,24 @@ class BM25Service:
             return jieba.dt
         except ImportError:
             return None
+
+    def _load_thermal_dict(self):
+        jieba = self._lazy_import_jieba()
+        dict_path = os.path.join(settings.JIEBA_DICT_DIR, "thermal_terms.txt")
+        if os.path.isfile(dict_path):
+            try:
+                count = 0
+                with open(dict_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        term = line.strip()
+                        if term:
+                            jieba.add_word(term, freq=100, tag="n")
+                            count += 1
+                logger.info(f"jieba 供热行业词典已加载: {count} 个术语 ({dict_path})")
+            except Exception as e:
+                logger.warning(f"加载 jieba 词典失败: {e}")
+        else:
+            logger.info(f"jieba 供热行业词典不存在: {dict_path}, 跳过")
 
     def _tokenize(self, text: str) -> List[str]:
         jieba = self._lazy_import_jieba()
