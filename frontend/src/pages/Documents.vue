@@ -11,26 +11,6 @@
       </div>
     </div>
 
-    <!-- ── 搜索区 ──────────────────────────────── -->
-    <div class="search-section neu-card">
-      <div class="search-bar">
-        <el-input
-          v-model="searchQuery"
-          placeholder="输入文档名搜索..."
-          clearable
-          size="large"
-          class="neu-search-input"
-          @keyup.enter="handleSearch"
-          @clear="handleClearSearch"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-        <button class="neu-btn-primary" @click="handleSearch">搜索</button>
-      </div>
-    </div>
-
     <!-- ── 上传区域 ────────────────────────────── -->
     <div class="upload-zone neu-card"
       :class="{ 'is-dragover': isDragOver }"
@@ -75,12 +55,42 @@
       </div>
     </div>
 
+    <!-- ── 搜索区 ──────────────────────────────── -->
+    <div class="search-section neu-card">
+      <div class="search-bar">
+        <el-input
+          v-model="searchQuery"
+          placeholder="输入文档名搜索..."
+          clearable
+          size="large"
+          class="neu-search-input"
+          @keyup.enter="handleSearch"
+          @clear="handleClearSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+        <button class="neu-btn-primary" @click="handleSearch">搜索</button>
+      </div>
+    </div>
+
     <!-- ── 文档列表 ────────────────────────────── -->
     <div class="documents-section neu-card">
       <div class="section-header">
         <div class="section-header-left">
-          <template v-if="isSearching">搜索结果：<strong>{{ total }}</strong> 个文档</template>
-          <template v-else>文档列表（<strong>{{ total }}</strong>）</template>
+          <span class="section-title-text">
+            <template v-if="isSearching">搜索结果：<strong>{{ total }}</strong> 个文档</template>
+            <template v-else>知识库文档（<strong>{{ total }}</strong>）</template>
+          </span>
+          <button
+            v-if="!batchMode"
+            class="neu-btn-primary neu-btn-primary--sm"
+            @click="enterBatchMode"
+          >
+            <el-icon :size="14"><Delete /></el-icon>
+            批量删除
+          </button>
         </div>
         <div class="section-header-right">
           <!-- 视图切换 -->
@@ -109,6 +119,37 @@
         </div>
       </div>
 
+      <!-- 批量操作栏 -->
+      <div v-if="batchMode" class="batch-action-bar neu-recessed">
+        <div class="batch-action-left">
+          <el-checkbox
+            v-model="selectAll"
+            :indeterminate="isIndeterminate"
+            size="large"
+            @change="toggleSelectAll"
+          >
+            全选
+          </el-checkbox>
+          <span class="batch-selected-count">
+            已选 <strong>{{ selectedIds.size }}</strong> 项
+          </span>
+        </div>
+        <div class="batch-action-right">
+          <button
+            class="neu-btn-danger"
+            :disabled="selectedIds.size === 0"
+            @click="handleBatchDelete"
+          >
+            <el-icon :size="14"><Delete /></el-icon>
+            删除选中
+          </button>
+          <button class="neu-btn-ghost" @click="exitBatchMode">
+            <el-icon :size="14"><Close /></el-icon>
+            取消
+          </button>
+        </div>
+      </div>
+
       <!-- 表格视图 -->
       <el-table
         v-if="viewMode === 'table'"
@@ -119,6 +160,15 @@
         empty-text="暂无文档，请上传"
         highlight-current-row
       >
+        <el-table-column v-if="batchMode" width="55" align="center">
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="selectedIds.has(row.id)"
+              size="large"
+              @change="toggleSelect(row)"
+            />
+          </template>
+        </el-table-column>
         <el-table-column prop="original_filename" label="文件名" min-width="200" show-overflow-tooltip />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">
@@ -156,9 +206,18 @@
             v-for="doc in documents"
             :key="doc.id"
             class="tilt-container"
+            :class="{ 'is-batch-mode': batchMode, 'is-selected': batchMode && selectedIds.has(doc.id) }"
             @mousemove="(e) => handleTilt(e, doc.id)"
             @mouseleave="(e) => handleTiltLeave(e, doc.id)"
           >
+            <!-- 批量勾选框 -->
+            <div v-if="batchMode" class="batch-card-check" @click.stop="toggleSelect(doc)">
+              <el-checkbox
+                :model-value="selectedIds.has(doc.id)"
+                size="large"
+              />
+            </div>
+
             <div class="doc-card tilt-card" :data-doc-id="doc.id" @click="handleRowClick(doc)">
               <!-- 角螺丝 -->
               <span class="neu-screw neu-screw-tl" />
@@ -239,6 +298,7 @@
           @size-change="handleSizeChange"
         />
       </div>
+
     </div>
 
     <!-- ── 分块详情弹窗 ─────────────────────────── -->
@@ -267,7 +327,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
-  Grid, List, Coin, Clock
+  Grid, List, Coin, Clock, Close
 } from '@element-plus/icons-vue'
 import type { DocumentInfo } from '@/types'
 import { useDocuments } from '@/composables/documents/useDocuments'
@@ -287,6 +347,7 @@ const {
   loadDocuments,
   uploadFile: _uploadFile,
   deleteDocument: _deleteDocument,
+  deleteDocumentsBatch: _deleteDocumentsBatch,
   loadDocumentChunks,
   refresh: _refresh
 } = useDocuments()
@@ -297,6 +358,68 @@ const pageSize = ref(12)
 const searchQuery = ref('')
 const isSearching = ref(false)
 const viewMode = ref<'card' | 'table'>('card')
+
+// 批量删除状态
+const batchMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+const selectAll = computed({
+  get: () => batchMode.value && documents.value.length > 0 && selectedIds.value.size === documents.value.length,
+  set: () => {}
+})
+
+const isIndeterminate = computed(() =>
+  batchMode.value && selectedIds.value.size > 0 && selectedIds.value.size < documents.value.length
+)
+
+function enterBatchMode() {
+  batchMode.value = true
+  selectedIds.value = new Set()
+}
+
+function exitBatchMode() {
+  batchMode.value = false
+  selectedIds.value = new Set()
+}
+
+function toggleSelect(doc: DocumentInfo) {
+  const newSet = new Set(selectedIds.value)
+  if (newSet.has(doc.id)) {
+    newSet.delete(doc.id)
+  } else {
+    newSet.add(doc.id)
+  }
+  selectedIds.value = newSet
+}
+
+function toggleSelectAll(val: boolean) {
+  if (val) {
+    selectedIds.value = new Set(documents.value.map(d => d.id))
+  } else {
+    selectedIds.value = new Set()
+  }
+}
+
+async function handleBatchDelete() {
+  if (selectedIds.value.size === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedIds.value.size} 个文档吗？此操作不可撤销。`,
+      '批量删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await _deleteDocumentsBatch(
+      Array.from(selectedIds.value),
+      pageSize.value,
+      currentPage.value,
+      isSearching.value,
+      searchQuery.value.trim()
+    )
+    selectedIds.value = new Set()
+  } catch {
+    // 用户取消
+  }
+}
 
 const pageSizes = computed(() => {
   return viewMode.value === 'card'
@@ -392,6 +515,10 @@ async function handleSearch() {
     isSearching.value = true
     currentPage.value = 1
     await handleLoad(q)
+  } else {
+    isSearching.value = false
+    currentPage.value = 1
+    await handleLoad()
   }
 }
 
@@ -593,6 +720,51 @@ onMounted(() => {
   box-shadow: inset 3px 3px 8px rgba(0,0,0,0.2), inset -3px -3px 8px rgba(255,255,255,0.1);
 }
 
+.neu-btn-primary--sm {
+  padding: 8px 18px;
+  font-size: var(--font-size-sm);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* 危险操作按钮 */
+.neu-btn-danger {
+  background: linear-gradient(135deg, #f87171, #ef4444);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: 8px 18px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  box-shadow:
+    3px 3px 8px rgba(239, 68, 68, 0.18),
+    -3px -3px 8px rgba(255, 255, 255, 0.7);
+  transition: all 150ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  font-family: var(--font-family);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.neu-btn-danger:hover:not(:disabled) {
+  box-shadow:
+    5px 5px 14px rgba(239, 68, 68, 0.28),
+    -4px -4px 12px rgba(255, 255, 255, 0.85);
+  transform: translateY(-1px);
+}
+.neu-btn-danger:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 2px 2px 6px rgba(185, 28, 28, 0.3),
+    inset -2px -2px 6px rgba(255, 255, 255, 0.15);
+}
+.neu-btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 /* ── Upload Zone ─────────────────────────────────── */
 .upload-zone {
   padding: 44px;
@@ -729,6 +901,9 @@ onMounted(() => {
 }
 
 .section-header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-main);
@@ -979,6 +1154,18 @@ onMounted(() => {
   background-color: rgba(79, 70, 229, 0.03) !important;
 }
 
+.documents-section :deep(.el-checkbox__input.is-checked .el-checkbox__inner),
+.documents-section :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+.documents-section :deep(.el-checkbox__input.is-checked:hover .el-checkbox__inner),
+.documents-section :deep(.el-checkbox__input.is-indeterminate:hover .el-checkbox__inner) {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
 /* ── Table File Type Badge ───────────────────────── */
 .file-type-cell {
   display: flex;
@@ -1002,6 +1189,123 @@ onMounted(() => {
   justify-content: flex-end;
   margin-top: 24px;
   padding-top: 4px;
+}
+
+.pagination-wrapper :deep(.el-pagination .is-active) {
+  background-color: var(--color-secondary);
+  color: #fff;
+}
+
+.pagination-wrapper :deep(.el-pagination .el-select .el-input.is-focus .el-input__wrapper) {
+  box-shadow: 0 0 0 1px var(--color-secondary) inset;
+}
+
+/* ── 批量操作栏 ──────────────────────────────────── */
+.batch-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  margin-bottom: 18px;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-radius: var(--radius-sm);
+   background: var(--color-surface);
+ }
+
+ .batch-action-left {
+   display: flex;
+   align-items: center;
+  gap: 16px;
+}
+
+.batch-action-left :deep(.el-checkbox__label) {
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  color: var(--color-text-main);
+}
+
+.batch-action-left :deep(.el-checkbox__input.is-checked .el-checkbox__inner),
+.batch-action-left :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+.batch-action-left :deep(.el-checkbox__input.is-checked:hover .el-checkbox__inner),
+.batch-action-left :deep(.el-checkbox__input.is-indeterminate:hover .el-checkbox__inner) {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.batch-selected-count {
+  font-size: var(--font-size-base);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.batch-selected-count strong {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.batch-action-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 卡片批量选中状态 */
+.tilt-container.is-batch-mode {
+  cursor: default;
+}
+
+.tilt-container.is-batch-mode .doc-card {
+  cursor: pointer;
+}
+
+.tilt-container.is-selected .doc-card {
+  border-color: var(--color-secondary) !important;
+  box-shadow:
+    inset 2px 2px 6px rgba(124, 58, 237, 0.12),
+    inset -2px -2px 6px rgba(124, 58, 237, 0.04),
+    3px 3px 10px var(--neu-shadow-dark),
+    -3px -3px 10px var(--neu-shadow-light);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.04), var(--color-surface));
+}
+
+.batch-card-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+  width: 30px;
+  height: 30px;
+  background: var(--color-surface);
+  border-radius: var(--radius-xs);
+  padding: 0;
+  box-shadow:
+    2px 2px 6px var(--neu-shadow-dark),
+    -2px -2px 6px var(--neu-shadow-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 150ms ease-out;
+}
+
+.tilt-container.is-selected .batch-card-check {
+  box-shadow: var(--neu-pressed);
+}
+
+.batch-card-check :deep(.el-checkbox__input.is-checked .el-checkbox__inner),
+.batch-card-check :deep(.el-checkbox__input.is-indeterminate .el-checkbox__inner) {
+  background-color: var(--color-secondary);
+  border-color: var(--color-secondary);
+}
+
+.batch-card-check :deep(.el-checkbox__input.is-checked:hover .el-checkbox__inner),
+.batch-card-check :deep(.el-checkbox__input.is-indeterminate:hover .el-checkbox__inner) {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 /* ── Chunk Dialog ────────────────────────────────── */
@@ -1106,5 +1410,12 @@ onMounted(() => {
   .doc-info-item {
     font-size: 11px;
   }
+}
+</style>
+
+<style>
+.el-select-dropdown__item.is-selected {
+  color: var(--color-secondary, #7C3AED);
+  font-weight: 600;
 }
 </style>

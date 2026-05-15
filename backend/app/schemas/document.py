@@ -73,3 +73,7 @@ class RerankResult(BaseModel):
     bge_similarity: float
     bm25_raw_score: float
     retriever: str = "rerank"
+
+
+class BatchDeleteRequest(BaseModel):
+    ids: list[str] = Field(..., min_length=1, max_length=200)

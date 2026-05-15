@@ -220,6 +220,27 @@ class DocumentService:
         return True
 
     @staticmethod
+    async def delete_documents_batch(db: AsyncSession, document_ids: list[str], user_id: str) -> int:
+        deleted_count = 0
+        for document_id in document_ids:
+            document = await DocumentService.get_document(db, document_id, user_id)
+            if not document:
+                continue
+
+            file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), document.filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+            milvus_service.delete_by_document_id(document_id)
+            bm25_service.remove_by_document_id(document_id)
+
+            await db.delete(document)
+            deleted_count += 1
+
+        await db.commit()
+        return deleted_count
+
+    @staticmethod
     async def get_chunks(db: AsyncSession, document_id: str, user_id: str) -> List[Dict[str, Any]]:
         document = await DocumentService.get_document(db, document_id, user_id)
         if not document:

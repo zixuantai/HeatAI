@@ -11,6 +11,7 @@ from app.schemas.document import (
     RerankRequest,
     RerankResult,
     ChunkInfo,
+    BatchDeleteRequest,
 )
 from app.services.document_service import document_service
 
@@ -83,6 +84,16 @@ async def list_documents(
         "message": "success",
         "data": {"total": total, "items": items},
     }
+
+
+@router.delete("/batch", response_model=dict)
+async def delete_documents_batch(
+    body: BatchDeleteRequest,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    deleted_count = await document_service.delete_documents_batch(db, body.ids, str(current_user.id))
+    return {"code": 0, "message": f"已删除 {deleted_count} 个文档", "data": {"deleted_count": deleted_count}}
 
 
 @router.get("/{document_id}", response_model=dict)

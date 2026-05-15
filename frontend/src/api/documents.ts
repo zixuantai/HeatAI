@@ -23,6 +23,14 @@ export function deleteDocumentApi(documentId: string): Promise<void> {
   })
 }
 
+export function deleteDocumentsBatchApi(ids: string[]): Promise<{ deleted_count: number }> {
+  return request<{ deleted_count: number }>({
+    method: 'DELETE',
+    url: '/documents/batch',
+    data: { ids }
+  })
+}
+
 export function getDocumentChunksApi(documentId: string): Promise<DocumentChunksResponse> {
   return request<DocumentChunksResponse>({
     method: 'GET',

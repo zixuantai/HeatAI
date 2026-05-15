@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDocumentsApi, deleteDocumentApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
+import { getDocumentsApi, deleteDocumentApi, deleteDocumentsBatchApi, getDocumentChunksApi, uploadDocumentApi } from '@/api/documents'
 import type { DocumentInfo, ChunkInfo } from '@/types'
 
 interface UploadingFile {
@@ -86,6 +86,21 @@ export function useDocuments() {
     await loadDocuments(pageSize, currentPage, isSearching ? searchQuery : undefined)
   }
 
+  async function deleteDocumentsBatch(ids: string[], pageSize: number, currentPage: number, isSearching: boolean, searchQuery?: string) {
+    try {
+      const res = await deleteDocumentsBatchApi(ids)
+      ElMessage.success(res.deleted_count > 0 ? `已删除 ${res.deleted_count} 个文档` : '没有文档被删除')
+      const remaining = documents.value.length - ids.length
+      if (remaining <= 0 && currentPage > 1) {
+        currentPage -= 1
+      }
+      await loadDocuments(pageSize, currentPage, isSearching ? searchQuery : undefined)
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message || '批量删除失败'
+      ElMessage.error(msg)
+    }
+  }
+
   return {
     loading,
     chunkLoading,
@@ -98,6 +113,7 @@ export function useDocuments() {
     loadDocuments,
     uploadFile,
     deleteDocument,
+    deleteDocumentsBatch,
     loadDocumentChunks,
     refresh
   }
