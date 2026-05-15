@@ -106,6 +106,29 @@ class BM25Service:
 
         return results
 
+    def add_chunks(self, chunks: List[Dict[str, Any]]):
+        if not chunks:
+            return
+        self._corpus_chunks.extend(chunks)
+        new_chunks = chunks
+        tokenized_new = []
+        for c in new_chunks:
+            content = c.get("content", "")
+            tokens = self._tokenize(content)
+            tokenized_new.append(tokens)
+        if self._searcher is not None:
+            self._searcher = self._searcher.__class__(
+                self._searcher.corpus + tokenized_new
+            )
+        else:
+            from rank_bm25 import BM25Okapi
+            self._searcher = BM25Okapi(tokenized_new)
+        self._chunk_ids = [c.get("id", str(i)) for i, c in enumerate(self._corpus_chunks)]
+        logger.info(f"BM25 index: added {len(chunks)} chunks, total: {len(self._corpus_chunks)}")
+
+    def remove_by_document_id(self, document_id: str):
+        self.delete_document_index(document_id)
+
     def delete_document_index(self, document_id: str):
         if not self._corpus_chunks:
             return

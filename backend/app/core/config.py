@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RERANKER_DEVICE: str = "cpu"
 
-    CHUNK_SIZE: int = 600
-    CHUNK_OVERLAP: int = 100
+    CHUNK_SIZE: int = 400
+    CHUNK_OVERLAP: int = 80
 
     BM25_RETRIEVAL_TOP_K: int = 50
     HYBRID_BM25_WEIGHT: float = 0.4

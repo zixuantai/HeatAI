@@ -69,7 +69,7 @@ class RerankerService:
         title = candidate.get("title", "")
         content = candidate.get("content", "")
         if title:
-            return f"{title}\n{content}"
+            return f"标题: {title}\n{content}"
         return content
 
     @staticmethod

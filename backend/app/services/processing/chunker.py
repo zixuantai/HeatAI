@@ -40,23 +40,24 @@ class TextChunker:
                         "metadata": {**current_meta, "paragraph_end": para_index - 1},
                     }
                     chunks_data.append(chunk_entry)
-                    current_chunk = ""
 
                 if len(para) > self.chunk_size:
                     sub_chunks = self._force_split(para, base_meta)
                     chunks_data.extend(sub_chunks)
                     current_chunk = ""
                     current_meta = {**base_meta, "paragraph_start": para_index + 1}
-                elif self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
-                    overlap_text = current_chunk[-self.chunk_overlap:]
-                    current_chunk = overlap_text + "\n\n" + para
                 else:
-                    current_chunk = para
-
-                current_meta = {
-                    **base_meta,
-                    "paragraph_start": para_index,
-                }
+                    overlap_text = ""
+                    if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
+                        overlap_text = current_chunk[-self.chunk_overlap:]
+                    if overlap_text:
+                        current_chunk = overlap_text + "\n\n" + para
+                    else:
+                        current_chunk = para
+                    current_meta = {
+                        **base_meta,
+                        "paragraph_start": para_index,
+                    }
 
             para_index += 1
 

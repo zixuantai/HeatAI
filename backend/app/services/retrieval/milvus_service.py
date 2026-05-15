@@ -120,7 +120,18 @@ class MilvusService:
                 index_params=index_params,
             )
         except Exception as e:
-            logger.warning(f"索引创建跳过 (可能已被自动创建): {e}")
+            logger.warning(f"向量索引创建跳过 (可能已被自动创建): {e}")
+
+        for scalar_field in ["document_id", "chunk_index"]:
+            try:
+                self._client.create_index(
+                    collection_name=collection_name,
+                    field_name=scalar_field,
+                    index_type="INVERTED",
+                )
+                logger.info(f"标量索引已创建: {scalar_field}")
+            except Exception as e:
+                logger.warning(f"标量索引创建跳过 ({scalar_field}): {e}")
 
         self._client.load_collection(collection_name)
         time.sleep(1)
@@ -160,20 +171,30 @@ class MilvusService:
         self._ensure_initialized()
 
         expr = f'document_id == "{document_id}"'
-        res = self._client.query(
-            collection_name=settings.MILVUS_COLLECTION_NAME,
-            filter=expr,
-            output_fields=["id"],
-            limit=10000,
-        )
+        try:
+            delete_res = self._client.delete(
+                collection_name=settings.MILVUS_COLLECTION_NAME,
+                filter=expr,
+            )
+            deleted_count = len(delete_res) if isinstance(delete_res, (list, dict)) else 0
+            if hasattr(delete_res, "delete_count"):
+                deleted_count = delete_res.delete_count
+        except Exception as e:
+            logger.warning(f"Milvus delete by expression 失败, 回退到先查后删: {e}")
+            res = self._client.query(
+                collection_name=settings.MILVUS_COLLECTION_NAME,
+                filter=expr,
+                output_fields=["id"],
+                limit=10000,
+            )
+            if not res:
+                return 0
+            ids_to_delete = [r["id"] for r in res]
+            self._client.delete(collection_name=settings.MILVUS_COLLECTION_NAME, ids=ids_to_delete)
+            deleted_count = len(ids_to_delete)
 
-        if not res:
-            return 0
-
-        ids_to_delete = [r["id"] for r in res]
-        self._client.delete(collection_name=settings.MILVUS_COLLECTION_NAME, ids=ids_to_delete)
-        logger.info(f"从 Milvus 删除文档 {document_id} 的 {len(ids_to_delete)} 条向量")
-        return len(ids_to_delete)
+        logger.info(f"从 Milvus 删除文档 {document_id} 的 {deleted_count} 条向量")
+        return deleted_count
 
     def search(
         self,

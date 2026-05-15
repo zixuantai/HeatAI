@@ -108,7 +108,11 @@ class DocumentService:
                            f"内容预览={content_preview}...")
             logger.info(f"[文本切块] ✅ 全部 {len(chunks)} 个分块切分成功")
 
-            chunk_texts = [c["content"] for c in chunks]
+            chunk_texts = [
+                f"标题: {c['metadata'].get('title', '')}\n{c['content']}"
+                if c['metadata'].get('title') else c['content']
+                for c in chunks
+            ]
 
             embed_start = time.time()
             logger.info(f"[向量化] 开始编码 {len(chunk_texts)} 个文本块...")

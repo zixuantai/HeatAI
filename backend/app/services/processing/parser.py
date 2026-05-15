@@ -51,7 +51,7 @@ class DocumentParser:
             if not text:
                 continue
             if "Heading" in style or "heading" in style or "标题" in style:
-                paragraphs.append(f"【{text}】")
+                paragraphs.append(f"## {text}")
             else:
                 paragraphs.append(text)
 
@@ -88,8 +88,31 @@ class DocumentParser:
         return text, title
 
     @staticmethod
+    def _detect_encoding(file_bytes: bytes) -> str:
+        for enc in ["utf-8", "gb18030", "gbk", "gb2312", "latin-1"]:
+            try:
+                file_bytes.decode(enc)
+                return enc
+            except (UnicodeDecodeError, LookupError):
+                continue
+        try:
+            import chardet
+            result = chardet.detect(file_bytes)
+            detected = result.get("encoding")
+            if detected and detected.lower() != "utf-8":
+                try:
+                    file_bytes.decode(detected)
+                    return detected
+                except (UnicodeDecodeError, LookupError):
+                    pass
+        except ImportError:
+            pass
+        return "utf-8"
+
+    @staticmethod
     def _parse_txt(file_bytes: bytes, filename: str) -> Tuple[str, str]:
-        text = file_bytes.decode("utf-8", errors="replace")
+        encoding = DocumentParser._detect_encoding(file_bytes)
+        text = file_bytes.decode(encoding, errors="replace")
         title = filename.rsplit(".", 1)[0]
         return text, title
 
