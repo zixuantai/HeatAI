@@ -5,6 +5,16 @@ let ttsBuffer = ''
 let isStreamComplete = false
 const synth = window.speechSynthesis
 
+const audioVolume = ref(1.0)
+
+export function getAudioVolume() {
+  return audioVolume.value
+}
+
+export function setAudioVolume(volume: number) {
+  audioVolume.value = Math.max(0, Math.min(1, volume))
+}
+
 function getChineseVoice(): SpeechSynthesisVoice | null {
   const voices = synth.getVoices()
   return voices.find(v => v.lang.startsWith('zh-CN'))
@@ -23,7 +33,7 @@ export function useAudioPlayer() {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 1.0
     utterance.pitch = 1.0
-    utterance.volume = 1.0
+    utterance.volume = audioVolume.value
 
     const voice = getChineseVoice()
     if (voice) utterance.voice = voice
@@ -98,7 +108,7 @@ export function useAudioPlayer() {
     const utterance = new SpeechSynthesisUtterance(allText)
     utterance.rate = 1.0
     utterance.pitch = 1.0
-    utterance.volume = 1.0
+    utterance.volume = audioVolume.value
 
     const voice = getChineseVoice()
     if (voice) utterance.voice = voice

@@ -222,6 +222,16 @@
               <el-option v-for="v in voiceOptions" :key="v.value" :label="v.label" :value="v.value" />
             </el-select>
           </div>
+          <div class="settings-voice-item">
+            <div class="settings-voice-item-info">
+              <span class="settings-voice-item-label">音量调节</span>
+              <span class="settings-voice-item-desc">调节语音播报的音量大小</span>
+            </div>
+            <div class="settings-voice-volume">
+              <el-slider v-model="voiceVolume" :min="0" :max="100" :step="1" size="small" class="settings-voice-slider" @input="handleVoiceVolumeChange" />
+              <span class="settings-voice-volume-value">{{ voiceVolume }}</span>
+            </div>
+          </div>
         </div>
 
         <div v-if="activeSettingsNav === 'theme'" class="settings-theme">
@@ -335,6 +345,7 @@ const {
   voiceEnabled,
   voiceOptions,
   voiceType,
+  voiceVolume,
   themeMode,
   personalizationValues,
   croppieRef,
@@ -347,6 +358,7 @@ const {
   handleThemeChange,
   handleVoiceEnabledChange,
   handleVoiceTypeChange,
+  handleVoiceVolumeChange,
   onSettingsOpen,
   handleAvatarFileChange,
   cancelCrop,
@@ -1154,6 +1166,24 @@ watch(() => route.path, () => {
 
 .settings-voice-select {
   width: 180px;
+}
+
+.settings-voice-volume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-voice-slider {
+  width: 180px;
+}
+
+.settings-voice-volume-value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
+  min-width: 32px;
+  text-align: right;
 }
 
 .settings-theme-desc {

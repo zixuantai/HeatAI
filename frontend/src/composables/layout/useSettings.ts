@@ -2,6 +2,7 @@ import { ref, computed, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import Croppie from 'croppie'
 import 'croppie/croppie.css'
+import { setAudioVolume } from '@/composables/chat/useAudioPlayer'
 
 export function useSettings(userId: () => string | undefined) {
   const settingsNavItems = [
@@ -18,6 +19,7 @@ export function useSettings(userId: () => string | undefined) {
 
   const voiceEnabledKey = computed(() => `heatai_voice_enabled_${userId() || ''}`)
   const voiceTypeKey = computed(() => `heatai_voice_type_${userId() || ''}`)
+  const voiceVolumeKey = computed(() => `heatai_voice_volume_${userId() || ''}`)
   const themeKey = computed(() => `heatai_theme_${userId() || ''}`)
   const personalizationKeyPrefix = computed(() => `heatai_personalization_${userId() || ''}_`)
 
@@ -31,6 +33,11 @@ export function useSettings(userId: () => string | undefined) {
     { label: '阳光顽皮男', value: 'longjielidou_v3' }
   ]
   const voiceType = ref(localStorage.getItem(voiceTypeKey.value) || 'longanhuan')
+
+  const savedVolume = localStorage.getItem(voiceVolumeKey.value)
+  const voiceVolume = ref(savedVolume !== null ? Number(savedVolume) : 80)
+
+  setAudioVolume(voiceVolume.value / 100)
 
   const themeMode = ref(localStorage.getItem(themeKey.value) || 'light')
 
@@ -81,11 +88,20 @@ export function useSettings(userId: () => string | undefined) {
     localStorage.setItem(voiceTypeKey.value, val)
   }
 
+  function handleVoiceVolumeChange(val: number) {
+    voiceVolume.value = val
+    localStorage.setItem(voiceVolumeKey.value, String(val))
+    setAudioVolume(val / 100)
+  }
+
   function onSettingsOpen() {
     activeSettingsNav.value = settingsNavItems[0]?.key || 'voice'
     loadPersonalizationValues()
     const savedTheme = localStorage.getItem(themeKey.value) || 'light'
     themeMode.value = savedTheme
+    const savedVol = localStorage.getItem(voiceVolumeKey.value)
+    voiceVolume.value = savedVol !== null ? Number(savedVol) : 80
+    setAudioVolume(voiceVolume.value / 100)
   }
 
   function handleAvatarFileChange(e: Event) {
@@ -153,6 +169,7 @@ export function useSettings(userId: () => string | undefined) {
     voiceEnabled,
     voiceOptions,
     voiceType,
+    voiceVolume,
     themeMode,
     personalizationValues,
     croppieRef,
@@ -165,6 +182,7 @@ export function useSettings(userId: () => string | undefined) {
     handleThemeChange,
     handleVoiceEnabledChange,
     handleVoiceTypeChange,
+    handleVoiceVolumeChange,
     onSettingsOpen,
     handleAvatarFileChange,
     cancelCrop,
@@ -173,6 +191,7 @@ export function useSettings(userId: () => string | undefined) {
     destroyCroppie,
     voiceEnabledKey,
     voiceTypeKey,
+    voiceVolumeKey,
     themeKey
   }
 }
