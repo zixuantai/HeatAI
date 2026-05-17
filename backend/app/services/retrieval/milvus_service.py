@@ -154,6 +154,8 @@ class MilvusService:
         CST = timezone(timedelta(hours=8))
         now_iso = datetime.now(CST).strftime("%Y-%m-%dT%H:%M:%S+08:00")
 
+        schema_fields = self._get_schema_field_names()
+
         data: List[Dict[str, Any]] = []
         chunk_ids: List[str] = []
 
@@ -161,7 +163,7 @@ class MilvusService:
             chunk_id = chunk["metadata"].get("chunk_id", "")
             chunk_ids.append(chunk_id)
 
-            data.append({
+            entry = {
                 "id": chunk_id,
                 "vector": emb,
                 "content": chunk["content"],
@@ -171,12 +173,36 @@ class MilvusService:
                 "chunk_index": chunk["metadata"].get("chunk_index", 0),
                 "created_at": now_iso,
                 "version": chunk["metadata"].get("version", 1),
-            })
+            }
+
+            entry.update(self._fill_extra_schema_fields(schema_fields, entry, chunk))
+
+            data.append(entry)
 
         self._client.insert(collection_name=settings.MILVUS_COLLECTION_NAME, data=data)
         self._client.flush(collection_name=settings.MILVUS_COLLECTION_NAME)
         logger.info(f"成功插入 {len(data)} 条向量到 Milvus")
         return chunk_ids
+
+    def _get_schema_field_names(self) -> set:
+        desc = self._client.describe_collection(settings.MILVUS_COLLECTION_NAME)
+        return {f["name"] for f in desc.get("fields", [])}
+
+    def _fill_extra_schema_fields(
+        self,
+        schema_fields: set,
+        entry: Dict[str, Any],
+        chunk: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        extra: Dict[str, Any] = {}
+        for field_name in schema_fields:
+            if field_name in entry or field_name in ("vector",):
+                continue
+            if field_name == "big_context":
+                extra["big_context"] = chunk["content"]
+            else:
+                extra[field_name] = ""
+        return extra
 
     def delete_by_document_id(self, document_id: str) -> int:
         self._ensure_initialized()

@@ -14,12 +14,14 @@ from app.schemas.document import (
     BatchDeleteRequest,
 )
 from app.services.document_service import document_service
+from app.services.processing.parser import DocumentParser
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["文档管理"])
 
 MAX_FILE_SIZE = 50 * 1024 * 1024
+SUPPORTED_TYPES = tuple(DocumentParser.SUPPORTED_TYPES)
 
 
 @router.post("/upload", response_model=DocumentInfo, status_code=status.HTTP_201_CREATED)
@@ -32,7 +34,7 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="文件名不能为空")
 
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-    if ext not in ("pdf", "docx", "html", "htm", "txt"):
+    if ext not in SUPPORTED_TYPES:
         raise HTTPException(status_code=400, detail=f"不支持的文件类型: .{ext}")
 
     file_bytes = await file.read()
@@ -85,8 +87,19 @@ async def list_documents(
         try:
             items.append(DocumentInfo.model_validate(doc).model_dump(mode="json"))
         except Exception:
-            logger.exception(f"文档记录验证失败: {doc.id}")
-            total -= 1
+            logger.exception(f"文档记录验证失败，ID={doc.id}，状态={doc.status}")
+            items.append({
+                "id": doc.id,
+                "filename": getattr(doc, "filename", ""),
+                "original_filename": getattr(doc, "original_filename", "未知"),
+                "file_type": getattr(doc, "file_type", "unknown"),
+                "file_size": getattr(doc, "file_size", 0),
+                "chunk_count": getattr(doc, "chunk_count", 0),
+                "status": getattr(doc, "status", "failed"),
+                "error_message": str(e)[:200],
+                "created_at": getattr(doc, "created_at", None),
+                "updated_at": getattr(doc, "updated_at", None),
+            })
     return {
         "code": 0,
         "message": "success",

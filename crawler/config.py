@@ -28,7 +28,12 @@ class CrawlerConfig:
     MAX_PAGE_DEPTH: int = 1
     MAX_LINKS_PER_SITE: int = 50
 
-    TARGET_FILE_TYPES: List[str] = field(default_factory=lambda: [".pdf", ".doc", ".docx", ".html", ".htm", ".txt"])
+    TARGET_FILE_TYPES: List[str] = field(default_factory=lambda: [
+        ".pdf", ".doc", ".docx", ".html", ".htm", ".txt",
+        ".md", ".markdown", ".csv", ".json",
+        ".xlsx", ".xls", ".pptx", ".ppt", ".epub",
+        ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp",
+    ])
 
     SEARCH_KEYWORDS: List[str] = field(default_factory=lambda: [
         "供热", "供暖", "热力", "集中供热",

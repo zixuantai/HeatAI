@@ -12,13 +12,8 @@ from sqlalchemy import select, func
 
 from app.core.config import settings
 from app.models.document import Document
-from app.services.processing.parser import document_parser
-from app.services.processing.text_cleaner import text_cleaner
-from app.services.processing.chunker import text_chunker
-<<<<<<< HEAD
-=======
-from app.services.processing.dedup_service import MinHashDedupService
->>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
+from app.services.processing.pipeline import ProcessingPipeline
+from app.services.processing.corpus_dedup_service import CorpusDedupService
 from app.services.retrieval.bm25_service import bm25_service
 from app.services.retrieval.embedding import embedding_service
 from app.services.retrieval.reranker_service import reranker_service
@@ -84,44 +79,42 @@ class DocumentService:
                 f.write(file_bytes)
             logger.info(f"[文档上传] 文件已保存至: {file_path}")
 
-            parse_start = time.time()
-            parsed_text, title = document_parser.parse(file_bytes, original_filename)
+            pipeline = ProcessingPipeline.default()
+
+            parsed_text, title = pipeline.parser.parse(file_bytes, original_filename)
             if not parsed_text or not parsed_text.strip():
                 raise ValueError("文档解析结果为空")
-            logger.info(f"[文档解析] 标题: {title}, 文本长度: {len(parsed_text)} 字符, 耗时: {time.time() - parse_start:.2f}s")
 
-            cleaned_text = text_cleaner.clean(parsed_text)
-            if not cleaned_text or not cleaned_text.strip():
-                raise ValueError("文本清洗后为空")
-            logger.info(f"[文本清洗] 清洗后文本长度: {len(cleaned_text)} 字符")
-
-            base_metadata: Dict[str, Any] = {
-                "source": original_filename,
-                "title": title,
-                "document_id": doc_record.id,
-            }
-
-            chunk_start = time.time()
-            chunks = text_chunker.chunk(cleaned_text, base_metadata)
-            logger.info(f"[文本切块] 切块数量: {len(chunks)}, 耗时: {time.time() - chunk_start:.2f}s")
-
-            if not chunks:
-                raise ValueError("文本切块结果为空")
-
-<<<<<<< HEAD
-=======
-            before_dedup = len(chunks)
-            dedup_service = MinHashDedupService(
+            corpus_dedup = CorpusDedupService(
                 threshold=settings.MINHASH_THRESHOLD,
                 num_perm=settings.MINHASH_NUM_PERM,
             )
-            chunks = dedup_service.deduplicate(chunks)
-            if not chunks:
-                raise ValueError("文档内去重后无有效内容，文档可能包含大量重复文本")
-            if len(chunks) < before_dedup:
-                logger.info(f"[去重] 文档内去重: {before_dedup} → {len(chunks)} chunks")
+            similar_doc = await corpus_dedup.check_duplicate(
+                db, user_id, parsed_text
+            )
+            if similar_doc:
+                raise ValueError(
+                    "该文档与已上传的「{name}」内容高度相似，建议检查是否重复上传".format(
+                        name=similar_doc.original_filename
+                    )
+                )
 
->>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
+            base_metadata: Dict[str, Any] = {
+                "source": original_filename,
+                "document_id": doc_record.id,
+                "title": title,
+            }
+
+            chunks = pipeline.run(
+                filename=original_filename,
+                base_metadata=base_metadata,
+                parsed_text=parsed_text,
+                title=title,
+            )
+
+            chunk_start = time.time()
+            logger.info(f"[文本切块] 切块数量: {len(chunks)}")
+
             for i, chunk in enumerate(chunks):
                 content_len = len(chunk["content"])
                 content_preview = chunk["content"][:80].replace("\n", "\\n")
@@ -170,6 +163,7 @@ class DocumentService:
             logger.info(f"[BM25 索引] ✅ 已添加 {len(chunks)} 个分块, 耗时: {time.time() - bm25_start:.2f}s")
 
             doc_record.chunk_count = len(chunks)
+            await corpus_dedup.index_signature(db, doc_record.id, parsed_text)
             doc_record.status = "completed"
             await db.commit()
             await db.refresh(doc_record)

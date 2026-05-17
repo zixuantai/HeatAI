@@ -74,3 +74,23 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+
+-- 文档管理表
+CREATE TABLE IF NOT EXISTS documents (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID NOT NULL,
+    filename        VARCHAR(500) NOT NULL,
+    original_filename VARCHAR(500) NOT NULL,
+    file_type       VARCHAR(20) NOT NULL,
+    file_size       INTEGER DEFAULT 0,
+    chunk_count     INTEGER DEFAULT 0,
+    content_hash    VARCHAR(64),
+    minhash_sig     TEXT,
+    status          VARCHAR(20) DEFAULT 'processing',
+    error_message   TEXT,
+    created_at      TIMESTAMP DEFAULT NOW(),
+    updated_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_user ON documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);

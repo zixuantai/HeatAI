@@ -185,6 +185,18 @@ class DocumentFetcher:
                 ext = ".html"
             elif "plain" in ct:
                 ext = ".txt"
+            elif "markdown" in ct:
+                ext = ".md"
+            elif "csv" in ct or "excel" in ct or "spreadsheet" in ct:
+                ext = ".csv" if "csv" in ct else ".xlsx"
+            elif "json" in ct:
+                ext = ".json"
+            elif "presentation" in ct or "powerpoint" in ct:
+                ext = ".pptx"
+            elif "epub" in ct:
+                ext = ".epub"
+            elif "image" in ct:
+                ext = ".png"
             else:
                 ext = ".html"
             name = basename
@@ -224,7 +236,9 @@ class DocumentFetcher:
 
         # 从 Content-Type 判断
         ct = content_type.lower()
-        doc_cts = {"pdf", "msword", "word", "document", "text/plain", "text/html"}
+        doc_cts = {"pdf", "msword", "word", "document", "text/plain", "text/html",
+                   "markdown", "csv", "json", "excel", "spreadsheet",
+                   "presentation", "powerpoint", "epub", "image"}
         for dct in doc_cts:
             if dct in ct:
                 return True

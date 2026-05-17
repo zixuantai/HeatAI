@@ -389,7 +389,12 @@ class CrawlerScheduler:
             logger.error(f"目录不存在: {scan_dir}")
             return 0
 
-        supported_exts = {".pdf", ".docx", ".doc", ".html", ".htm", ".shtml", ".shtm", ".txt"}
+        supported_exts = {
+            ".pdf", ".docx", ".doc", ".html", ".htm", ".shtml", ".shtm", ".txt",
+            ".md", ".markdown", ".csv", ".json",
+            ".xlsx", ".xls", ".pptx", ".ppt", ".epub",
+            ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp",
+        }
         files = [
             f for f in os.listdir(scan_dir)
             if os.path.isfile(os.path.join(scan_dir, f))

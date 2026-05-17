@@ -16,6 +16,7 @@ class BM25Service:
     _tokenized_corpus: List[List[str]] = []
     _chunk_ids: List[str] = []
     _lock = threading.Lock()
+    _dict_loaded = False
 
     def __new__(cls):
         if cls._instance is None:
@@ -24,6 +25,9 @@ class BM25Service:
 
     def _lazy_import_jieba(self):
         import jieba
+        if not self.__class__._dict_loaded:
+            self._load_thermal_dict()
+            self.__class__._dict_loaded = True
         return jieba
 
     def _get_jieba(self):
@@ -33,8 +37,6 @@ class BM25Service:
         except ImportError:
             return None
 
-<<<<<<< HEAD
-=======
     def _load_thermal_dict(self):
         import jieba
         dict_path = os.path.join(settings.JIEBA_DICT_DIR, "thermal_terms.txt")
@@ -53,7 +55,6 @@ class BM25Service:
         else:
             logger.info(f"jieba 供热行业词典不存在: {dict_path}, 跳过")
 
->>>>>>> 46fe523 (fix: 优化知识库文档删除/上传体验，全选功能拆分为全选本页和全选知识库)
     def _tokenize(self, text: str) -> List[str]:
         jieba = self._lazy_import_jieba()
         tokens = jieba.lcut(text)
@@ -133,7 +134,21 @@ class BM25Service:
     def add_chunks(self, chunks: List[Dict[str, Any]]):
         if not chunks:
             return
-        self._corpus_chunks.extend(chunks)
+        flat_chunks = []
+        for c in chunks:
+            meta = c.get("metadata", {})
+            flat = {
+                "content": c.get("content", ""),
+                "id": meta.get("chunk_id", meta.get("id", "")),
+                "source": meta.get("source", ""),
+                "title": meta.get("title", ""),
+                "document_id": meta.get("document_id", ""),
+                "chunk_index": meta.get("chunk_index", 0),
+                "created_at": meta.get("created_at", ""),
+                "version": meta.get("version", 1),
+            }
+            flat_chunks.append(flat)
+        self._corpus_chunks.extend(flat_chunks)
         self.build_index(self._corpus_chunks)
         logger.info(f"BM25 index: added {len(chunks)} chunks, total: {len(self._corpus_chunks)}")
 

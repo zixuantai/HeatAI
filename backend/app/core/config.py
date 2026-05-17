@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 300
     CHUNK_OVERLAP: int = 60
 
+    MINHASH_THRESHOLD: float = 0.85
+    MINHASH_NUM_PERM: int = 128
+
     BGE_MAX_TOKENS: int = 450
 
     BM25_RETRIEVAL_TOP_K: int = 50
@@ -64,6 +67,8 @@ class Settings(BaseSettings):
     LLM_TEMPERATURE: float = 0.15
 
     UPLOAD_DIR: str = "./uploads"
+
+    JIEBA_DICT_DIR: str = ""
 
     LOG_LEVEL: str = "INFO"
 

@@ -5,11 +5,11 @@ from typing import List
 class TextCleaner:
 
     @staticmethod
-    def clean(text: str) -> str:
+    def clean(text: str, preserve_indent: bool = False) -> str:
         text = TextCleaner._remove_control_chars(text)
         text = TextCleaner._normalize_whitespace(text)
         text = TextCleaner._remove_excessive_newlines(text)
-        text = TextCleaner._remove_empty_lines(text)
+        text = TextCleaner._remove_empty_lines(text, preserve_indent=preserve_indent)
         text = TextCleaner._normalize_punctuation(text)
         return text.strip()
 
@@ -27,14 +27,14 @@ class TextCleaner:
         return re.sub(r"\n{3,}", "\n\n", text)
 
     @staticmethod
-    def _remove_empty_lines(text: str) -> str:
+    def _remove_empty_lines(text: str, preserve_indent: bool = False) -> str:
         lines = text.split("\n")
         result = []
         has_content = False
         for line in lines:
             stripped = line.strip()
             if stripped:
-                result.append(stripped)
+                result.append(line if preserve_indent else stripped)
                 has_content = True
             elif has_content:
                 result.append("")

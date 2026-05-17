@@ -264,6 +264,10 @@ html, body {
   background: #F59E0B;
   box-shadow: 0 0 8px 2px rgba(245, 158, 11, 0.5);
 }
+.neu-led-danger {
+  background: #EF4444;
+  box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.5);
+}
 @keyframes led-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }

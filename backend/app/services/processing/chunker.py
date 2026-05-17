@@ -2,6 +2,9 @@ import re
 from typing import List, Dict, Any
 from app.core.config import settings
 
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[。！？.!?；;])\s*")
+_NATURAL_BREAKS_RE = re.compile(r"[\s,，、；;。！？.!?：:]")
+
 
 class TextChunker:
 
@@ -48,8 +51,10 @@ class TextChunker:
                     current_meta = {**base_meta, "paragraph_start": para_index + 1}
                 else:
                     overlap_text = ""
-                    if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
+                    if self.chunk_overlap > 0 and len(current_chunk) >= self.chunk_overlap:
                         overlap_text = current_chunk[-self.chunk_overlap:]
+                    else:
+                        overlap_text = current_chunk
                     if overlap_text:
                         current_chunk = overlap_text + "\n\n" + para
                     else:
@@ -72,6 +77,19 @@ class TextChunker:
 
         for idx, chunk in enumerate(sent_chunks):
             chunk["metadata"]["chunk_index"] = idx
+            chunk["metadata"]["chunk_count"] = len(sent_chunks)
+
+        char_pos = 0
+        for chunk in sent_chunks:
+            content = chunk["content"]
+            pos = text.find(content, char_pos)
+            if pos >= 0:
+                chunk["metadata"]["char_offset"] = pos
+                chunk["metadata"]["char_length"] = len(content)
+                char_pos = pos + len(content)
+            else:
+                chunk["metadata"]["char_offset"] = char_pos
+                chunk["metadata"]["char_length"] = len(content)
 
         return sent_chunks
 
@@ -79,9 +97,17 @@ class TextChunker:
         paragraphs = re.split(r"\n\s*\n", text)
         return [p.strip() for p in paragraphs if p.strip()]
 
+    def _find_safe_cut(self, text: str, max_len: int) -> int:
+        if len(text) <= max_len:
+            return len(text)
+        for i in range(max_len, max(0, max_len - 60), -1):
+            if _NATURAL_BREAKS_RE.match(text[i]):
+                return i + 1
+        return max_len
+
     def _force_split(self, para: str, base_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         chunks = []
-        sentences = re.split(r"(?<=[。！？.!?])\s*", para)
+        sentences = _SENTENCE_BOUNDARY_RE.split(para)
         current_text = ""
         for sent in sentences:
             sent = sent.strip()
@@ -96,9 +122,13 @@ class TextChunker:
                     step = self.chunk_size - self.chunk_overlap
                     if step < 1:
                         step = 1
-                    for i in range(0, len(sent), step):
-                        chunk_text = sent[i:i + self.chunk_size]
-                        chunks.append({"content": chunk_text, "metadata": base_meta.copy()})
+                    pos = 0
+                    while pos < len(sent):
+                        end = self._find_safe_cut(sent, pos + self.chunk_size)
+                        chunk_text = sent[pos:end]
+                        if chunk_text:
+                            chunks.append({"content": chunk_text, "metadata": base_meta.copy()})
+                        pos = max(pos + step, end - self.chunk_overlap if end - self.chunk_overlap > pos else pos + 1)
                     current_text = ""
                 else:
                     current_text = sent
@@ -115,7 +145,7 @@ class TextChunker:
                 result.append(chunk)
                 continue
 
-            sentences = re.split(r"(?<=[。！？.!?])\s*", content)
+            sentences = _SENTENCE_BOUNDARY_RE.split(content)
             sub_chunk = ""
             sub_meta = dict(chunk["metadata"])
 
@@ -129,9 +159,9 @@ class TextChunker:
                 else:
                     if sub_chunk:
                         result.append({"content": sub_chunk, "metadata": dict(sub_meta)})
-                    if self.chunk_overlap > 0 and len(sub_chunk) > self.chunk_overlap:
-                        overlap = sub_chunk[-self.chunk_overlap:]
-                        sub_chunk = overlap + " " + sent
+                    overlap_len = min(self.chunk_overlap, len(sub_chunk))
+                    if overlap_len > 0:
+                        sub_chunk = sub_chunk[-overlap_len:] + " " + sent
                     else:
                         sub_chunk = sent
 

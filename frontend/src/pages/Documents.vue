@@ -21,7 +21,7 @@
       <input
         ref="fileInputRef"
         type="file"
-        accept=".pdf,.docx,.doc,.html,.htm,.txt"
+        accept=".pdf,.docx,.doc,.html,.htm,.txt,.md,.markdown,.csv,.json,.xlsx,.xls,.pptx,.ppt,.epub,.png,.jpg,.jpeg,.bmp,.tiff,.webp"
         multiple
         style="display: none"
         @change="handleFileSelect"
@@ -31,7 +31,7 @@
           <el-icon :size="36" class="upload-icon"><UploadFilled /></el-icon>
         </div>
         <p class="upload-text">点击或拖拽文件到此处上传</p>
-        <p class="upload-hint">支持 PDF · Word (.docx/.doc) · HTML · TXT，单文件最大 50MB</p>
+        <p class="upload-hint">支持 PDF · Word · Excel · PPT · HTML · TXT · Markdown · CSV · JSON · EPUB · 图片，单文件最大 50MB</p>
       </div>
     </div>
 
@@ -331,9 +331,18 @@
                   </svg>
                 </div>
                 <div class="doc-meta-row">
-                  <span class="neu-led" :class="doc.chunk_count > 0 ? 'neu-led-online' : 'neu-led-warning'" />
-                  <span class="doc-meta-label">{{ doc.chunk_count > 0 ? 'INDEXED' : 'PENDING' }}</span>
-                </div>
+                <span
+                  class="neu-led"
+                  :class="{
+                    'neu-led-online': doc.status === 'completed',
+                    'neu-led-danger': doc.status === 'failed',
+                    'neu-led-warning': doc.status === 'processing' || doc.status !== 'completed' && doc.status !== 'failed'
+                  }"
+                />
+                <span class="doc-meta-label">
+                  {{ doc.status === 'completed' ? 'INDEXED' : doc.status === 'failed' ? 'FAILED' : doc.status === 'processing' ? 'PROCESSING' : 'PENDING' }}
+                </span>
+              </div>
               </div>
 
               <!-- 中间：文件名 -->
