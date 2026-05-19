@@ -7,6 +7,32 @@ const synth = window.speechSynthesis
 
 const audioVolume = ref(1.0)
 
+let voicesReadyPromise: Promise<void> | null = null
+
+function ensureVoicesReady(): Promise<void> {
+  if (voicesReadyPromise) return voicesReadyPromise
+
+  const voices = synth.getVoices()
+  if (voices.length > 0) {
+    voicesReadyPromise = Promise.resolve()
+    return voicesReadyPromise
+  }
+
+  voicesReadyPromise = new Promise<void>((resolve) => {
+    const onVoicesChanged = () => {
+      synth.removeEventListener('voiceschanged', onVoicesChanged)
+      resolve()
+    }
+    synth.addEventListener('voiceschanged', onVoicesChanged)
+    setTimeout(() => {
+      synth.removeEventListener('voiceschanged', onVoicesChanged)
+      resolve()
+    }, 3000)
+  })
+
+  return voicesReadyPromise
+}
+
 export function getAudioVolume() {
   return audioVolume.value
 }
@@ -20,6 +46,28 @@ function getChineseVoice(): SpeechSynthesisVoice | null {
   return voices.find(v => v.lang.startsWith('zh-CN'))
       || voices.find(v => v.lang.startsWith('zh'))
       || null
+}
+
+let engineWarmedUp = false
+
+function warmUpEngine(): Promise<void> {
+  if (engineWarmedUp) return Promise.resolve()
+  engineWarmedUp = true
+
+  return ensureVoicesReady().then(() => {
+    const utterance = new SpeechSynthesisUtterance('')
+    utterance.volume = 0
+    utterance.rate = 1.0
+
+    return new Promise<void>((resolve) => {
+      const done = () => resolve()
+      utterance.onstart = done
+      utterance.onend = done
+      utterance.onerror = done
+      setTimeout(done, 500)
+      synth.speak(utterance)
+    })
+  })
 }
 
 export function useAudioPlayer() {
@@ -36,7 +84,9 @@ export function useAudioPlayer() {
     utterance.volume = audioVolume.value
 
     const voice = getChineseVoice()
-    if (voice) utterance.voice = voice
+    if (voice) {
+      utterance.voice = voice
+    }
 
     utterance.onstart = () => {
       isAudioPlaying.value = true
@@ -55,7 +105,17 @@ export function useAudioPlayer() {
       }
     }
 
-    synth.speak(utterance)
+    if (voice) {
+      synth.speak(utterance)
+    } else {
+      ensureVoicesReady().then(() => {
+        const retryVoice = getChineseVoice()
+        if (retryVoice) {
+          utterance.voice = retryVoice
+        }
+        synth.speak(utterance)
+      })
+    }
   }
 
   const initAudioStream = () => {
@@ -66,6 +126,7 @@ export function useAudioPlayer() {
     isStreamComplete = false
     isAudioPlaying.value = true
     hasAudio.value = true
+    warmUpEngine()
   }
 
   const handleAudioChunk = (text: string) => {
@@ -110,9 +171,6 @@ export function useAudioPlayer() {
     utterance.pitch = 1.0
     utterance.volume = audioVolume.value
 
-    const voice = getChineseVoice()
-    if (voice) utterance.voice = voice
-
     utterance.onend = () => {
       console.log('[Audio] 重播结束')
       isAudioPlaying.value = false
@@ -124,7 +182,19 @@ export function useAudioPlayer() {
       isAudioPlaying.value = false
     }
 
-    synth.speak(utterance)
+    const doSpeak = () => {
+      const voice = getChineseVoice()
+      if (voice) utterance.voice = voice
+      synth.speak(utterance)
+    }
+
+    const voice = getChineseVoice()
+    if (voice) {
+      utterance.voice = voice
+      synth.speak(utterance)
+    } else {
+      ensureVoicesReady().then(doSpeak)
+    }
   }
 
   const setMuted = (muted: boolean) => {
