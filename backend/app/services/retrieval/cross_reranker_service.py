@@ -99,9 +99,11 @@ class CrossRerankerService:
         normalize: bool = True,
     ) -> List[float]:
         self._load_model()
+        from app.core.config import settings
 
         pairs = [[query, text] for _, text in candidates]
-        scores = self._model.compute_score(pairs, normalize=normalize)
+        max_length = getattr(settings, "CROSS_ENCODER_MAX_TOKENS", 384)
+        scores = self._model.compute_score(pairs, normalize=normalize, max_length=max_length)
 
         if isinstance(scores, float):
             scores = [scores]

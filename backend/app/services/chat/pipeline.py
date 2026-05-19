@@ -44,22 +44,37 @@ class ChatPipeline:
         if not expanded_queries:
             return main_results
 
+        threshold = settings.SIMILARITY_THRESHOLD
+
+        # ── Skip expanded search if main results are already sufficient ──
+        if main_results:
+            min_score = settings.EXPANDED_MIN_MAIN_SCORE
+            min_count = settings.EXPANDED_SKIP_COUNT
+            high_quality = sum(1 for r in main_results if r.get("score", 0) >= min_score)
+            if len(main_results) >= min_count and high_quality >= min(2, len(main_results)):
+                logger.info(
+                    f"[Query改写] 主检索结果充足 (共{len(main_results)}条, 高分{high_quality}条), 跳过扩展查询"
+                )
+                return main_results
+
         seen_keys = set()
         for r in main_results:
             key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
             seen_keys.add(key)
 
-        threshold = settings.SIMILARITY_THRESHOLD
+        # ── Batch BGE encode all expanded queries at once ──
+        expanded_texts = [BGE_QUERY_INSTRUCTION + eq for eq in expanded_queries]
+        expanded_embs = await asyncio.to_thread(embedding_service.encode, expanded_texts)
 
-        async def _search_one_expanded(eq: str):
+        async def _search_one_expanded(eq: str, query_emb: list):
             try:
-                bm25_res = await asyncio.to_thread(bm25_service.search, eq, 3)
-                bm25_res = reranker_service.filter_by_threshold(bm25_res, threshold)
-                query_emb = await asyncio.to_thread(
-                    embedding_service.encode_single, BGE_QUERY_INSTRUCTION + eq
-                )
-                vector_res = await asyncio.to_thread(milvus_service.search, query_emb, 3)
-                vector_res = reranker_service.filter_by_threshold(vector_res, threshold)
+                # BM25 and Milvus are independent — run in parallel
+                bm25_task = asyncio.to_thread(bm25_service.search, eq, 3)
+                milvus_task = asyncio.to_thread(milvus_service.search, query_emb, 3)
+                bm25_res_raw, vector_res_raw = await asyncio.gather(bm25_task, milvus_task)
+
+                bm25_res = reranker_service.filter_by_threshold(bm25_res_raw, threshold)
+                vector_res = reranker_service.filter_by_threshold(vector_res_raw, threshold)
                 for r in vector_res:
                     r["retriever"] = "vector_expanded"
                 merged = list(bm25_res)
@@ -73,7 +88,9 @@ class ChatPipeline:
                 logger.warning(f"[Query改写] 扩展查询 '{eq}' 检索失败: {e}")
                 return []
 
-        all_expanded_results = await asyncio.gather(*[_search_one_expanded(eq) for eq in expanded_queries])
+        all_expanded_results = await asyncio.gather(*[
+            _search_one_expanded(eq, emb) for eq, emb in zip(expanded_queries, expanded_embs)
+        ])
 
         merged = list(main_results)
         for exp_results in all_expanded_results:

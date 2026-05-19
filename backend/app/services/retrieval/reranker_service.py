@@ -153,13 +153,24 @@ class RerankerService:
     ) -> Tuple[List[Dict[str, Any]], List[float], List[float], float]:
         t0 = time.time()
 
-        candidate_texts = [self._format_candidate_text(c) for c in candidates]
-        doc_embeddings = embedding_service.encode(candidate_texts)
+        bge_similarities: List[float] = []
+        need_encode_idxs: List[int] = []
+        need_encode_texts: List[str] = []
 
-        bge_similarities = []
-        for doc_emb in doc_embeddings:
-            sim = self._cosine_similarity(query_embedding, doc_emb)
-            bge_similarities.append(sim)
+        for i, c in enumerate(candidates):
+            precomputed = c.get("cosine_similarity")
+            if precomputed is not None:
+                bge_similarities.append(float(precomputed))
+            else:
+                bge_similarities.append(0.0)
+                need_encode_idxs.append(i)
+                need_encode_texts.append(self._format_candidate_text(c))
+
+        if need_encode_texts:
+            doc_embeddings = embedding_service.encode(need_encode_texts)
+            for j, idx in enumerate(need_encode_idxs):
+                sim = self._cosine_similarity(query_embedding, doc_embeddings[j])
+                bge_similarities[idx] = sim
 
         bge_norm = min_max_normalize(bge_similarities)
         bm25_raw_scores = [c.get("bm25_raw_score", c.get("score", 0.0)) for c in candidates]
@@ -189,6 +200,8 @@ class RerankerService:
             title = c.get("title", "")
             content = c.get("content", "")
             text = f"{title}\n{content}" if title else content
+            if len(text) > settings.CROSS_ENCODER_MAX_CHARS:
+                text = text[: settings.CROSS_ENCODER_MAX_CHARS]
             pairs.append((title, text))
 
         scores = cross_reranker_service.compute_scores(query, pairs, normalize=True)
@@ -376,6 +389,11 @@ class RerankerService:
             key = self._chunk_key(r)
             bm25_score_map[key] = r["score"]
 
+        milvus_distance_map: Dict[str, float] = {}
+        for r in vector_results:
+            key = self._chunk_key(r)
+            milvus_distance_map[key] = r.get("score", 0)
+
         all_candidates: Dict[str, Dict[str, Any]] = {}
         for r in bm25_results:
             key = self._chunk_key(r)
@@ -391,6 +409,9 @@ class RerankerService:
         for c in candidates_list:
             key = self._chunk_key(c)
             c["bm25_raw_score"] = bm25_score_map.get(key, 0.0)
+            if key in milvus_distance_map:
+                c["milvus_distance"] = milvus_distance_map[key]
+                c["cosine_similarity"] = self._cosine_similarity_from_distance(milvus_distance_map[key])
 
         _log_stage("merge", f"{len(candidates_list)} unique candidates")
 

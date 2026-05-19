@@ -1,10 +1,11 @@
 <template>
-  <div class="chat-container" :class="{ 'has-messages': messages.length > 0 }">
-    <div class="chat-topbar">
-      <div class="topbar-brand">
-        <span class="topbar-text">HeatAI</span>
+  <div class="chat-page-wrapper" :class="{ 'panel-open': sourcePanelVisible }">
+    <div class="chat-container" :class="{ 'has-messages': messages.length > 0 }">
+      <div class="chat-topbar">
+        <div class="topbar-brand">
+          <span class="topbar-text">HeatAI</span>
+        </div>
       </div>
-    </div>
 
     <div class="chat-body" :class="{ 'is-empty': messages.length === 0 }">
       <div v-if="messages.length === 0" class="chat-welcome">
@@ -21,22 +22,28 @@
             :class="msg.role"
             :style="{ animationDelay: `${index * 0.05}s` }"
           >
-            <div class="message-bubble" :class="msg.role">
-              <div
-                v-if="msg.role === 'assistant'"
-                class="message-text markdown-body"
-                v-html="renderMarkdownCached(msg.content)"
-              ></div>
-              <div v-else class="message-text">{{ msg.content }}</div>
-              <div v-if="msg.images && msg.images.length > 0" class="message-image-list">
-                <img
-                  v-for="(img, i) in msg.images"
-                  :key="i"
-                  :src="img"
-                  alt="用户上传图片"
-                  class="message-image-thumb"
-                />
+            <div class="message-content">
+              <div class="message-bubble" :class="msg.role">
+                <div
+                  v-if="msg.role === 'assistant'"
+                  class="message-text markdown-body"
+                  v-html="renderMarkdownCached(msg.content)"
+                ></div>
+                <div v-else class="message-text">{{ msg.content }}</div>
+                <div v-if="msg.images && msg.images.length > 0" class="message-image-list">
+                  <img
+                    v-for="(img, i) in msg.images"
+                    :key="i"
+                    :src="img"
+                    alt="用户上传图片"
+                    class="message-image-thumb"
+                  />
+                </div>
               </div>
+              <MessageActions
+                :message="msg"
+                @show-source="handleShowSource"
+              />
             </div>
           </div>
 
@@ -185,6 +192,15 @@
         <p v-if="messages.length > 0" class="input-hint">内容由AI生成，仅供参考</p>
       </div>
     </div>
+    </div>
+
+    <Transition name="source-slide">
+      <SourcePanel
+        v-if="sourcePanelVisible"
+        :sources="currentSources"
+        @close="sourcePanelVisible = false"
+      />
+    </Transition>
   </div>
 </template>
 
@@ -199,9 +215,12 @@ import type { ChatMessage } from '@/types'
 import { useAuthStore } from '@/store/modules/auth'
 import { useChatStore } from '@/store/modules/chat'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
+import MessageActions from '@/components/chat/MessageActions.vue'
+import SourcePanel from '@/components/chat/SourcePanel.vue'
 import { useAudioPlayer } from '@/composables/chat/useAudioPlayer'
 import { renderMarkdownCached } from '@/composables/chat/useMarkdown'
 import { useImageUpload } from '@/composables/chat/useImageUpload'
+import type { SourceItem } from '@/composables/chat/useSourceExtractor'
 
 const props = defineProps<{
   sessionId?: string
@@ -221,6 +240,9 @@ const isSpeaking = ref(false)
 const voiceInputRef = ref<InstanceType<typeof VoiceInput>>()
 const isMultiLine = ref(false)
 const streamCreatedSessionId = ref<string | null>(null)
+
+const sourcePanelVisible = ref(false)
+const currentSources = ref<SourceItem[]>([])
 
 const { uploadedImages, handleImageSelect: _handleImageSelect, handlePaste: _handlePaste, removeImage: _removeImage } = useImageUpload()
 
@@ -448,6 +470,11 @@ function handleVoiceStop() {
   doStop(sessionKey.value)
 }
 
+function handleShowSource(sources: SourceItem[]) {
+  currentSources.value = sources
+  sourcePanelVisible.value = true
+}
+
 function onVoiceModeChange(value: boolean) {
   isVoiceMode.value = value
   if (!value) {
@@ -555,8 +582,35 @@ async function handleSend() {
 </script>
 
 <style scoped>
-.chat-container {
+/* ── Page Wrapper (chat + source panel side by side) ── */
+.chat-page-wrapper {
+  display: flex;
   height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Slide transition for source panel ─────────────── */
+.source-slide-enter-active,
+.source-slide-leave-active {
+  transition: width 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.25s ease;
+  overflow: hidden;
+}
+
+.source-slide-enter-from,
+.source-slide-leave-to {
+  width: 0 !important;
+  opacity: 0;
+}
+
+.source-slide-enter-to,
+.source-slide-leave-from {
+  width: 420px;
+  opacity: 1;
+}
+
+.chat-container {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-bg);
@@ -715,6 +769,20 @@ async function handleSend() {
   animation: fadeInUp 0.4s ease-out both;
 }
 
+.message-content {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+}
+
+.message-row.user .message-content {
+  align-items: flex-end;
+}
+
+.message-row.assistant .message-content {
+  align-items: flex-start;
+}
+
 .message-row.user {
   justify-content: flex-end;
 }
@@ -745,7 +813,7 @@ async function handleSend() {
   font-size: var(--font-size-base);
   line-height: var(--leading-relaxed);
   word-break: break-word;
-  max-width: 82%;
+  width: auto;
   transition: box-shadow var(--transition-base);
 }
 

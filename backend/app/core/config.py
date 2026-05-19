@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
     RERANKER_DEVICE: str = "cpu"
 
-    CHUNK_SIZE: int = 300
-    CHUNK_OVERLAP: int = 60
+    CHUNK_SIZE: int = 200
+    CHUNK_OVERLAP: int = 40
 
     MINHASH_THRESHOLD: float = 0.85
     MINHASH_NUM_PERM: int = 128
@@ -54,12 +54,18 @@ class Settings(BaseSettings):
     HYBRID_VECTOR_WEIGHT: float = 0.6
 
     RERANK_RECALL_TOP_K: int = 20
-    RERANK_COARSE_TOP_K: int = 10
+    RERANK_COARSE_TOP_K: int = 5
     RERANK_FINAL_TOP_K: int = 8
     RERANK_BM25_WEIGHT: float = 0.3
     RERANK_BGE_WEIGHT: float = 0.7
 
     SIMILARITY_THRESHOLD: float = 0.35
+
+    EXPANDED_SKIP_COUNT: int = 4
+    EXPANDED_MIN_MAIN_SCORE: float = 0.65
+
+    CROSS_ENCODER_MAX_CHARS: int = 400
+    CROSS_ENCODER_MAX_TOKENS: int = 350
 
     CONTEXT_MAX_CHUNK_CHARS: int = 800
     CONTEXT_MAX_TOTAL_CHARS: int = 6000
