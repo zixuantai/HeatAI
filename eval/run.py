@@ -155,7 +155,7 @@ def cmd_report(result_path: str, prefix: str = "dashboard"):
             scores_list = []
             valid_names = []
             for m in metric_names:
-                vals = [s.get(m, 0) for s in per_sample if s.get(m, 0) and s.get(m, 0) > 0]
+                vals = [s.get(m, 0) for s in per_sample]
                 if vals:
                     scores_list.append(vals)
                     valid_names.append(m)

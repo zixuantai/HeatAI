@@ -93,21 +93,43 @@ class EvalRunner:
         if self.dataset_path is None:
             raise ValueError("必须提供 dataset_path 或 dataset")
 
-        path = Path(self.dataset_path)
+        ds = self._load_from_path(self.dataset_path)
+        return self._apply_max_questions(ds)
+
+    def _reload_dataset(self) -> EvalDataset:
+        if self.dataset_path is not None:
+            ds = self._load_from_path(self.dataset_path)
+        elif self.dataset is not None:
+            ds = EvalDataset()
+            for r in self.dataset.records:
+                ds.records.append({
+                    "question": r.get("question", ""),
+                    "category": r.get("category", "未分类"),
+                    "ground_truth": r.get("ground_truth", ""),
+                    "metadata": dict(r.get("metadata", {}) or {}),
+                })
+        else:
+            raise ValueError("必须提供 dataset_path 或 dataset")
+        return self._apply_max_questions(ds)
+
+    @staticmethod
+    def _load_from_path(dataset_path: str) -> EvalDataset:
+        path = Path(dataset_path)
         if path.suffix == ".json":
-            ds = DatasetBuilder.from_json(str(path))
+            return DatasetBuilder.from_json(str(path))
         elif path.suffix == ".csv":
-            ds = DatasetBuilder.from_csv(str(path))
+            return DatasetBuilder.from_csv(str(path))
         elif path.suffix == ".parquet":
-            ds = DatasetBuilder.load_synthetic_dataset(str(path))
+            return DatasetBuilder.load_synthetic_dataset(str(path))
         else:
             raise ValueError(f"不支持的文件格式: {path.suffix}")
 
+    @staticmethod
+    def _apply_max_questions(ds: EvalDataset) -> EvalDataset:
         max_q = eval_settings.EVAL_MAX_QUESTIONS
         if max_q > 0 and len(ds) > max_q:
             logger.info(f"限制评估样本数: {len(ds)} -> {max_q}")
-            ds = ds.sample(max_q)
-
+            return ds.sample(max_q)
         return ds
 
     def _run_rag_pipeline(self, question: str) -> PipelineOutput:
@@ -224,7 +246,7 @@ class EvalRunner:
                 orig_fn = self.pipeline_fn
                 self.pipeline_fn = pipeline_fn
 
-                variant_ds = DatasetBuilder.from_json(self.dataset_path or "")
+                variant_ds = self._reload_dataset()
                 for i, record in enumerate(variant_ds):
                     output = self._run_rag_pipeline(record["question"])
                     record["answer"] = output.answer

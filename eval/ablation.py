@@ -161,7 +161,6 @@ def analyze_ragas_ablation(
         "no_bm25": "去掉 BM25（仅用 BGE 向量检索）",
         "no_fine_rank": "去掉 Cross-Encoder 精排",
         "no_context_enrich": "去掉相邻 chunk 上下文增强",
-        "no_long_term_memory": "去掉长期记忆注入",
     }
 
     for variant_name, result in ablated_results.items():

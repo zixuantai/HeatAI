@@ -172,7 +172,11 @@ class DatasetBuilder:
 
         if path.suffix == ".parquet":
             from datasets import load_dataset
-            ds = load_dataset("parquet", data_files=str(path))["train"]
+            loaded = load_dataset("parquet", data_files=str(path))
+            if isinstance(loaded, dict):
+                ds = loaded.get("train", list(loaded.values())[0])
+            else:
+                ds = loaded
         elif path.suffix == ".jsonl":
             records = []
             with open(path, "r", encoding="utf-8") as f:

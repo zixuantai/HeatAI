@@ -4,7 +4,7 @@ DashScope LLM 评判适配器
 
 使用方式：
     from eval.judge.dashscope_llm import DashScopeLLM
-    judge = DashScopeLLM(model="qwen3-max")
+    judge = DashScopeLLM(model="qwen3.6-plus")
 """
 
 import asyncio
@@ -27,11 +27,11 @@ class DashScopeLLM(BaseLLM):
     可被 Ragas 的 evaluate() 直接使用。
 
     关键参数：
-        model: DashScope 模型名，默认 qwen3-max
+        model: DashScope 模型名，默认 qwen3.6-plus
         temperature: 评判温度，建议 0.0（确保评判一致性）
     """
 
-    model: str = "qwen3-max"
+    model: str = "qwen3.6-plus"
     api_key: str = ""
     temperature: float = 0.0
     _executor: ThreadPoolExecutor | None = None

@@ -229,7 +229,7 @@ explorer eval_output/figures
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `DASHSCOPE_API_KEY` | - | **必填**，DashScope API 密钥 |
-| `DASHSCOPE_EVAL_MODEL` | `qwen3-max` | 评判 LLM 模型 |
+| `DASHSCOPE_EVAL_MODEL` | `qwen3.6-plus` | 评判 LLM 模型 |
 | `DASHSCOPE_EVAL_MODEL_LITE` | `qwen-plus` | 轻量评判模型（降低成本） |
 | `EVAL_MAX_QUESTIONS` | `0`（全部） | 限制评估样本数，0=不限制 |
 | `EVAL_OUTPUT_DIR` | `./eval_output` | 评估结果输出目录 |

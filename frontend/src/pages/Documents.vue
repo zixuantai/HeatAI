@@ -150,7 +150,7 @@
         <div class="section-header-left">
           <span class="section-title-text">
             <template v-if="isSearching">搜索结果：<strong>{{ total }}</strong> 个文档</template>
-            <template v-else>知识库文档（<strong>{{ total }}</strong>）</template>
+            <template v-else>知识库文档</template>
           </span>
           <button
             v-if="!batchMode"
@@ -239,6 +239,7 @@
         style="width: 100%"
         empty-text="暂无文档，请上传"
         highlight-current-row
+        @row-click="handleRowClick"
       >
         <el-table-column v-if="batchMode" width="55" align="center">
           <template #default="{ row }">
@@ -293,18 +294,17 @@
             :key="doc.id"
             class="tilt-container"
             :class="{ 'is-batch-mode': batchMode, 'is-selected': batchMode && selectedIds.has(doc.id) }"
-            @mousemove="(e) => handleTilt(e, doc.id)"
-            @mouseleave="(e) => handleTiltLeave(e, doc.id)"
           >
-            <!-- 批量勾选框 -->
-            <div v-if="batchMode" class="batch-card-check" @click.stop="toggleSelect(doc)">
-              <el-checkbox
-                :model-value="selectedIds.has(doc.id)"
-                size="large"
-              />
-            </div>
 
             <div class="doc-card tilt-card" :data-doc-id="doc.id" @click="handleRowClick(doc)">
+              <!-- 批量勾选框 -->
+              <div v-if="batchMode" class="batch-card-check" @click.stop="toggleSelect(doc)">
+                <el-checkbox
+                  :model-value="selectedIds.has(doc.id)"
+                  size="large"
+                />
+              </div>
+
               <!-- 角螺丝 -->
               <span class="neu-screw neu-screw-tl" />
               <span class="neu-screw neu-screw-tr" />
@@ -364,18 +364,17 @@
                   <span>{{ formatDateShort(doc.created_at) }}</span>
                 </div>
               </div>
-            </div>
 
-            <!-- 操作按钮：在卡片外部，不受 3D transform 影响 -->
-            <button
-              class="neu-btn-delete"
-              :class="{ 'is-deleting': deletingIds.has(doc.id) }"
-              :disabled="deletingIds.has(doc.id)"
-              @click.stop="handleDeleteClick(doc)"
-            >
-              <el-icon v-if="!deletingIds.has(doc.id)" :size="14"><Delete /></el-icon>
-              <el-icon v-else :size="14" class="is-loading"><Loading /></el-icon>
-            </button>
+              <button
+                class="neu-btn-delete"
+                :class="{ 'is-deleting': deletingIds.has(doc.id) }"
+                :disabled="deletingIds.has(doc.id)"
+                @click.stop="handleDeleteClick(doc)"
+              >
+                <el-icon v-if="!deletingIds.has(doc.id)" :size="14"><Delete /></el-icon>
+                <el-icon v-else :size="14" class="is-loading"><Loading /></el-icon>
+              </button>
+            </div>
           </div>
 
           <el-empty
@@ -530,7 +529,8 @@ function toggleSelect(doc: DocumentInfo) {
 function toggleSelectAllPage(val: boolean) {
   isPageAllSelected.value = val
   if (val) {
-    const newSet = new Set(selectedIds.value)
+    allKbIds.value = []
+    const newSet = new Set<string>()
     documents.value.forEach(d => newSet.add(d.id))
     selectedIds.value = newSet
   } else {
@@ -542,6 +542,7 @@ function toggleSelectAllPage(val: boolean) {
 
 async function toggleSelectAllKB(val: boolean) {
   if (val) {
+    isPageAllSelected.value = false
     allKbIdsLoading.value = true
     try {
       const res = await getAllDocumentIdsApi(isSearching.value ? searchQuery.value.trim() : undefined)
@@ -663,6 +664,10 @@ async function handleDeleteClick(doc: DocumentInfo) {
 }
 
 async function handleRowClick(row: DocumentInfo) {
+  if (batchMode.value) {
+    toggleSelect(row)
+    return
+  }
   await loadDocumentChunks(row)
 }
 
@@ -699,37 +704,6 @@ function handleSizeChange(size: number) {
   pageSize.value = size
   currentPage.value = 1
   handleLoad(isSearching.value ? searchQuery.value.trim() : undefined)
-}
-
-// ── 3D Tilt 倾斜效果 ──────────────────────────────
-function handleTilt(e: MouseEvent, docId: string) {
-  const card = (e.currentTarget as HTMLElement).querySelector('.tilt-card') as HTMLElement
-  if (!card) return
-
-  const rect = card.getBoundingClientRect()
-  const x = e.clientX - rect.left
-  const y = e.clientY - rect.top
-
-  const centerX = rect.width / 2
-  const centerY = rect.height / 2
-
-  const rotateX = ((y - centerY) / centerY) * -8
-  const rotateY = ((x - centerX) / centerX) * 8
-
-  card.style.transform = `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateZ(8px)`
-  card.style.boxShadow = `
-    ${10 + Math.abs(rotateY) * 0.8}px ${10 + Math.abs(rotateX) * 0.8}px 22px var(--neu-shadow-dark),
-    ${-10 - Math.abs(rotateY) * 0.8}px ${-10 - Math.abs(rotateX) * 0.8}px 22px var(--neu-shadow-light),
-    inset 1px 1px 0 rgba(255,255,255,0.6)
-  `
-}
-
-function handleTiltLeave(e: MouseEvent, docId: string) {
-  const card = (e.currentTarget as HTMLElement).querySelector('.tilt-card') as HTMLElement
-  if (!card) return
-
-  card.style.transform = 'perspective(800px) rotateX(0deg) rotateY(0deg) translateZ(0)'
-  card.style.boxShadow = ''
 }
 
 onMounted(() => {
@@ -1266,7 +1240,7 @@ onMounted(() => {
   grid-column: 1 / -1;
 }
 
-/* 3D Tilt 外层容器 */
+/* 3D 立体放大外层容器 */
 .tilt-container {
   perspective: 800px;
   position: relative;
@@ -1281,10 +1255,17 @@ onMounted(() => {
   padding: 24px 20px 68px;
   cursor: pointer;
   box-shadow: var(--neu-card);
-  will-change: transform;
   overflow: hidden;
   height: 210px;
-  transform-style: flat;
+  transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.35s ease-out;
+}
+
+.doc-card:hover {
+  transform: scale(1.04) translateZ(18px);
+  box-shadow:
+    8px 8px 20px var(--neu-shadow-dark),
+    -8px -8px 20px var(--neu-shadow-light),
+    0 12px 28px rgba(0, 0, 0, 0.12);
 }
 
 .doc-card::after {
@@ -1408,8 +1389,8 @@ onMounted(() => {
 
 .neu-btn-delete {
   position: absolute;
-  bottom: 28px;
-  right: 12px;
+  bottom: 16px;
+  right: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1451,6 +1432,10 @@ onMounted(() => {
 
 .documents-section :deep(.el-table__body tr:hover > td) {
   background-color: rgba(79, 70, 229, 0.03) !important;
+}
+
+.documents-section :deep(.el-table__body tr.current-row > td) {
+  background-color: rgba(79, 70, 229, 0.05) !important;
 }
 
 .documents-section :deep(.el-checkbox__input.is-checked .el-checkbox__inner),

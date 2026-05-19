@@ -206,15 +206,14 @@ html, body {
   box-shadow: var(--neu-glow);
 }
 
-/* 3D Tilt 容器 — 开启透视 */
+/* 3D 立体放大容器 — 开启透视 */
 .tilt-container {
   perspective: 800px;
   transform-style: preserve-3d;
 }
 
 .tilt-card {
-  will-change: transform;
-  transition: box-shadow var(--transition-slow);
+  transition: transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.35s ease-out;
   transform-style: preserve-3d;
 }
 

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class EvalSettings(BaseSettings):
     DASHSCOPE_API_KEY: str = ""
-    DASHSCOPE_EVAL_MODEL: str = "qwen3-max"
+    DASHSCOPE_EVAL_MODEL: str = "qwen3.6-plus"
     DASHSCOPE_EVAL_MODEL_LITE: str = "qwen-plus"
 
     EVAL_MAX_QUESTIONS: int = 0
@@ -21,7 +21,6 @@ class EvalSettings(BaseSettings):
         "no_bm25",
         "no_fine_rank",
         "no_context_enrich",
-        "no_long_term_memory",
     ]
 
     EVAL_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"

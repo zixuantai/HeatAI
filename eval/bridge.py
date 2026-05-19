@@ -42,22 +42,22 @@ for _env_path in [
             pass
 
 from backend.app.core.config import settings
-from backend.app.services.reranker_service import reranker_service
-from backend.app.services.embedding import embedding_service, BGE_QUERY_INSTRUCTION
-from backend.app.services.bm25_service import bm25_service
-from backend.app.services.milvus_service import milvus_service
+from backend.app.services.retrieval.reranker_service import reranker_service
+from backend.app.services.retrieval.embedding import embedding_service, BGE_QUERY_INSTRUCTION
+from backend.app.services.retrieval.bm25_service import bm25_service
+from backend.app.services.retrieval.milvus_service import milvus_service
 
 logger = logging.getLogger(__name__)
 
 
 def _ensure_models_loaded():
     embedding_service.ensure_loaded()
-    from backend.app.services.cross_reranker_service import cross_reranker_service
+    from backend.app.services.retrieval.cross_reranker_service import cross_reranker_service
     cross_reranker_service.ensure_loaded()
 
 
 async def _rewrite_query(question: str) -> dict:
-    from backend.app.services.query_rewriter import query_rewriter
+    from backend.app.services.chat.engine.query_rewriter import query_rewriter
 
     skip = query_rewriter.should_skip_rewrite(question)
     if skip:
@@ -124,7 +124,7 @@ async def _run_full_pipeline(
     enable_fine_rank: bool = True,
     enable_context_enrich: bool = True,
 ) -> dict:
-    from backend.app.services.chat_service import chat_service
+    from backend.app.services.chat.service import chat_service
 
     if enable_rewrite:
         rewrite_result = await _rewrite_query(question)
@@ -137,17 +137,14 @@ async def _run_full_pipeline(
 
     search_query = rewrite_result["rewritten_query"]
 
-    if enable_bm25:
+    if enable_bm25 and enable_fine_rank:
         search_results = await asyncio.to_thread(
             reranker_service.search_and_rerank, search_query
         )
-    else:
-        search_results = await _search_vector_only(search_query)
-
-    if enable_fine_rank and enable_bm25:
-        pass
-    elif not enable_fine_rank:
-        search_results = _coarse_rank_only(search_query, search_results)
+    elif enable_bm25 and not enable_fine_rank:
+        search_results = await _search_bm25_vector_coarse_only(search_query)
+    elif not enable_bm25:
+        search_results = await _search_vector_only(search_query, enable_fine_rank=enable_fine_rank)
 
     if enable_context_enrich:
         pass
@@ -180,14 +177,11 @@ async def _run_full_pipeline(
     }
 
 
-async def _search_vector_only(query: str) -> list:
+async def _search_vector_only(query: str, enable_fine_rank: bool = True) -> list:
     query_for_vector = f"{BGE_QUERY_INSTRUCTION}{query}"
     query_embedding = embedding_service.encode_single(query_for_vector)
     vector_results = milvus_service.search(query_embedding, top_k=settings.RERANK_RECALL_TOP_K)
     vector_results = reranker_service.filter_by_threshold(vector_results)
-
-    from backend.app.services.reranker_service import RerankerService
-    import numpy as np
 
     candidates = vector_results
     if not candidates:
@@ -208,27 +202,76 @@ async def _search_vector_only(query: str) -> list:
         coarse_top_k=coarse_top_k,
     )
 
-    fine_scores, _ = self._fine_rank(query, coarse_results)
-    effective_top_k = min(top_k, len(fine_scores))
-
-    results = []
-    for rank, (orig_idx, cross_score) in enumerate(fine_scores[:effective_top_k]):
-        entry = dict(coarse_results[orig_idx])
-        entry["score"] = round(cross_score, 6)
-        entry["retriever"] = "rerank_vector_only"
-        results.append(entry)
+    if enable_fine_rank:
+        fine_scores, _ = self._fine_rank(query, coarse_results)
+        effective_top_k = min(top_k, len(fine_scores))
+        results = []
+        for rank, (orig_idx, cross_score) in enumerate(fine_scores[:effective_top_k]):
+            entry = dict(coarse_results[orig_idx])
+            entry["score"] = round(cross_score, 6)
+            entry["retriever"] = "rerank_vector_only"
+            results.append(entry)
+    else:
+        effective_top_k = min(top_k, len(coarse_results))
+        results = list(coarse_results[:effective_top_k])
+        for r in results:
+            r["retriever"] = r.get("retriever", "coarse_vector_only")
 
     results = self.enrich_with_adjacent_chunks(results)
     return results
 
 
-def _coarse_rank_only(query: str, results: list) -> list:
-    if not results:
+async def _search_bm25_vector_coarse_only(search_query: str) -> list:
+    bm25_results = await asyncio.to_thread(
+        bm25_service.search, search_query, settings.RERANK_RECALL_TOP_K
+    )
+    bm25_results = reranker_service.filter_by_threshold(bm25_results)
+
+    query_for_vector = f"{BGE_QUERY_INSTRUCTION}{search_query}"
+    query_embedding = await asyncio.to_thread(
+        embedding_service.encode_single, query_for_vector
+    )
+    vector_results = await asyncio.to_thread(
+        milvus_service.search, query_embedding, settings.RERANK_RECALL_TOP_K
+    )
+    vector_results = reranker_service.filter_by_threshold(vector_results)
+
+    seen_keys = set()
+    candidates = []
+    for r in bm25_results:
+        key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
+        seen_keys.add(key)
+        candidates.append(r)
+    for r in vector_results:
+        key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
+        if key not in seen_keys:
+            seen_keys.add(key)
+            candidates.append(r)
+
+    if not candidates:
         return []
-    top_n = min(settings.RERANK_FINAL_TOP_K, len(results))
-    for r in results[:top_n]:
-        r["retriever"] = r.get("retriever", "coarse_only")
-    return results[:top_n]
+
+    self = reranker_service
+    top_k = settings.RERANK_FINAL_TOP_K
+    coarse_top_k = min(settings.RERANK_COARSE_TOP_K, len(candidates))
+
+    self._mark_temporal_info(candidates)
+
+    coarse_results, _, _, _ = self._coarse_rank(
+        query=search_query,
+        candidates=candidates,
+        bm25_weight=settings.RERANK_COARSE_BM25_WEIGHT,
+        bge_weight=settings.RERANK_COARSE_BGE_WEIGHT,
+        query_embedding=query_embedding,
+        coarse_top_k=coarse_top_k,
+    )
+
+    effective_top_k = min(top_k, len(coarse_results))
+    results = list(coarse_results[:effective_top_k])
+    for r in results:
+        r["retriever"] = r.get("retriever", "coarse_bm25_vector")
+
+    return results
 
 
 def full_pipeline_fn(question: str) -> dict:

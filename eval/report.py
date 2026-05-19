@@ -636,7 +636,7 @@ class EvalReport:
                 scores_list = []
                 valid_names = []
                 for m in metric_names:
-                    vals = [getattr(s, m, 0) for s in ragas_result.scores if getattr(s, m, 0) > 0]
+                    vals = [getattr(s, m, 0) for s in ragas_result.scores]
                     if vals:
                         scores_list.append(vals)
                         valid_names.append(m)

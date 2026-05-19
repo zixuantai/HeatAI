@@ -135,7 +135,7 @@ class RagasEvaluator:
         from eval.dataset.builder import DatasetBuilder
 
         ds = DatasetBuilder.from_json("eval_data/questions.json")
-        judge = create_judge_llm("qwen3-max")
+        judge = create_judge_llm()
         evaluator = RagasEvaluator(judge_llm=judge)
         result = evaluator.evaluate(eval_dataset=ds)
     """
@@ -227,9 +227,7 @@ class RagasEvaluator:
             "llm": judge,
         }
 
-        need_embedding = any(m in metrics for m in ("answer_similarity", "answer_correctness"))
-        if need_embedding:
-            eval_kwargs["embeddings"] = self._get_embedding()
+        eval_kwargs["embeddings"] = self._get_embedding()
 
         try:
             result_df = ragas_evaluate(**eval_kwargs)

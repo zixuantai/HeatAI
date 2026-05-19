@@ -121,19 +121,32 @@ def cmd_report():
 
 def _preload_models():
     import threading
+    load_error = [None]
+    load_done = threading.Event()
+
     def _load():
-        from backend.app.services.embedding import embedding_service
-        embedding_service.ensure_loaded()
-        from backend.app.services.cross_reranker_service import cross_reranker_service
-        cross_reranker_service.ensure_loaded()
+        try:
+            from backend.app.services.retrieval.embedding import embedding_service
+            embedding_service.ensure_loaded()
+            from backend.app.services.retrieval.cross_reranker_service import cross_reranker_service
+            cross_reranker_service.ensure_loaded()
+        except Exception as e:
+            load_error[0] = e
+        finally:
+            load_done.set()
+
     t = threading.Thread(target=_load, daemon=True)
     t.start()
-    t.join(timeout=120)
+    if not load_done.wait(timeout=120):
+        logger.warning("模型预加载超时（120s），将尝试继续运行")
+        return
+    if load_error[0] is not None:
+        logger.warning(f"模型预加载失败: {load_error[0]}，将尝试继续运行")
 
 
 def _build_bm25():
-    from backend.app.services.milvus_service import milvus_service
-    from backend.app.services.bm25_service import bm25_service
+    from backend.app.services.retrieval.milvus_service import milvus_service
+    from backend.app.services.retrieval.bm25_service import bm25_service
     if bm25_service.chunk_count > 0:
         logger.info(f"BM25 index ready: {bm25_service.chunk_count} chunks")
         return
