@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.models.document import Document
 from app.services.processing.pipeline import ProcessingPipeline
 from app.services.processing.corpus_dedup_service import CorpusDedupService
+from app.services.processing.classifier import document_classifier
 from app.services.retrieval.bm25_service import bm25_service
 from app.services.retrieval.embedding import embedding_service
 from app.services.retrieval.reranker_service import reranker_service
@@ -84,6 +85,19 @@ class DocumentService:
             parsed_text, title = pipeline.parser.parse(file_bytes, original_filename)
             if not parsed_text or not parsed_text.strip():
                 raise ValueError("文档解析结果为空")
+
+            try:
+                result = await document_classifier.classify(title, parsed_text)
+                category = result.get("category")
+                if category:
+                    doc_record.category = category
+                    await db.commit()
+                    await db.refresh(doc_record)
+                    logger.info(f"[文档分类] 文档 {original_filename} 分类为: {category} (置信度: {result.get('confidence')})")
+                else:
+                    logger.info(f"[文档分类] 文档 {original_filename} 未匹配到已知类别: {result.get('reason')}")
+            except Exception as class_err:
+                logger.warning(f"[文档分类] 分类过程异常，继续处理: {class_err}")
 
             corpus_dedup = CorpusDedupService(
                 threshold=settings.MINHASH_THRESHOLD,
@@ -322,6 +336,43 @@ class DocumentService:
             logger.warning(f"BM25 批量删除失败: {e}")
 
         logger.info(f"批量清理完成: {len(cleanup_list)} 个文档")
+
+    @staticmethod
+    async def get_stats(
+        db: AsyncSession,
+        user_id: str,
+    ) -> dict:
+        from sqlalchemy import case
+
+        result = await db.execute(
+            select(func.count(Document.id)).where(Document.user_id == user_id)
+        )
+        total = result.scalar() or 0
+
+        result = await db.execute(
+            select(Document.file_type, func.count(Document.id))
+            .where(Document.user_id == user_id)
+            .group_by(Document.file_type)
+            .order_by(func.count(Document.id).desc())
+        )
+        by_file_type = [{"type": row[0], "count": row[1]} for row in result.all()]
+
+        result = await db.execute(
+            select(
+                Document.category,
+                func.count(Document.id).label("count"),
+            )
+            .where(Document.user_id == user_id)
+            .group_by(Document.category)
+            .order_by(func.count(Document.id).desc())
+        )
+        by_category = [{"category": row[0] or "未分类", "count": row[1]} for row in result.all()]
+
+        return {
+            "total": total,
+            "by_file_type": by_file_type,
+            "by_category": by_category,
+        }
 
     @staticmethod
     async def get_chunks(db: AsyncSession, document_id: str, user_id: str) -> List[Dict[str, Any]]:

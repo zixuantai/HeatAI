@@ -162,3 +162,19 @@ export interface SearchResponse {
   query: string
   results: SearchResult[]
 }
+
+export interface DocTypeStat {
+  type: string
+  count: number
+}
+
+export interface CategoryStat {
+  category: string
+  count: number
+}
+
+export interface DocumentStats {
+  total: number
+  by_file_type: DocTypeStat[]
+  by_category: CategoryStat[]
+}

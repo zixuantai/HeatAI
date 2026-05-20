@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT"))
+        await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS category VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS minhash_sig TEXT"))
         await conn.commit()
 

@@ -12,6 +12,7 @@ from app.schemas.document import (
     RerankResult,
     ChunkInfo,
     BatchDeleteRequest,
+    DocumentStatsResponse,
 )
 from app.services.document_service import document_service
 from app.services.processing.parser import DocumentParser
@@ -131,6 +132,22 @@ async def list_all_document_ids(
         search=search,
     )
     return {"code": 0, "message": "success", "data": {"ids": ids, "total": len(ids)}}
+
+
+@router.get("/stats", response_model=dict)
+async def get_document_stats(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    stats = await document_service.get_stats(
+        db=db,
+        user_id=str(current_user.id),
+    )
+    return {
+        "code": 0,
+        "message": "success",
+        "data": stats,
+    }
 
 
 @router.get("/{document_id}", response_model=dict)

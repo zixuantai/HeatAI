@@ -75,5 +75,21 @@ class RerankResult(BaseModel):
     retriever: str = "rerank"
 
 
+class DocTypeStat(BaseModel):
+    type: str
+    count: int
+
+
+class CategoryStat(BaseModel):
+    category: str
+    count: int
+
+
+class DocumentStatsResponse(BaseModel):
+    total: int
+    by_file_type: list[DocTypeStat]
+    by_category: list[CategoryStat]
+
+
 class BatchDeleteRequest(BaseModel):
     ids: list[str] = Field(..., min_length=1, max_length=200)

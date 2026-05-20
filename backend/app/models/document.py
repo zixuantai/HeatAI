@@ -18,6 +18,7 @@ class Document(Base):
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     minhash_sig: Mapped[str | None] = mapped_column(Text, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(20), default="processing")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -1,5 +1,12 @@
 import { request } from '@/utils/request'
-import type { DocumentInfo, DocumentListResponse, DocumentChunksResponse, SearchResponse } from '@/types'
+import type { DocumentInfo, DocumentListResponse, DocumentChunksResponse, SearchResponse, DocumentStats } from '@/types'
+
+export function getDocumentStatsApi(): Promise<DocumentStats> {
+  return request<DocumentStats>({
+    method: 'GET',
+    url: '/documents/stats'
+  })
+}
 
 export function getDocumentsApi(limit = 50, offset = 0, search?: string): Promise<DocumentListResponse> {
   return request<DocumentListResponse>({

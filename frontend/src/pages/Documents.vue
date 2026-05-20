@@ -40,7 +40,77 @@
       <span>上传文档后需经过解析、分块、向量化等处理步骤，请耐心等待</span>
     </div>
 
-    <!-- ── 上传进度 ────────────────────────────── -->
+    <!-- ── 知识库文档数据展示 ────────────────────── -->
+    <div class="stats-section neu-card" v-if="statsData && statsData.total > 0">
+      <h3 class="stats-title">知识库文档数据展示</h3>
+      <div class="stats-charts">
+        <!-- 文档类型分布 -->
+        <div class="stats-chart-item">
+          <h4 class="chart-label">文档类型分布</h4>
+          <div class="donut-wrapper">
+            <svg viewBox="0 0 160 160" class="donut-chart">
+              <circle
+                v-for="(seg, i) in fileTypeSegments"
+                :key="i"
+                cx="80" cy="80" r="54"
+                fill="none"
+                stroke-width="26"
+                :stroke="seg.color"
+                :stroke-dasharray="seg.dashArray"
+                :stroke-dashoffset="seg.dashOffset"
+                stroke-linecap="butt"
+                transform="rotate(-90 80 80)"
+              />
+              <circle cx="80" cy="80" r="41" fill="var(--color-bg)" />
+              <text x="80" y="76" text-anchor="middle" class="donut-center-num">{{ statsData.total }}</text>
+              <text x="80" y="94" text-anchor="middle" class="donut-center-label">文档总数</text>
+            </svg>
+            <div class="donut-legend">
+              <div v-for="item in statsData.by_file_type" :key="item.type" class="legend-item">
+                <span class="legend-dot" :style="{ background: getFileTypeColor(item.type) }"></span>
+                <span class="legend-name">{{ formatFileTypeLabel(item.type) }}</span>
+                <span class="legend-count">{{ item.count }}</span>
+              </div>
+              <div v-if="statsData.by_file_type.length === 0" class="legend-empty">暂无数据</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 文档分类分布 -->
+        <div class="stats-chart-item">
+          <h4 class="chart-label">文档分类分布</h4>
+          <div class="donut-wrapper">
+            <svg viewBox="0 0 160 160" class="donut-chart">
+              <circle
+                v-for="(seg, i) in categorySegments"
+                :key="i"
+                cx="80" cy="80" r="54"
+                fill="none"
+                stroke-width="26"
+                :stroke="seg.color"
+                :stroke-dasharray="seg.dashArray"
+                :stroke-dashoffset="seg.dashOffset"
+                stroke-linecap="butt"
+                transform="rotate(-90 80 80)"
+              />
+              <circle cx="80" cy="80" r="41" fill="var(--color-bg)" />
+              <text x="80" y="76" text-anchor="middle" class="donut-center-num">{{ statsData.total }}</text>
+              <text x="80" y="94" text-anchor="middle" class="donut-center-label">文档总数</text>
+            </svg>
+            <div class="donut-legend">
+              <div v-for="(item, i) in statsData.by_category" :key="item.category" class="legend-item">
+                <span class="legend-dot" :style="{ background: categoryColors[i % categoryColors.length] }"></span>
+                <span class="legend-name">{{ item.category }}</span>
+                <span class="legend-count">{{ item.count }}</span>
+              </div>
+              <div v-if="statsData.by_category.length === 0" class="legend-empty">暂无分类数据</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 搜索区 ──────────────────────────────── -->
     <div v-if="uploadingFiles.length > 0" class="upload-progress-section">
       <div class="upload-progress-summary neu-card" @click="uploadProgressCollapsed = !uploadProgressCollapsed">
         <div class="summary-left">
@@ -429,9 +499,9 @@ import {
   FolderOpened, UploadFilled, Document, Delete, Refresh, Search, InfoFilled,
   Grid, List, Coin, Clock, Close, CircleCheckFilled, Loading, CircleCheck, CircleClose, ArrowDown
 } from '@element-plus/icons-vue'
-import type { DocumentInfo } from '@/types'
+import type { DocumentInfo, DocumentStats } from '@/types'
 import { useDocuments } from '@/composables/documents/useDocuments'
-import { getAllDocumentIdsApi } from '@/api/documents'
+import { getAllDocumentIdsApi, getDocumentStatsApi } from '@/api/documents'
 import {
   uploadingFiles,
   activeUploadingFiles,
@@ -467,6 +537,7 @@ const {
 
 useUploadLifecycle(async () => {
   await loadDocuments(pageSize.value, 1)
+  loadStats()
 })
 
 const currentPage = ref(1)
@@ -475,6 +546,67 @@ const pageSize = ref(12)
 const searchQuery = ref('')
 const isSearching = ref(false)
 const viewMode = ref<'card' | 'table'>('card')
+
+// 统计图表数据
+const statsData = ref<DocumentStats | null>(null)
+
+const categoryColors = [
+  '#4F46E5', '#7C3AED', '#EC4899', '#F59E0B', '#10B981',
+  '#06B6D4', '#EF4444', '#8B5CF6', '#F97316', '#14B8A6',
+]
+
+const CIRCLE_LENGTH = 2 * Math.PI * 54
+
+function buildSegments(items: { count: number }[], colorGetter: (i: number) => string) {
+  const total = items.reduce((s, it) => s + it.count, 0)
+  if (total === 0) return []
+  let offset = 0
+  return items.map((item, i) => {
+    const ratio = item.count / total
+    const dashLen = ratio * CIRCLE_LENGTH
+    const seg = {
+      color: colorGetter(i),
+      dashArray: `${dashLen} ${CIRCLE_LENGTH - dashLen}`,
+      dashOffset: -offset,
+    }
+    offset += dashLen
+    return seg
+  })
+}
+
+const fileTypeSegments = computed(() => {
+  if (!statsData.value) return []
+  return buildSegments(statsData.value.by_file_type, (i) =>
+    getFileTypeColor(statsData.value!.by_file_type[i].type)
+  )
+})
+
+const categorySegments = computed(() => {
+  if (!statsData.value) return []
+  return buildSegments(statsData.value.by_category, (i) =>
+    categoryColors[i % categoryColors.length]
+  )
+})
+
+function formatFileTypeLabel(type: string): string {
+  const map: Record<string, string> = {
+    pdf: 'PDF', docx: 'Word', doc: 'Word', html: 'HTML', htm: 'HTML',
+    txt: 'TXT', md: 'Markdown', csv: 'CSV', json: 'JSON',
+    xlsx: 'Excel', xls: 'Excel', pptx: 'PPT', ppt: 'PPT',
+    png: '图片', jpg: '图片', jpeg: '图片', bmp: '图片', tiff: '图片', webp: '图片',
+    epub: 'EPUB',
+  }
+  return map[type.toLowerCase()] || type.toUpperCase()
+}
+
+async function loadStats() {
+  try {
+    const data = await getDocumentStatsApi()
+    statsData.value = data
+  } catch {
+    statsData.value = null
+  }
+}
 
 // 批量删除状态
 const batchMode = ref(false)
@@ -708,6 +840,7 @@ function handleSizeChange(size: number) {
 
 onMounted(() => {
   handleLoad()
+  loadStats()
 })
 </script>
 
@@ -795,6 +928,111 @@ onMounted(() => {
 .search-section {
   padding: 22px 24px;
   margin-bottom: 20px;
+}
+
+/* ── Stats Section (知识库文档数据展示) ──────────── */
+.stats-section {
+  padding: 24px 28px;
+  margin-bottom: 20px;
+}
+
+.stats-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-main);
+  margin: 0 0 20px;
+  letter-spacing: 0.02em;
+}
+
+.stats-charts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+}
+
+.stats-chart-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chart-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  margin: 0 0 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.donut-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.donut-chart {
+  width: 140px;
+  height: 140px;
+  flex-shrink: 0;
+  filter: drop-shadow(2px 4px 8px rgba(0, 0, 0, 0.08));
+}
+
+.donut-center-num {
+  font-family: var(--font-family);
+  font-size: 20px;
+  font-weight: 800;
+  fill: var(--color-text-main);
+}
+
+.donut-center-label {
+  font-family: var(--font-family);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  fill: var(--color-text-muted);
+}
+
+.donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 90px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-name {
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+  flex: 1;
+}
+
+.legend-count {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs);
+  background: var(--color-border-light);
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+}
+
+.legend-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: 4px 0;
 }
 
 .search-bar {
@@ -1648,6 +1886,11 @@ onMounted(() => {
   .doc-cards-wrapper {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .stats-charts {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1693,6 +1936,11 @@ onMounted(() => {
   .section-header-right {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .donut-wrapper {
+    flex-direction: column;
+    gap: 16px;
   }
 }
 
