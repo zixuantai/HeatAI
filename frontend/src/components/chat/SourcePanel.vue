@@ -40,7 +40,7 @@
               </div>
             </div>
 
-            <h3 class="source-card-name" :title="source.title">{{ source.title }}</h3>
+            <h3 class="source-card-name" :title="docInfoCache[index]?.original_filename || source.title">{{ docInfoCache[index]?.original_filename || source.title }}</h3>
 
             <div class="source-card-info">
               <div class="source-info-item" v-if="docInfoCache[index]">
@@ -88,9 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { getDocumentsApi } from '@/api/documents'
-import { getDocumentChunksApi } from '@/api/documents'
+import { ref, reactive, watch } from 'vue'
+import { getDocumentsApi, getDocumentApi, getDocumentChunksApi } from '@/api/documents'
 import type { SourceItem } from '@/composables/chat/useSourceExtractor'
 import type { ChunkInfo, DocumentInfo } from '@/types'
 
@@ -112,6 +111,58 @@ function close() {
   emit('close')
 }
 
+async function loadDocInfo(index: number) {
+  const source = props.sources[index]
+  if (!source || docInfoCache[index] !== undefined) return
+
+  let matched: DocumentInfo | null = null
+
+  if (source.documentId) {
+    try {
+      console.log('[SourcePanel] loadDocInfo - 通过documentId查询:', source.documentId)
+      matched = await getDocumentApi(source.documentId)
+      console.log('[SourcePanel] loadDocInfo - 通过documentId查询成功:', matched?.original_filename)
+    } catch {
+      console.log('[SourcePanel] loadDocInfo - 通过documentId查询失败')
+      matched = null
+    }
+  }
+
+  if (!matched) {
+    try {
+      console.log('[SourcePanel] loadDocInfo - 通过title搜索:', source.title)
+      const result = await getDocumentsApi(200, 0, source.title)
+      matched = result.items.find(
+        item => item.original_filename === source.title ||
+          item.filename === source.title ||
+          item.original_filename.includes(source.title) ||
+          source.title.includes(item.original_filename)
+      ) || null
+      console.log('[SourcePanel] loadDocInfo - title搜索结果:', matched?.original_filename || '未找到')
+    } catch {
+      console.log('[SourcePanel] loadDocInfo - title搜索失败')
+      matched = null
+    }
+  }
+
+  if (matched) {
+    console.log('[SourcePanel] loadDocInfo - 文档匹配成功:', matched.original_filename)
+    docInfoCache[index] = matched
+  } else {
+    console.log('[SourcePanel] loadDocInfo - 未找到匹配文档, 将显示原始title:', source.title)
+  }
+}
+
+watch(() => props.sources, (newSources) => {
+  console.log('[SourcePanel] watch触发, sources数量:', newSources?.length || 0)
+  if (newSources && newSources.length > 0) {
+    for (let i = 0; i < newSources.length; i++) {
+      console.log('[SourcePanel] 开始加载文档信息, index:', i, 'title:', newSources[i].title, 'documentId:', newSources[i].documentId)
+      loadDocInfo(i)
+    }
+  }
+}, { immediate: true })
+
 async function toggleExpand(index: number, title: string) {
   if (expandedIndex.value === index) {
     expandedIndex.value = null
@@ -126,13 +177,26 @@ async function toggleExpand(index: number, title: string) {
 
   loadingIndex.value = index
   try {
-    const result = await getDocumentsApi(200, 0, title)
-    const matched = result.items.find(
-      item => item.original_filename === title ||
-        item.filename === title ||
-        item.original_filename.includes(title) ||
-        title.includes(item.original_filename)
-    )
+    let matched: DocumentInfo | null = null
+    const source = props.sources[index]
+
+    if (source?.documentId) {
+      try {
+        matched = await getDocumentApi(source.documentId)
+      } catch {
+        matched = null
+      }
+    }
+
+    if (!matched) {
+      const result = await getDocumentsApi(200, 0, title)
+      matched = result.items.find(
+        item => item.original_filename === title ||
+          item.filename === title ||
+          item.original_filename.includes(title) ||
+          title.includes(item.original_filename)
+      ) || null
+    }
 
     if (!matched) {
       loadErrors.value[index] = '未找到匹配的文档'

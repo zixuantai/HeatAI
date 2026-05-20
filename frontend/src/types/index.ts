@@ -49,6 +49,11 @@ export interface ApiResponse<T = unknown> {
   data: T
 }
 
+export interface SourceRef {
+  title: string
+  document_id: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
@@ -57,6 +62,7 @@ export interface ChatMessage {
   toolCalls?: ToolCallInfo[]
   toolResults?: ToolResultInfo[]
   images?: string[]
+  sources?: SourceRef[]
 }
 
 export interface ToolCallInfo {

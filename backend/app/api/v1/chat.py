@@ -171,12 +171,21 @@ async def stream_chat(
 
                 if need_kb:
                     yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
+                    logger.info(f"[对话] 知识库查询模式, need_kb=True, 开始检索")
                     search_query = rewrite_result["rewritten_query"]
                     search_results = await chat_pipeline.search_knowledge_base(search_query)
                     search_results = await _merge_expanded(search_results, rewrite_result)
                 else:
                     logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
                     search_results = []
+
+                if search_results:
+                    source_docs = _extract_source_documents(search_results)
+                    logger.info(f"[对话] 提取来源文档: {len(source_docs)} 个, titles: {[d['title'] for d in source_docs]}")
+                    if source_docs:
+                        yield f"data: {json.dumps({'src': source_docs})}\n\n"
+                else:
+                    logger.info("[对话] 无搜索结果，不发送来源事件")
 
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
 
@@ -233,6 +242,20 @@ def _event_to_sse(event: dict) -> dict:
     elif event_type == "error":
         return {"error": event["content"]}
     return {}
+
+
+def _extract_source_documents(search_results: list) -> list:
+    seen = set()
+    sources = []
+    for r in search_results:
+        doc_id = r.get("document_id", "")
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            sources.append({
+                "title": r.get("title", ""),
+                "document_id": doc_id,
+            })
+    return sources
 
 
 @router.get("/sessions", response_model=dict)

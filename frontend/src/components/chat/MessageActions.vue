@@ -46,6 +46,7 @@ import type { ChatMessage } from '@/types'
 import { useClipboard } from '@/composables/chat/useClipboard'
 import { useVoicePlayback } from '@/composables/chat/useVoicePlayback'
 import { extractSources } from '@/composables/chat/useSourceExtractor'
+import type { SourceItem } from '@/composables/chat/useSourceExtractor'
 
 const props = defineProps<{
   message: ChatMessage
@@ -73,8 +74,20 @@ function handleVoice() {
 }
 
 function handleSource() {
-  const sources = extractSources(props.message.content)
-  emit('showSource', sources)
+  if (props.message.sources && props.message.sources.length > 0) {
+    console.log('[MessageActions] 使用消息中存储的sources, 数量:', props.message.sources.length)
+    const sources: SourceItem[] = props.message.sources.map((s, i) => ({
+      label: `参考${i + 1}`,
+      title: s.title,
+      documentId: s.document_id
+    }))
+    emit('showSource', sources)
+  } else {
+    console.log('[MessageActions] 消息无sources, 从内容中解析')
+    const sources = extractSources(props.message.content)
+    console.log('[MessageActions] extractSources 结果:', sources.length, '个来源')
+    emit('showSource', sources)
+  }
 }
 
 function stripMarkdownForCopy(text: string): string {

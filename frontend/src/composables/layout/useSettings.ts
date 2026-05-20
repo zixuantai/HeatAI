@@ -85,6 +85,7 @@ export function useSettings(userId: () => string | undefined) {
   }
 
   function handleVoiceTypeChange(val: string) {
+    console.log('[Settings] 音色切换:', val, 'key:', voiceTypeKey.value)
     localStorage.setItem(voiceTypeKey.value, val)
   }
 
@@ -102,6 +103,11 @@ export function useSettings(userId: () => string | undefined) {
     const savedVol = localStorage.getItem(voiceVolumeKey.value)
     voiceVolume.value = savedVol !== null ? Number(savedVol) : 80
     setAudioVolume(voiceVolume.value / 100)
+    const savedVoiceType = localStorage.getItem(voiceTypeKey.value)
+    console.log('[Settings] onSettingsOpen - voiceTypeKey:', voiceTypeKey.value, 'savedVoiceType:', savedVoiceType)
+    if (savedVoiceType) {
+      voiceType.value = savedVoiceType
+    }
   }
 
   function handleAvatarFileChange(e: Event) {

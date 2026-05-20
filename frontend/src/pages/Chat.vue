@@ -65,7 +65,7 @@
               @click="togglePlay"
             >
               <div v-if="isAudioPlaying && !isAudioMuted" class="audio-wave-icon">
-                <span v-for="i in 4" :key="i" class="audio-wave-bar" :style="{ animationDelay: `${i * 0.15}s` }"></span>
+                <span v-for="i in 4" :key="i" class="audio-wave-bar"></span>
               </div>
               <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -268,13 +268,18 @@ watch(() => {
   statusMessage.value = data.statusMessage
 }, { immediate: true, deep: true })
 
-const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, handleAudioChunk, togglePlay, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
+const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, loadSessionAudio, unloadAudio, handleAudioChunk, handleServerAudio, togglePlay, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
 
-watch(() => {
-  const s = chatStore.sessions[sessionKey.value]
-  return s ? s.hasAudio : false
-}, (val) => {
-  hasAudio.value = val
+// 仅 session 切换时加载对应的历史音频数据
+watch(() => sessionKey.value, (newKey, oldKey) => {
+  if (newKey === oldKey) return
+  const s = chatStore.sessions[newKey]
+  if (s && s.audioChunks.length > 0) {
+    console.log('[Chat] 切换session, 加载音频, 片段数:', s.audioChunks.length)
+    loadSessionAudio([...s.audioChunks])
+  } else {
+    unloadAudio()
+  }
 }, { immediate: true })
 
 function toggleQuickMode() {
@@ -341,7 +346,7 @@ async function loadSessionMessages(sessionId: string) {
         timestamp: new Date(m.created_at).getTime()
       }))
       const cur = chatStore.sessions[sessionId]
-      if (cur && cur.loading) {
+      if (cur && (cur.loading || cur.messages.length > 0)) {
         return
       }
       chatStore.initSession(sessionId, msgs)
@@ -471,6 +476,11 @@ function handleVoiceStop() {
 }
 
 function handleShowSource(sources: SourceItem[]) {
+  console.log('[Chat.vue] handleShowSource 收到来源, 数量:', sources.length, '数据:', JSON.stringify(sources.map(s => ({ label: s.label, title: s.title, documentId: s.documentId }))))
+  if (sourcePanelVisible.value) {
+    sourcePanelVisible.value = false
+    return
+  }
   currentSources.value = sources
   sourcePanelVisible.value = true
 }
@@ -551,6 +561,7 @@ async function handleSend() {
   scrollToBottom()
 
   const enableVoice = localStorage.getItem(`heatai_voice_enabled_${authStore.user?.id || ''}`) !== 'false'
+  console.log('[Chat] enableVoice:', enableVoice, 'key:', `heatai_voice_enabled_${authStore.user?.id || ''}`)
   if (enableVoice) {
     initAudioStream()
   }
@@ -558,6 +569,9 @@ async function handleSend() {
   if (isVoiceMode.value && voiceInputRef.value) {
     voiceInputRef.value.pauseVAD()
   }
+
+  const hasServerAudio = enableVoice
+  console.log('[Chat] hasServerAudio:', hasServerAudio, 'hasOnStreamDone:', enableVoice)
 
   chatStore.startStream(
     sid,
@@ -568,6 +582,9 @@ async function handleSend() {
     enableVoice ? (text: string) => {
       handleAudioChunk(text)
     } : undefined,
+    hasServerAudio ? (audio: string) => {
+      handleServerAudio(audio)
+    } : undefined,
     (newSessionId: string) => {
       if (!props.sessionId) {
         streamCreatedSessionId.value = newSessionId
@@ -576,7 +593,11 @@ async function handleSend() {
     },
     (error: string) => {
       ElMessage.error(error || '请求失败，请稍后重试')
-    }
+    },
+    enableVoice ? () => {
+      console.log('[Chat] onStreamDone 触发, 调用 finishAudio')
+      finishAudio()
+    } : undefined
   )
 }
 </script>
@@ -846,10 +867,11 @@ async function handleSend() {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 0.3s ease;
   box-shadow: var(--shadow-sm);
   color: var(--color-primary);
   padding: 0;
+  position: relative;
 }
 
 .audio-toggle-btn:hover {
@@ -868,33 +890,53 @@ async function handleSend() {
   background: var(--color-bg);
 }
 
+.audio-toggle-btn:not(.muted) {
+  animation: audio-btn-glow 2s ease-in-out infinite;
+}
+
+@keyframes audio-btn-glow {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(79, 70, 229, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(79, 70, 229, 0.35);
+  }
+}
+
 .audio-wave-icon {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 2px;
-  height: 14px;
+  height: 16px;
 }
 
 .audio-wave-bar {
   width: 2.5px;
-  height: 4px;
+  height: 3px;
+  min-height: 3px;
+  display: inline-block;
   border-radius: 1.5px;
   background: var(--color-primary);
-  animation: audio-wave-pulse 0.8s ease-in-out infinite alternate;
+  animation: audio-wave-bounce 1s ease-in-out infinite;
+  will-change: height;
 }
 
 .audio-toggle-btn.muted .audio-wave-bar {
   background: var(--color-text-subtle);
+  animation-play-state: paused;
 }
 
-@keyframes audio-wave-pulse {
-  0% {
-    height: 4px;
-    opacity: 0.3;
+.audio-wave-bar:nth-child(1) { animation-delay: 0s; }
+.audio-wave-bar:nth-child(2) { animation-delay: 0.12s; }
+.audio-wave-bar:nth-child(3) { animation-delay: 0.24s; }
+.audio-wave-bar:nth-child(4) { animation-delay: 0.36s; }
+
+@keyframes audio-wave-bounce {
+  0%, 40%, 100% {
+    height: 3px;
   }
-  100% {
-    height: 14px;
-    opacity: 1;
+  20% {
+    height: 16px;
   }
 }
 

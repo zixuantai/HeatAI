@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { ChatResponseData, SessionInfo, SessionDetail, ToolCallInfo, ToolResultInfo } from '@/types'
+import type { ChatResponseData, SessionInfo, SessionDetail, ToolCallInfo, ToolResultInfo, SourceRef } from '@/types'
 
 export function askApi(message: string, sessionId?: string): Promise<ChatResponseData> {
   return request<ChatResponseData>({
@@ -19,6 +19,7 @@ export interface StreamCallbacks {
   onToolCall?: (info: ToolCallInfo) => void
   onToolResult?: (info: ToolResultInfo) => void
   onAudio?: (audioBase64: string) => void
+  onSources?: (sources: SourceRef[]) => void
 }
 
 let abortController: AbortController | null = null
@@ -47,7 +48,7 @@ export function askStreamApi(message: string, sessionId: string | null, callback
 
   const controller = new AbortController()
   abortController = controller
-  const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult, onAudio } = callbacks
+  const { onChunk, onDone, onError, onSessionId, onStatus, onToolCall, onToolResult, onAudio, onSources } = callbacks
   let aborted = false
 
   const token = localStorage.getItem('access_token')
@@ -129,7 +130,14 @@ export function askStreamApi(message: string, sessionId: string | null, callback
             onChunk(parsed.c)
           }
           if (parsed.a && onAudio) {
+            console.log('[askStreamApi] 收到音频事件, 长度:', (parsed.a as string).length)
             onAudio(parsed.a)
+          } else if (parsed.a) {
+            console.log('[askStreamApi] 收到音频事件但 onAudio 回调未设置, 丢弃')
+          }
+          if (parsed.src && onSources) {
+            console.log('[askStreamApi] 收到来源事件, sources数量:', (parsed.src as any[]).length, '数据:', JSON.stringify(parsed.src))
+            onSources(parsed.src as SourceRef[])
           }
         } catch {
           // skip unparseable lines

@@ -113,9 +113,9 @@ class VoiceService:
             loop = asyncio.get_running_loop()
             callback = TTSCallback()
             synthesizer = SpeechSynthesizer(
-                model='cosyvoice-v1',
+                model='cosyvoice-v3-flash',
                 voice=voice,
-                format=AudioFormat.MP3_16000HZ_MONO_128KBPS,
+                format=AudioFormat.MP3_22050HZ_MONO_256KBPS,
                 callback=callback
             )
 

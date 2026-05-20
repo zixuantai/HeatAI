@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { reactive } from 'vue'
-import type { ChatMessage } from '@/types'
+import type { ChatMessage, SourceRef } from '@/types'
 import { askStreamApi, stopStream as stopStreamApi } from '@/api/chat'
 import type { StreamCallbacks } from '@/api/chat'
 import { useAuthStore } from '@/store/modules/auth'
@@ -13,10 +13,12 @@ export interface SessionChatState {
   streamingContent: string
   streamMsgId: string
   pendingStreamContent: string
+  pendingSources: SourceRef[]
   statusMessage: string
   abortController: AbortController | null
   initialized: boolean
   hasAudio: boolean
+  audioChunks: string[]
 }
 
 export const useChatStore = defineStore('chat', () => {
@@ -29,10 +31,12 @@ export const useChatStore = defineStore('chat', () => {
       streamingContent: '',
       streamMsgId: '',
       pendingStreamContent: '',
+      pendingSources: [],
       statusMessage: '',
       abortController: null,
       initialized: false,
-      hasAudio: false
+      hasAudio: false,
+      audioChunks: []
     }
   }
 
@@ -45,7 +49,10 @@ export const useChatStore = defineStore('chat', () => {
 
   function initSession(sessionId: string, messages: ChatMessage[]) {
     const state = getOrCreate(sessionId)
-    state.messages = messages
+    // 防止用后端数据覆盖流式输出期间已存在消息
+    if (state.messages.length === 0) {
+      state.messages = messages
+    }
     state.initialized = true
   }
 
@@ -70,8 +77,10 @@ export const useChatStore = defineStore('chat', () => {
     images: string[],
     quickMode: boolean,
     onAudioChunk?: (text: string) => void,
+    onServerAudio?: (audioBase64: string) => void,
     onSessionCreated?: (sessionId: string) => void,
-    onStreamError?: (error: string) => void
+    onStreamError?: (error: string) => void,
+    onStreamDone?: () => void
   ) {
     const state = getOrCreate(storeKey)
 
@@ -82,6 +91,7 @@ export const useChatStore = defineStore('chat', () => {
     state.loading = true
     state.streamingContent = ''
     state.pendingStreamContent = ''
+    state.pendingSources = []
     state.statusMessage = ''
     state.initialized = true
     state.hasAudio = !!onAudioChunk
@@ -105,12 +115,16 @@ export const useChatStore = defineStore('chat', () => {
         }
         if (!placeholderPushed) {
           placeholderPushed = true
+          const hasSources = s.pendingSources.length > 0
+          console.log('[ChatStore] onChunk - 推送assistant占位消息, pendingSources:', hasSources ? '有' + s.pendingSources.length + '个来源' : '空')
           s.messages.push({
             id: streamMsgId,
             role: 'assistant',
             content: '',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            sources: hasSources ? s.pendingSources : undefined
           })
+          s.pendingSources = []
         }
         s.pendingStreamContent = s.streamingContent
         const msg = s.messages.find(m => m.id === streamMsgId)
@@ -143,9 +157,41 @@ export const useChatStore = defineStore('chat', () => {
         }
         s.statusMessage = statusTextMap[status] || status
       },
+      onAudio(audioBase64: string) {
+        console.log('[ChatStore] onAudio 收到音频, 长度:', audioBase64.length)
+        const s = sessions[currentKey]
+        if (s) {
+          s.audioChunks.push(audioBase64)
+          s.hasAudio = true
+        }
+        if (onServerAudio) {
+          onServerAudio(audioBase64)
+        } else {
+          console.log('[ChatStore] onAudio - onServerAudio 未设置, 音频丢弃')
+        }
+      },
+      onSources(sources: SourceRef[]) {
+        console.log('[ChatStore] onSources 收到来源, 数量:', sources.length, '数据:', JSON.stringify(sources))
+        const s = sessions[currentKey]
+        if (!s) {
+          console.log('[ChatStore] onSources - session未找到, currentKey:', currentKey)
+          return
+        }
+        if (placeholderPushed) {
+          const msg = s.messages.find(m => m.id === streamMsgId)
+          if (msg) {
+            console.log('[ChatStore] onSources - 已推placeholder, 直接设置sources到消息')
+            msg.sources = sources
+          }
+        } else {
+          console.log('[ChatStore] onSources - 未推placeholder, 存入pendingSources')
+          s.pendingSources = sources
+        }
+      },
       onDone() {
         if (!sessions[currentKey]) return
         finishStreamForSession(currentKey)
+        if (onStreamDone) onStreamDone()
       },
       onError(error: string) {
         const s = sessions[currentKey]
@@ -168,6 +214,7 @@ export const useChatStore = defineStore('chat', () => {
 
     const authStore = useAuthStore()
     const voiceType = localStorage.getItem(`heatai_voice_type_${authStore.user?.id || ''}`) || 'longanhuan'
+    console.log('[ChatStore] startStream - voiceType从localStorage读取:', voiceType, 'key:', `heatai_voice_type_${authStore.user?.id || ''}`)
     const userId = authStore.user?.id || ''
     const personalizationKeys = ['gentle', 'enthusiastic', 'structure', 'emoji']
     const personalization: Record<string, number> = {}
