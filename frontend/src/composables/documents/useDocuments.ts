@@ -136,22 +136,16 @@ export function useDocuments() {
   }
 
   async function deleteDocument(id: string, pageSize: number, currentPage: number, isSearching: boolean, searchQuery?: string): Promise<number> {
-    const snapshot = documents.value
-    const prevTotal = total.value
     let adjustedPage = currentPage
     deletingIds.value = new Set(deletingIds.value).add(id)
-    documents.value = documents.value.filter(d => d.id !== id)
-    total.value = total.value - 1
 
     try {
       await deleteDocumentApi(id)
       ElMessage.success('文档已删除')
-      if (documents.value.length === 0 && currentPage > 1) {
+      if (documents.value.length <= 1 && currentPage > 1) {
         adjustedPage = currentPage - 1
       }
-    } catch (e: unknown) {
-      documents.value = snapshot
-      total.value = prevTotal
+    } catch {
       adjustedPage = currentPage
     } finally {
       const next = new Set(deletingIds.value)
@@ -181,23 +175,16 @@ export function useDocuments() {
   }
 
   async function deleteDocumentsBatch(ids: string[], pageSize: number, currentPage: number, isSearching: boolean, searchQuery?: string): Promise<number> {
-    const snapshot = documents.value
-    const prevTotal = total.value
     let adjustedPage = currentPage
-    const idsSet = new Set(ids)
     deletingIds.value = new Set([...deletingIds.value, ...ids])
-    documents.value = documents.value.filter(d => !idsSet.has(d.id))
-    total.value = Math.max(0, total.value - ids.length)
 
     try {
       const res = await deleteDocumentsBatchApi(ids)
       ElMessage.success(res.deleted_count > 0 ? `已删除 ${res.deleted_count} 个文档` : '没有文档被删除')
-      if (documents.value.length === 0 && currentPage > 1) {
+      if (documents.value.length <= ids.length && currentPage > 1) {
         adjustedPage = currentPage - 1
       }
-    } catch (e: unknown) {
-      documents.value = snapshot
-      total.value = prevTotal
+    } catch {
       adjustedPage = currentPage
     } finally {
       const next = new Set(deletingIds.value)

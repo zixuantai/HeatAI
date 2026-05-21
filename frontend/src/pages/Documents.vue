@@ -489,6 +489,22 @@
         <el-empty v-if="!chunkLoading && chunks.length === 0" description="暂无分块数据" />
       </div>
     </el-dialog>
+
+    <!-- ── 删除等待弹窗 ─────────────────────────── -->
+    <el-dialog
+      v-model="deleting"
+      width="420px"
+      :close-on-click-modal="false"
+      :close-on-press-escape="false"
+      :show-close="false"
+      destroy-on-close
+      align-center
+    >
+      <div class="deleting-modal-body">
+        <el-icon :size="40" class="deleting-spinner"><Loading /></el-icon>
+        <p class="deleting-text">正在删除，请耐心等待</p>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -537,7 +553,7 @@ const {
 
 useUploadLifecycle(async () => {
   await loadDocuments(pageSize.value, 1)
-  loadStats()
+  await loadStats()
 })
 
 const currentPage = ref(1)
@@ -607,6 +623,9 @@ async function loadStats() {
     statsData.value = null
   }
 }
+
+// 删除等待状态
+const deleting = ref(false)
 
 // 批量删除状态
 const batchMode = ref(false)
@@ -703,6 +722,7 @@ async function handleBatchDelete() {
     )
     const ids = Array.from(selectedIds.value)
     exitBatchMode()
+    deleting.value = true
     const newPage = await _deleteDocumentsBatch(
       ids,
       pageSize.value,
@@ -711,8 +731,11 @@ async function handleBatchDelete() {
       searchQuery.value.trim()
     )
     currentPage.value = newPage
+    await loadStats()
   } catch {
     // 用户取消
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -788,10 +811,14 @@ async function handleDeleteClick(doc: DocumentInfo) {
       '删除确认',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
     )
+    deleting.value = true
     const newPage = await _deleteDocument(doc.id, pageSize.value, currentPage.value, isSearching.value, searchQuery.value.trim())
     currentPage.value = newPage
+    await loadStats()
   } catch {
     // 用户取消
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -1876,6 +1903,33 @@ onMounted(() => {
   line-height: var(--leading-relaxed);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ── Deleting Modal ──────────────────────────────── */
+.deleting-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  gap: 20px;
+}
+
+.deleting-spinner {
+  color: var(--color-primary);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.deleting-text {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
+  margin: 0;
 }
 
 /* ============================================================
