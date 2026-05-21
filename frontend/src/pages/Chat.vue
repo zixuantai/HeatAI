@@ -42,6 +42,7 @@
               </div>
               <MessageActions
                 :message="msg"
+                :is-streaming="loading && msg.role === 'assistant' && index === lastAssistantIndex"
                 @show-source="handleShowSource"
               />
             </div>
@@ -56,23 +57,6 @@
                 <span class="typing-dot" :style="{ animationDelay: '0.4s' }"></span>
               </span>
             </div>
-          </div>
-
-          <div v-if="hasAudio" class="audio-control-bar">
-            <button
-              class="audio-toggle-btn"
-              :class="{ muted: !isAudioPlaying || isAudioMuted }"
-              @click="togglePlay"
-            >
-              <div v-if="isAudioPlaying && !isAudioMuted" class="audio-wave-icon">
-                <span v-for="i in 4" :key="i" class="audio-wave-bar"></span>
-              </div>
-              <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
-              </svg>
-            </button>
           </div>
         </div>
       </div>
@@ -254,6 +238,15 @@ const messages = computed(() => {
   const s = chatStore.sessions[sessionKey.value]
   return s ? s.messages : []
 })
+
+const lastAssistantIndex = computed(() => {
+  const msgs = messages.value
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'assistant') return i
+  }
+  return -1
+})
+
 const loading = ref(false)
 const streamingContent = ref('')
 const statusMessage = ref('')
@@ -268,7 +261,7 @@ watch(() => {
   statusMessage.value = data.statusMessage
 }, { immediate: true, deep: true })
 
-const { hasAudio, isAudioPlaying, isAudioMuted, initAudioStream, loadSessionAudio, unloadAudio, handleAudioChunk, handleServerAudio, togglePlay, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
+const { initAudioStream, loadSessionAudio, unloadAudio, handleAudioChunk, handleServerAudio, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
 
 // 仅 session 切换时加载对应的历史音频数据
 watch(() => sessionKey.value, (newKey, oldKey) => {
@@ -849,95 +842,6 @@ async function handleSend() {
   color: var(--color-text-main);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--color-border-light);
-}
-
-.audio-control-bar {
-  display: flex;
-  align-items: center;
-  padding: 4px 0 4px 0;
-}
-
-.audio-toggle-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-sm);
-  color: var(--color-primary);
-  padding: 0;
-  position: relative;
-}
-
-.audio-toggle-btn:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.25);
-  transform: scale(1.1);
-}
-
-.audio-toggle-btn:active {
-  transform: scale(0.9);
-}
-
-.audio-toggle-btn.muted {
-  color: var(--color-text-subtle);
-  border-color: var(--color-border);
-  background: var(--color-bg);
-}
-
-.audio-toggle-btn:not(.muted) {
-  animation: audio-btn-glow 2s ease-in-out infinite;
-}
-
-@keyframes audio-btn-glow {
-  0%, 100% {
-    box-shadow: 0 0 4px rgba(79, 70, 229, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 14px rgba(79, 70, 229, 0.35);
-  }
-}
-
-.audio-wave-icon {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 16px;
-}
-
-.audio-wave-bar {
-  width: 2.5px;
-  height: 3px;
-  min-height: 3px;
-  display: inline-block;
-  border-radius: 1.5px;
-  background: var(--color-primary);
-  animation: audio-wave-bounce 1s ease-in-out infinite;
-  will-change: height;
-}
-
-.audio-toggle-btn.muted .audio-wave-bar {
-  background: var(--color-text-subtle);
-  animation-play-state: paused;
-}
-
-.audio-wave-bar:nth-child(1) { animation-delay: 0s; }
-.audio-wave-bar:nth-child(2) { animation-delay: 0.12s; }
-.audio-wave-bar:nth-child(3) { animation-delay: 0.24s; }
-.audio-wave-bar:nth-child(4) { animation-delay: 0.36s; }
-
-@keyframes audio-wave-bounce {
-  0%, 40%, 100% {
-    height: 3px;
-  }
-  20% {
-    height: 16px;
-  }
 }
 
 /* ── Thinking Indicator ──────────────────────────────── */
