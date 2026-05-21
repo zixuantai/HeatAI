@@ -202,18 +202,22 @@ async def stream_chat(
                 await conversation_service.save_message(save_db, session_id, "assistant", full_answer)
                 await conversation_service.extract_and_save_long_term(save_db, current_user.id, session_id)
 
+            yield "data: [DONE]\n\n"
+
             if full_answer.strip():
                 logger.info(f"[TTS] 开始合成完整回答, 文本长度: {len(full_answer)}")
                 try:
                     chunk_count = 0
                     async for chunk in voice_service.text_to_speech_stream(full_answer, voice_param):
                         chunk_count += 1
-                        yield f"data: {json.dumps({'a': chunk})}\n\n"
+                        try:
+                            yield f"data: {json.dumps({'a': chunk})}\n\n"
+                        except BaseException:
+                            logger.info(f"[TTS] 客户端已断开, 停止发送音频 (已发送 {chunk_count} 块)")
+                            return
                     logger.info(f"[TTS] 合成完成, 共 {chunk_count} 个音频块")
                 except Exception as e:
                     logger.error(f"[TTS] 合成失败: {e}")
-
-            yield "data: [DONE]\n\n"
         except ValueError as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
         except RuntimeError as e:

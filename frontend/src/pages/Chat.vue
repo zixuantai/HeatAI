@@ -247,19 +247,18 @@ const lastAssistantIndex = computed(() => {
   return -1
 })
 
-const loading = ref(false)
-const streamingContent = ref('')
-const statusMessage = ref('')
-
-watch(() => {
+const loading = computed(() => {
   const s = chatStore.sessions[sessionKey.value]
-  if (!s) return { loading: false, streamingContent: '', statusMessage: '' }
-  return { loading: s.loading, streamingContent: s.streamingContent, statusMessage: s.statusMessage }
-}, (data) => {
-  loading.value = data.loading
-  streamingContent.value = data.streamingContent
-  statusMessage.value = data.statusMessage
-}, { immediate: true, deep: true })
+  return s ? s.loading : false
+})
+const streamingContent = computed(() => {
+  const s = chatStore.sessions[sessionKey.value]
+  return s ? s.streamingContent : ''
+})
+const statusMessage = computed(() => {
+  const s = chatStore.sessions[sessionKey.value]
+  return s ? s.statusMessage : ''
+})
 
 const { initAudioStream, loadSessionAudio, unloadAudio, handleAudioChunk, handleServerAudio, finishAudio, stopPlayback, cleanup } = useAudioPlayer()
 
