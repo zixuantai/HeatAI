@@ -10,6 +10,7 @@ from app.core.dependencies import CurrentUser
 from app.schemas.chat import ChatRequest
 from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate, SessionPinUpdate
 from app.services.chat import chat_service, chat_pipeline, conversation_service, voice_service, query_rewriter
+from app.services.chat.engine.rag_graph import rag_graph, RAGState
 from app.services.memory.context_builder import context_builder
 
 logger = logging.getLogger(__name__)
@@ -19,12 +20,33 @@ router = APIRouter(prefix="/chat", tags=["对话"])
 chat_pipeline.bind_kb_search()
 
 
-def _log_rewrite(rewrite_result: dict):
-    chat_pipeline.log_rewrite_result(rewrite_result)
+# ── 辅助函数 ──────────────────────────────────────────────────
+
+def _extract_source_documents(search_results: list) -> list:
+    seen = set()
+    sources = []
+    for r in search_results:
+        doc_id = r.get("document_id", "")
+        if doc_id and doc_id not in seen:
+            seen.add(doc_id)
+            sources.append({
+                "title": r.get("title", ""),
+                "document_id": doc_id,
+            })
+    return sources
 
 
-async def _merge_expanded(main_results: list, rewrite_result: dict) -> list:
-    return await chat_pipeline.merge_expanded_results(main_results, rewrite_result)
+def _event_to_sse(event: dict) -> dict:
+    event_type = event.get("type", "content")
+    if event_type == "content":
+        return {"c": event["content"]}
+    elif event_type == "tool_call":
+        return {"tc": {"tool_name": event["tool_name"], "tool_args": event["tool_args"], "tool_call_id": event["tool_call_id"]}}
+    elif event_type == "tool_result":
+        return {"tr": {"tool_name": event["tool_name"], "result": event["result"], "tool_call_id": event["tool_call_id"]}}
+    elif event_type == "error":
+        return {"error": event["content"]}
+    return {}
 
 
 @router.post("/ask")
@@ -55,32 +77,20 @@ async def ask(
                 pass
             result = await chat_service.quick_ask(req.message, history_messages, req.personalization)
         else:
-            need_kb, skip_rewrite = chat_pipeline.should_search_kb(req.message)
-            rewrite_result = chat_pipeline.build_rewrite_result(req.message, skip_rewrite)
-
-            if rewrite_result is not None:
-                _log_rewrite(rewrite_result)
-                if need_kb:
-                    search_results = await chat_pipeline.search_knowledge_base(req.message)
-                else:
-                    search_results = []
-                ctx = await context_builder.build(db, session_id, current_user.id, req.message)
-            else:
-                ctx_task = asyncio.create_task(
-                    context_builder.build(db, session_id, current_user.id, req.message)
-                )
-                rewrite_result = await query_rewriter.rewrite(req.message)
-                _log_rewrite(rewrite_result)
-
-                if need_kb:
-                    search_query = rewrite_result["rewritten_query"]
-                    search_results = await chat_pipeline.search_knowledge_base(search_query)
-                    search_results = await _merge_expanded(search_results, rewrite_result)
-                else:
-                    search_results = []
-                ctx = await ctx_task
-
-            result = await chat_service.ask(req.message, ctx.messages, search_results, req.personalization)
+            # ── RAG 管线由 StateGraph 编排 ──
+            initial: RAGState = {
+                "message": req.message,
+                "session_id": session_id,
+                "user_id": current_user.id,
+                "db": db,
+            }
+            state = await rag_graph.ainvoke(initial)
+            result = await chat_service.ask(
+                req.message,
+                state["context_messages"],
+                state["search_results"],
+                req.personalization,
+            )
 
         await conversation_service.save_message(db, session_id, "assistant", result["answer"])
         await conversation_service.extract_and_save_long_term(db, current_user.id, session_id)
@@ -157,27 +167,27 @@ async def stream_chat(
                         collected_content.append(event["content"])
                     yield f"data: {json.dumps(_event_to_sse(event))}\n\n"
             else:
+                # ── RAG 管线由 StateGraph 编排 ──
                 need_kb, skip_rewrite = chat_pipeline.should_search_kb(req.message)
 
-                ctx_task = asyncio.create_task(
-                    context_builder.build(db, session_id, current_user.id, req.message)
-                )
+                initial: RAGState = {
+                    "message": req.message,
+                    "session_id": session_id,
+                    "user_id": current_user.id,
+                    "db": db,
+                }
 
-                rewrite_result = chat_pipeline.build_rewrite_result(req.message, skip_rewrite)
-                if rewrite_result is None:
+                # SSE: analyzing（仅 LLM 改写时发送）
+                if not skip_rewrite:
                     yield f"data: {json.dumps({'s': 'analyzing'})}\n\n"
-                    rewrite_result = await query_rewriter.rewrite(req.message)
-                _log_rewrite(rewrite_result)
 
+                state = await rag_graph.ainvoke(initial)
+
+                # SSE: 检索状态
+                search_results = state["search_results"]
                 if need_kb:
                     yield f"data: {json.dumps({'s': 'retrieving'})}\n\n"
-                    logger.info(f"[对话] 知识库查询模式, need_kb=True, 开始检索")
-                    search_query = rewrite_result["rewritten_query"]
-                    search_results = await chat_pipeline.search_knowledge_base(search_query)
-                    search_results = await _merge_expanded(search_results, rewrite_result)
-                else:
-                    logger.info(f"[对话] 工具类/闲聊查询，跳过知识库检索: {req.message}")
-                    search_results = []
+                    logger.info(f"[对话] 知识库查询模式, need_kb=True, 检索到 {len(search_results)} 条结果")
 
                 if search_results:
                     source_docs = _extract_source_documents(search_results)
@@ -187,12 +197,11 @@ async def stream_chat(
                 else:
                     logger.info("[对话] 无搜索结果，不发送来源事件")
 
+                # SSE: 生成中
                 yield f"data: {json.dumps({'s': 'generating'})}\n\n"
-
-                ctx = await ctx_task
-
                 yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-                async for event in chat_service.stream_ask(req.message, ctx.messages, search_results, req.personalization):
+
+                async for event in chat_service.stream_ask(req.message, state["context_messages"], search_results, req.personalization):
                     if event["type"] == "content":
                         collected_content.append(event["content"])
                     yield f"data: {json.dumps(_event_to_sse(event))}\n\n"
@@ -233,33 +242,6 @@ async def stream_chat(
             "X-Accel-Buffering": "no",
         }
     )
-
-
-def _event_to_sse(event: dict) -> dict:
-    event_type = event.get("type", "content")
-    if event_type == "content":
-        return {"c": event["content"]}
-    elif event_type == "tool_call":
-        return {"tc": {"tool_name": event["tool_name"], "tool_args": event["tool_args"], "tool_call_id": event["tool_call_id"]}}
-    elif event_type == "tool_result":
-        return {"tr": {"tool_name": event["tool_name"], "result": event["result"], "tool_call_id": event["tool_call_id"]}}
-    elif event_type == "error":
-        return {"error": event["content"]}
-    return {}
-
-
-def _extract_source_documents(search_results: list) -> list:
-    seen = set()
-    sources = []
-    for r in search_results:
-        doc_id = r.get("document_id", "")
-        if doc_id and doc_id not in seen:
-            seen.add(doc_id)
-            sources.append({
-                "title": r.get("title", ""),
-                "document_id": doc_id,
-            })
-    return sources
 
 
 @router.get("/sessions", response_model=dict)

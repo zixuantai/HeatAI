@@ -20,6 +20,7 @@ from app.services.chat.engine.tools import (
     search_knowledge_base,
 )
 from app.services.chat.engine.model_factory import create_chat_model
+from app.services.chat.engine.rag_graph import rag_graph, RAGState
 
 __all__ = [
     "ChatService", "chat_service",
@@ -38,4 +39,5 @@ __all__ = [
     "query_heating_schedule", "report_maintenance", "get_heating_tips",
     "search_knowledge_base",
     "create_chat_model",
+    "rag_graph", "RAGState",
 ]
