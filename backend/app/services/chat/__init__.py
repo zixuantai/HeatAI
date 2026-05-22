@@ -12,7 +12,14 @@ from app.services.chat.engine.response_parser import (
     has_tool_calls, extract_tool_calls, extract_content, extract_finish_reason
 )
 from app.services.chat.engine.query_rewriter import QueryRewriterService, query_rewriter
-from app.services.chat.engine.tools import TOOL_DEFINITIONS, ToolExecutor, tool_executor
+from app.services.chat.engine.tools import (
+    TOOL_DEFINITIONS, ToolExecutor, tool_executor,
+    LC_TOOLS, LC_QUICK_TOOLS, set_kb_search_fn,
+    get_current_time, get_weather, calculate_heating_fee,
+    query_heating_schedule, report_maintenance, get_heating_tips,
+    search_knowledge_base,
+)
+from app.services.chat.engine.model_factory import create_chat_model
 
 __all__ = [
     "ChatService", "chat_service",
@@ -26,4 +33,9 @@ __all__ = [
     "has_tool_calls", "extract_tool_calls", "extract_content", "extract_finish_reason",
     "QueryRewriterService", "query_rewriter",
     "TOOL_DEFINITIONS", "ToolExecutor", "tool_executor",
+    "LC_TOOLS", "LC_QUICK_TOOLS", "set_kb_search_fn",
+    "get_current_time", "get_weather", "calculate_heating_fee",
+    "query_heating_schedule", "report_maintenance", "get_heating_tips",
+    "search_knowledge_base",
+    "create_chat_model",
 ]

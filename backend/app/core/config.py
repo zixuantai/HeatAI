@@ -20,9 +20,17 @@ class Settings(BaseSettings):
 
     CORS_ORIGINS: list = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
+    # ── LLM 通用配置（OpenAI 兼容接口，切换模型只改这里）──
+    LLM_API_KEY: str = ""          # API 密钥
+    LLM_BASE_URL: str = ""         # API 地址（空则默认用 DashScope 兼容端点）
+    LLM_MODEL: str = "qwen-max"    # 默认模型名
+    LLM_TEMPERATURE: float = 0.15
+
+    # 向后兼容（LLM_API_KEY 为空时回退到 DASHSCOPE_API_KEY）
     DASHSCOPE_API_KEY: str = ""
-    DASHSCOPE_MODEL: str = "qwen-max"
-    DASHSCOPE_VL_MODEL: str = "qwen-vl-max"
+    DASHSCOPE_VL_MODEL: str = "qwen-vl-max"  # 视觉模型
+
+    MEMORY_LLM_MODEL: str = "qwen-turbo"  # Query 改写等内部调用用的小模型
 
     MILVUS_URI: str = ""
     MILVUS_TOKEN: str = ""
@@ -70,15 +78,12 @@ class Settings(BaseSettings):
     CONTEXT_MAX_CHUNK_CHARS: int = 800
     CONTEXT_MAX_TOTAL_CHARS: int = 6000
 
-    LLM_TEMPERATURE: float = 0.15
-
     UPLOAD_DIR: str = "./uploads"
 
     JIEBA_DICT_DIR: str = ""
 
     LOG_LEVEL: str = "INFO"
 
-    MEMORY_LLM_MODEL: str = "qwen-turbo"
     MEMORY_EXTRACT_TRIGGER_ROUNDS: int = 5
     MEMORY_COMPRESS_THRESHOLD_CHARS: int = 5000
     MEMORY_MAX_CONTEXT_CHARS: int = 3000
@@ -89,6 +94,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # 忽略 .env 中已废弃的旧字段
 
 
 settings = Settings()

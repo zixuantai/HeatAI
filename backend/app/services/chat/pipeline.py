@@ -23,6 +23,9 @@ class ChatPipeline:
                 return results
 
             tool_executor.set_search_fn(_kb_search_fn)
+            # 同步设置 LangChain tool 的模块级搜索函数
+            from app.services.chat.engine.tools import set_kb_search_fn
+            set_kb_search_fn(_kb_search_fn)
             self._kb_search_bound = True
 
     @staticmethod

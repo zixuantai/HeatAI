@@ -2,9 +2,17 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Any
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
+
+# 模块级知识库搜索函数，供 LangChain tool 和 ToolExecutor 共用
+_kb_search_fn: Optional[Callable] = None
+
+
+def set_kb_search_fn(fn: Callable):
+    global _kb_search_fn
+    _kb_search_fn = fn
 
 CST = timezone(timedelta(hours=8))
 
@@ -431,3 +439,133 @@ class ToolExecutor:
 
 
 tool_executor = ToolExecutor()
+
+
+# ── LangChain Tool 包装 ──────────────────────────────────────
+
+from typing import Optional as _Opt
+from langchain_core.tools import tool as lc_tool
+
+
+@lc_tool
+def get_current_time(timezone_offset: str = "+08:00") -> dict:
+    """获取当前日期和时间。当用户询问当前时间、日期、星期几、或需要知道现在是什么时候时调用此工具。
+
+    Args:
+        timezone_offset: 时区偏移，例如 '+08:00' 表示北京时间。默认为 '+08:00'。
+    """
+    return ToolExecutor._handle_get_current_time(timezone_offset)
+
+
+@lc_tool
+def get_weather(city: str) -> dict:
+    """查询指定城市的实时天气信息，包括温度、湿度、天气状况、风力等。
+    供热行业需要根据天气温度调整供暖策略和参数。
+
+    Args:
+        city: 城市名称，例如 '北京'、'哈尔滨'、'乌鲁木齐' 等。
+    """
+    return ToolExecutor._handle_get_weather(city)
+
+
+@lc_tool
+def calculate_heating_fee(
+    area_sqm: float, heating_type: str, city: str = "", months: int = 0
+) -> dict:
+    """计算供暖费用。根据房屋面积、供暖方式（集中供暖/自采暖）、供暖时长等参数估算供暖费用。
+
+    Args:
+        area_sqm: 房屋面积（平方米）
+        heating_type: 供暖方式。可选: 集中供暖, 燃气壁挂炉, 地暖, 电采暖
+        city: 所在城市，不同城市收费标准不同
+        months: 供暖月数，默认为所在城市标准供暖季月数
+    """
+    return ToolExecutor._handle_calculate_heating_fee(
+        area_sqm, heating_type, city, months if months > 0 else None
+    )
+
+
+@lc_tool
+def query_heating_schedule(city: str) -> dict:
+    """查询指定城市的供暖季时间安排，包括供暖开始日期、结束日期、供暖时长等信息。
+
+    Args:
+        city: 城市名称，例如 '北京'、'哈尔滨'、'沈阳' 等
+    """
+    return ToolExecutor._handle_query_heating_schedule(city)
+
+
+@lc_tool
+def report_maintenance(
+    issue_type: str, address: str, contact_phone: str, description: str = ""
+) -> dict:
+    """登记供热报修工单。当用户需要报修暖气不热、漏水、异响等供热故障时调用此工具。
+
+    Args:
+        issue_type: 故障类型。可选: 暖气不热, 管道漏水, 异响, 阀门故障, 温度不达标, 其他
+        address: 报修地址
+        contact_phone: 联系电话
+        description: 故障详细描述
+    """
+    return ToolExecutor._handle_report_maintenance(issue_type, address, contact_phone, description)
+
+
+@lc_tool
+def get_heating_tips(outdoor_temp: float, heating_type: str = "集中供暖") -> dict:
+    """根据当前的天气温度，提供供热相关的节能建议和温度调节技巧。
+
+    Args:
+        outdoor_temp: 室外温度（摄氏度）
+        heating_type: 供暖方式。可选: 集中供暖, 燃气壁挂炉, 地暖, 电采暖
+    """
+    return ToolExecutor._handle_get_heating_tips(outdoor_temp, heating_type)
+
+
+# search_knowledge_base 是动态绑定搜索函数的工具
+@lc_tool
+async def search_knowledge_base(query: str) -> dict:
+    """在供热知识库中搜索相关文档和资料。
+    当用户询问供热专业知识、技术规范、设备操作方法等需要知识库回答的问题时调用。
+
+    Args:
+        query: 搜索查询关键词或问题
+    """
+    if _kb_search_fn is None:
+        return {"query": query, "results": [], "message": "搜索功能暂未配置"}
+    try:
+        results = await _kb_search_fn(query)
+        formatted = []
+        for i, r in enumerate(results[:5]):
+            formatted.append({
+                "index": i + 1,
+                "title": r.get("title", "未知"),
+                "content": r.get("content", "")[:300],
+                "score": r.get("score", 0),
+                "source": r.get("document_id", "未知")
+            })
+        return {"query": query, "results": formatted, "total": len(formatted)}
+    except Exception as e:
+        logger.error(f"知识库搜索失败: {e}")
+        return {"query": query, "results": [], "message": f"搜索异常: {str(e)}"}
+
+
+# LangChain 工具列表（完整列表，含 search_knowledge_base）
+LC_TOOLS = [
+    get_current_time,
+    get_weather,
+    calculate_heating_fee,
+    query_heating_schedule,
+    report_maintenance,
+    get_heating_tips,
+    search_knowledge_base,
+]
+
+# 快速模式工具列表（不含 search_knowledge_base）
+LC_QUICK_TOOLS = [
+    get_current_time,
+    get_weather,
+    calculate_heating_fee,
+    query_heating_schedule,
+    report_maintenance,
+    get_heating_tips,
+]
