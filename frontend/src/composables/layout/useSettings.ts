@@ -1,4 +1,4 @@
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import Croppie from 'croppie'
 import 'croppie/croppie.css'
@@ -45,6 +45,7 @@ export function useSettings(userId: () => string | undefined) {
 
   const croppieRef = ref<HTMLElement | null>(null)
   const croppieVisible = ref(false)
+  const cropDialogVisible = ref(false)
   const cropLoading = ref(false)
   const avatarPreview = ref<string | null>(null)
   let croppieInstance: Croppie | null = null
@@ -110,39 +111,70 @@ export function useSettings(userId: () => string | undefined) {
     }
   }
 
+  let pendingCropPhoto: string | null = null
+
   function handleAvatarFileChange(e: Event) {
     const file = (e.target as HTMLInputElement).files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      const photo = reader.result as string
-      croppieVisible.value = true
-      nextTick(() => initCroppie(photo))
+      pendingCropPhoto = reader.result as string
+      cropDialogVisible.value = true
     }
     reader.readAsDataURL(file)
     ;(e.target as HTMLInputElement).value = ''
   }
 
+  function onCropDialogOpened() {
+    if (!pendingCropPhoto) return
+    const photo = pendingCropPhoto
+    pendingCropPhoto = null
+    setTimeout(() => {
+      initCroppie(photo)
+    }, 50)
+  }
+
+  function onCropDialogClosed() {
+    destroyCroppie()
+    pendingCropPhoto = null
+  }
+
   function initCroppie(photo: string) {
     destroyCroppie()
     if (!croppieRef.value) return
-    croppieInstance = new Croppie(croppieRef.value, {
-      viewport: { width: 200, height: 200, type: 'square' },
-      boundary: { width: 300, height: 300 },
-      enableOrientation: true,
-      enforceBoundary: true,
-    })
-    croppieInstance.bind({ url: photo })
+    try {
+      croppieInstance = new Croppie(croppieRef.value, {
+        viewport: { width: 200, height: 200, type: 'circle' },
+        boundary: { width: 300, height: 300 },
+        enableOrientation: true,
+        enforceBoundary: true,
+        enableZoom: true,
+        mouseWheelZoom: true,
+        showZoomer: true,
+      })
+      croppieInstance.bind({ url: photo })
+    } catch {
+      // ignore
+    }
   }
 
   function destroyCroppie() {
-    croppieInstance?.destroy()
+    try {
+      croppieInstance?.destroy()
+    } catch {
+      // ignore
+    }
     croppieInstance = null
+    if (croppieRef.value) {
+      croppieRef.value.innerHTML = ''
+      croppieRef.value.classList.remove('croppie-container')
+    }
   }
 
   function cancelCrop() {
     destroyCroppie()
     croppieVisible.value = false
+    cropDialogVisible.value = false
   }
 
   async function confirmCrop() {
@@ -156,6 +188,7 @@ export function useSettings(userId: () => string | undefined) {
       avatarPreview.value = result
       destroyCroppie()
       croppieVisible.value = false
+      cropDialogVisible.value = false
     } catch {
       ElMessage.error('图片裁剪失败')
     } finally {
@@ -166,6 +199,8 @@ export function useSettings(userId: () => string | undefined) {
   function resetCroppie() {
     destroyCroppie()
     croppieVisible.value = false
+    cropDialogVisible.value = false
+    pendingCropPhoto = null
   }
 
   return {
@@ -180,6 +215,7 @@ export function useSettings(userId: () => string | undefined) {
     personalizationValues,
     croppieRef,
     croppieVisible,
+    cropDialogVisible,
     cropLoading,
     avatarPreview,
     loadPersonalizationValues,
@@ -191,6 +227,8 @@ export function useSettings(userId: () => string | undefined) {
     handleVoiceVolumeChange,
     onSettingsOpen,
     handleAvatarFileChange,
+    onCropDialogOpened,
+    onCropDialogClosed,
     cancelCrop,
     confirmCrop,
     resetCroppie,

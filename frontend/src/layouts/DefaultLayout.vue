@@ -167,13 +167,6 @@
           </div>
         </div>
       </label>
-      <div v-if="croppieVisible" class="edit-avatar-cancel-row">
-        <el-button text type="warning" size="small" @click="cancelCrop">取消裁剪</el-button>
-      </div>
-      <div v-if="croppieVisible" ref="croppieRef" class="flex flex-col justify-center my-4 croppie-container"></div>
-      <div v-if="croppieVisible" class="edit-avatar-crop-actions">
-        <el-button type="primary" size="small" :loading="cropLoading" @click="confirmCrop">确认裁剪</el-button>
-      </div>
     </div>
     <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="70px" class="edit-form">
       <el-form-item label="用户名" prop="username">
@@ -193,6 +186,16 @@
     <template #footer>
       <el-button @click="editDialogVisible = false">取消</el-button>
       <el-button type="primary" :loading="editLoading" @click="handleSaveProfile">保存</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="cropDialogVisible" title="裁剪头像" width="520px" :close-on-click-modal="false" destroy-on-close @opened="onCropDialogOpened" @closed="onCropDialogClosed">
+    <div class="crop-dialog-body">
+      <div ref="croppieRef" class="crop-area"></div>
+    </div>
+    <template #footer>
+      <el-button @click="cancelCrop">取消</el-button>
+      <el-button type="primary" :loading="cropLoading" @click="confirmCrop">确认裁剪</el-button>
     </template>
   </el-dialog>
 
@@ -360,6 +363,7 @@ const {
   personalizationValues,
   croppieRef,
   croppieVisible,
+  cropDialogVisible,
   cropLoading,
   avatarPreview,
   loadPersonalizationValues,
@@ -371,6 +375,8 @@ const {
   handleVoiceVolumeChange,
   onSettingsOpen,
   handleAvatarFileChange,
+  onCropDialogOpened,
+  onCropDialogClosed,
   cancelCrop,
   confirmCrop,
   resetCroppie,
@@ -1079,12 +1085,39 @@ watch(() => route.path, () => {
   margin-top: 8px;
 }
 
-.croppie-container {
-  transition: none !important;
+.crop-dialog-body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 380px;
+  padding-bottom: 20px;
 }
 
-.croppie-container * {
-  transition: none !important;
+.crop-dialog-body .crop-area {
+  width: 300px;
+  height: 300px;
+  touch-action: none;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.crop-dialog-body .crop-area .cr-viewport {
+  cursor: move;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.crop-dialog-body .crop-area .cr-image {
+  pointer-events: auto;
+  cursor: move;
+  max-width: none;
+  position: absolute;
+}
+
+.crop-dialog-body .crop-area .cr-slider-wrap {
+  margin-top: 10px;
+  padding: 0 10px;
 }
 
 .edit-avatar-crop-actions {
