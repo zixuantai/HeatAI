@@ -43,6 +43,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/Documents.vue')
       }
     ]
+  },
+  {
+    path: '/organizations',
+    component: () => import('@/layouts/DefaultLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'Organizations',
+        component: () => import('@/pages/Organizations.vue')
+      }
+    ]
   }
 ]
 

@@ -17,6 +17,10 @@ instance.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    const orgId = localStorage.getItem('current_org_id')
+    if (orgId) {
+      config.headers['X-Organization-Id'] = orgId
+    }
     return config
   },
   (error) => {

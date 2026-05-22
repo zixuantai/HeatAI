@@ -12,7 +12,7 @@
     </div>
 
     <!-- ── 上传区域 ────────────────────────────── -->
-    <div class="upload-zone neu-card"
+    <div v-if="authStore.isOrgEditor" class="upload-zone neu-card"
       :class="{ 'is-dragover': isDragOver }"
       @dragover.prevent="isDragOver = true"
       @dragleave.prevent="isDragOver = false"
@@ -35,7 +35,7 @@
       </div>
     </div>
 
-    <div class="upload-notice">
+    <div v-if="authStore.isOrgEditor" class="upload-notice">
       <el-icon :size="16"><InfoFilled /></el-icon>
       <span>上传文档后需经过解析、分块、向量化等处理步骤，请耐心等待</span>
     </div>
@@ -223,7 +223,7 @@
             <template v-else>知识库文档</template>
           </span>
           <button
-            v-if="!batchMode"
+            v-if="!batchMode && authStore.isOrgEditor"
             class="neu-btn-primary neu-btn-primary--sm"
             @click="enterBatchMode"
           >
@@ -341,7 +341,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80" align="center" fixed="right">
+        <el-table-column v-if="authStore.isOrgEditor" label="操作" width="80" align="center" fixed="right">
           <template #default="{ row }">
             <el-button
               type="danger"
@@ -436,6 +436,7 @@
               </div>
 
               <button
+                v-if="authStore.isOrgEditor"
                 class="neu-btn-delete"
                 :class="{ 'is-deleting': deletingIds.has(doc.id) }"
                 :disabled="deletingIds.has(doc.id)"
@@ -518,6 +519,7 @@ import {
 import type { DocumentInfo, DocumentStats } from '@/types'
 import { useDocuments } from '@/composables/documents/useDocuments'
 import { getAllDocumentIdsApi, getDocumentStatsApi } from '@/api/documents'
+import { useAuthStore } from '@/store/modules/auth'
 import {
   uploadingFiles,
   activeUploadingFiles,
@@ -531,6 +533,8 @@ import {
   clearCompletedUploads,
   useUploadLifecycle,
 } from '@/composables/documents/useDocuments'
+
+const authStore = useAuthStore()
 
 const fileInputRef = ref<HTMLInputElement>()
 const isDragOver = ref(false)

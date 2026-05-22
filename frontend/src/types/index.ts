@@ -9,6 +9,7 @@ export interface UserInfo {
   role: string
   status: string
   created_at: string
+  organizations?: any[] | null
 }
 
 export interface UpdateUserRequest {
@@ -177,4 +178,55 @@ export interface DocumentStats {
   total: number
   by_file_type: DocTypeStat[]
   by_category: CategoryStat[]
+}
+
+export interface Organization {
+  id: string
+  name: string
+  description: string | null
+  invite_code: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OrganizationMember {
+  id: string
+  organization_id: string
+  user_id: string
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  joined_at: string
+  username?: string
+  nickname?: string
+  avatar?: string | null
+}
+
+export interface InviteCode {
+  id: string
+  organization_id: string
+  code: string
+  created_by: string
+  max_uses: number | null
+  use_count: number
+  expires_at: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface CreateOrganizationRequest {
+  name: string
+  description?: string
+}
+
+export interface JoinByInviteCodeRequest {
+  code: string
+}
+
+export interface CreateInviteCodeRequest {
+  max_uses?: number
+  expires_at?: string
+}
+
+export interface UpdateMemberRoleRequest {
+  role: string
 }
