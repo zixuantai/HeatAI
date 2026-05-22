@@ -16,7 +16,19 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/register',
     name: 'Register',
-    component: () => import('@/pages/Register.vue'),
+    component: () => import('@/pages/RegisterUser.vue'),
+    meta: { guest: true }
+  },
+  {
+    path: '/register-user',
+    name: 'RegisterUser',
+    component: () => import('@/pages/RegisterUser.vue'),
+    meta: { guest: true }
+  },
+  {
+    path: '/register-admin',
+    name: 'RegisterAdmin',
+    component: () => import('@/pages/RegisterAdmin.vue'),
     meta: { guest: true }
   },
   {

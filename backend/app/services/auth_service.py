@@ -10,14 +10,15 @@ from app.core.config import settings
 class AuthService:
 
     @staticmethod
-    async def register(db: AsyncSession, username: str, password: str) -> User:
+    async def register(db: AsyncSession, username: str, password: str, role: str = "user") -> User:
         result = await db.execute(select(User).where(User.username == username))
         if result.scalar_one_or_none():
             raise ValueError("用户名已存在")
 
         user = User(
             username=username,
-            password_hash=hash_password(password)
+            password_hash=hash_password(password),
+            role=role if role in ("user", "admin") else "user"
         )
         db.add(user)
         await db.commit()

@@ -29,6 +29,7 @@ export interface RegisterRequest {
   username: string
   password: string
   password_confirm: string
+  role?: string
 }
 
 export interface TokenResponse {

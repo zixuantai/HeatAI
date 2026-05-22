@@ -23,7 +23,7 @@ async def register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名支持字母、数字、下划线和中文，3-20位")
 
     try:
-        await auth_service.register(db, req.username, req.password)
+        await auth_service.register(db, req.username, req.password, req.role)
         return {"code": 0, "message": "注册成功", "data": None}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

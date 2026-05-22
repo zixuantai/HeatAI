@@ -1,7 +1,7 @@
 <template>
-  <div class="login-page">
+  <div class="register-page">
     <!-- Left Panel: Animated Characters -->
-    <div class="left-panel" :class="loginRole === 'admin' ? 'left-panel--admin' : 'left-panel--user'">
+    <div class="left-panel">
       <div class="left-content">
         <div class="left-top">
           <div class="brand">
@@ -13,7 +13,7 @@
         <div class="characters-area">
           <AnimatedCharacters
             :is-typing="isTyping"
-            :show-password="showPassword"
+            :show-password="showPassword || showConfirmPassword"
             :password-length="form.password.length"
           />
         </div>
@@ -27,7 +27,7 @@
       <div class="decor-blur decor-blur-2" />
     </div>
 
-    <!-- Right Panel: Login Form -->
+    <!-- Right Panel: Register Form -->
     <div class="right-panel">
       <div class="form-card">
         <div class="mobile-brand">
@@ -36,36 +36,11 @@
         </div>
 
         <div class="form-header">
-          <h1 class="form-title">欢迎回来</h1>
-          <p class="form-subtitle">登录您的账户继续使用</p>
+          <h1 class="form-title">创建账户</h1>
+          <p class="form-subtitle">加入HeatAI，高效解决供热问题</p>
         </div>
 
-        <!-- Role Selector -->
-        <div class="role-selector">
-          <div
-            class="role-option"
-            :class="{ active: loginRole === 'user' }"
-            @click="loginRole = 'user'"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-            <span>我是普通用户</span>
-          </div>
-          <div
-            class="role-option"
-            :class="{ active: loginRole === 'admin' }"
-            @click="loginRole = 'admin'"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
-            <span>我是管理员</span>
-          </div>
-        </div>
-
-        <form class="form-body" @submit.prevent="handleLogin">
+        <form class="form-body" @submit.prevent="handleRegister">
           <div class="field-group">
             <label class="field-label" for="username">用户名</label>
             <input
@@ -73,7 +48,7 @@
               v-model="form.username"
               type="text"
               class="field-input"
-              placeholder="请输入用户名"
+              placeholder="请输入用户名（3-20位字符）"
               autocomplete="off"
               @focus="isTyping = true"
               @blur="isTyping = false"
@@ -88,9 +63,9 @@
                 v-model="form.password"
                 :type="showPassword ? 'text' : 'password'"
                 class="field-input"
-                placeholder="请输入密码"
-                @focus="isTyping = true"
-                @blur="isTyping = false"
+                placeholder="请输入密码（6-20位字符）"
+                @focus="isTyping = true; isPasswordFocused = true"
+                @blur="isTyping = false; isPasswordFocused = false"
               />
               <button
                 type="button"
@@ -107,11 +82,46 @@
                 </svg>
               </button>
             </div>
+            <div class="password-strength" v-if="form.password">
+              <div class="strength-bar">
+                <div class="strength-fill" :style="strengthBarStyle" />
+              </div>
+              <span class="strength-text">{{ passwordStrength.text }}</span>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label" for="password_confirm">确认密码</label>
+            <div class="password-wrapper">
+              <input
+                id="password_confirm"
+                v-model="form.password_confirm"
+                :type="showConfirmPassword ? 'text' : 'password'"
+                class="field-input"
+                placeholder="请再次输入密码"
+                @focus="isTyping = true"
+                @blur="isTyping = false"
+              />
+              <button
+                type="button"
+                class="toggle-pwd"
+                @click="showConfirmPassword = !showConfirmPassword"
+              >
+                <svg v-if="showConfirmPassword" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </svg>
+                <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <InteractiveHoverButton
             type="submit"
-            :text="loading ? '登录中...' : '登 录'"
+            :text="loading ? '注册中...' : '注 册'"
             :loading="loading"
             :disabled="loading"
           />
@@ -122,14 +132,8 @@
         </form>
 
         <div class="form-footer">
-          <template v-if="loginRole === 'user'">
-            还没有账户？
-            <router-link to="/register" class="form-link">立即注册</router-link>
-          </template>
-          <template v-else>
-            还没有账户？
-            <router-link to="/register-admin" class="form-link">立即申请</router-link>
-          </template>
+          已有账户？
+          <router-link to="/login" class="form-link">立即登录</router-link>
         </div>
       </div>
     </div>
@@ -137,10 +141,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/store/modules/auth'
 import { ElMessage } from 'element-plus'
+import { registerApi } from '@/api/auth'
+import { useAuthStore } from '@/store/modules/auth'
 import AnimatedCharacters from '@/components/auth/AnimatedCharacters.vue'
 import InteractiveHoverButton from '@/components/auth/InteractiveHoverButton.vue'
 
@@ -150,33 +155,68 @@ const loading = ref(false)
 const errorMsg = ref('')
 const isTyping = ref(false)
 const showPassword = ref(false)
-const loginRole = ref<'user' | 'admin'>('user')
+const showConfirmPassword = ref(false)
+const isPasswordFocused = ref(false)
 
 const form = reactive({
   username: '',
-  password: ''
+  password: '',
+  password_confirm: '',
 })
 
-async function handleLogin() {
+const passwordStrength = computed(() => {
+  const pwd = form.password
+  if (!pwd) return { percent: 0, color: '#e2e8f0', text: '' }
+
+  let score = 0
+  if (pwd.length >= 6) score += 25
+  if (pwd.length >= 10) score += 15
+  if (/[a-z]/.test(pwd)) score += 15
+  if (/[A-Z]/.test(pwd)) score += 15
+  if (/[0-9]/.test(pwd)) score += 15
+  if (/[^a-zA-Z0-9]/.test(pwd)) score += 15
+
+  if (score <= 30) return { percent: 33, color: '#ef4444', text: '弱' }
+  if (score <= 60) return { percent: 66, color: '#f59e0b', text: '中' }
+  return { percent: 100, color: '#22c55e', text: '强' }
+})
+
+const strengthBarStyle = computed(() => ({
+  width: `${passwordStrength.value.percent}%`,
+  backgroundColor: passwordStrength.value.color,
+}))
+
+async function handleRegister() {
   errorMsg.value = ''
 
-  if (!form.username.trim()) {
-    errorMsg.value = '请输入用户名'
+  if (!form.username.trim()) { errorMsg.value = '请输入用户名'; return }
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]{3,20}$/.test(form.username.trim())) {
+    errorMsg.value = '用户名支持字母、数字、下划线和中文，3-20位'
     return
   }
-  if (!form.password) {
-    errorMsg.value = '请输入密码'
+  if (!form.password) { errorMsg.value = '请输入密码'; return }
+  if (form.password.length < 6 || form.password.length > 20) {
+    errorMsg.value = '密码长度为6-20个字符'
+    return
+  }
+  if (!form.password_confirm) { errorMsg.value = '请确认密码'; return }
+  if (form.password !== form.password_confirm) {
+    errorMsg.value = '两次输入的密码不一致'
     return
   }
 
   loading.value = true
   try {
+    await registerApi({
+      username: form.username.trim(),
+      password: form.password,
+      password_confirm: form.password_confirm,
+    })
+    ElMessage.success('注册成功，正在为您跳转...')
     await authStore.login(form.username.trim(), form.password)
-    ElMessage.success('登录成功')
-    const redirect = router.currentRoute.value.query.redirect as string
-    router.push(redirect || '/chat')
+    router.push('/chat')
   } catch (e: unknown) {
-    const msg = (e as { message?: string })?.message || '登录失败，请稍后重试'
+    const msg = (e as { message?: string })?.message || '注册失败，请稍后重试'
     errorMsg.value = msg
   } finally {
     loading.value = false
@@ -185,7 +225,7 @@ async function handleLogin() {
 </script>
 
 <style scoped>
-.login-page {
+.register-page {
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 100vh;
@@ -199,17 +239,10 @@ async function handleLogin() {
   position: relative;
   flex-direction: column;
   justify-content: space-between;
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 50%, #4b5563 100%);
   padding: 48px;
   color: #fff;
   overflow: hidden;
-}
-
-.left-panel--user {
-  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 50%, #4b5563 100%);
-}
-
-.left-panel--admin {
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
 }
 
 @media (min-width: 1024px) {
@@ -289,14 +322,7 @@ async function handleLogin() {
   right: 25%;
   width: 256px;
   height: 256px;
-}
-
-.left-panel--user .decor-blur-1 {
   background: rgba(156, 163, 175, 0.2);
-}
-
-.left-panel--admin .decor-blur-1 {
-  background: rgba(99, 102, 241, 0.3);
 }
 
 .decor-blur-2 {
@@ -304,14 +330,7 @@ async function handleLogin() {
   left: 25%;
   width: 384px;
   height: 384px;
-}
-
-.left-panel--user .decor-blur-2 {
   background: rgba(209, 213, 219, 0.15);
-}
-
-.left-panel--admin .decor-blur-2 {
-  background: rgba(139, 92, 246, 0.2);
 }
 
 /* ========== Right Panel ========== */
@@ -361,7 +380,7 @@ async function handleLogin() {
 
 .form-header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 
 .form-title {
@@ -378,48 +397,6 @@ async function handleLogin() {
   margin: 0;
 }
 
-/* ========== Role Selector ========== */
-.role-selector {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-
-.role-option {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 2px solid #e2e8f0;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-  font-weight: 500;
-  color: #64748b;
-  background: #fff;
-}
-
-.role-option:hover {
-  border-color: #c7d2fe;
-  color: #4f46e5;
-  background: #f5f3ff;
-}
-
-.role-option.active {
-  border-color: #6366f1;
-  color: #4f46e5;
-  background: #eef2ff;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.role-option svg {
-  flex-shrink: 0;
-}
-
-/* ========== Form ========== */
 .form-body {
   display: flex;
   flex-direction: column;
@@ -489,6 +466,35 @@ async function handleLogin() {
   color: #6366f1;
 }
 
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.strength-bar {
+  flex: 1;
+  height: 5px;
+  background: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.strength-fill {
+  height: 100%;
+  border-radius: 8px;
+  transition: all 0.4s ease;
+}
+
+.strength-text {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+  min-width: 20px;
+  text-align: right;
+}
+
 .form-error {
   padding: 12px 16px;
   font-size: 13px;
@@ -518,7 +524,7 @@ async function handleLogin() {
 
 /* ========== Responsive ========== */
 @media (max-width: 1023px) {
-  .login-page {
+  .register-page {
     grid-template-columns: 1fr;
   }
 }

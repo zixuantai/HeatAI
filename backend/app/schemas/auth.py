@@ -10,6 +10,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=20, description="用户名")
     password: str = Field(..., min_length=6, max_length=20, description="密码")
     password_confirm: str = Field(..., min_length=6, max_length=20, description="确认密码")
+    role: str = Field(default="user", description="角色: user 或 admin")
 
 
 class TokenResponse(BaseModel):

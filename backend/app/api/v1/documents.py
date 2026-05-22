@@ -35,8 +35,9 @@ async def upload_document(
     org, member = org_context
     org_id = org.id if org else None
 
-    if org and member.role not in ("owner", "admin", "editor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有 owner/admin/editor 可以上传文档")
+    # 权限检查：只有管理员用户可以上传文档
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有管理员可以上传文档")
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
@@ -131,8 +132,9 @@ async def delete_documents_batch(
     org, member = org_context
     org_id = org.id if org else None
 
-    if org and member.role not in ("owner", "admin", "editor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有 owner/admin/editor 可以删除文档")
+    # 权限检查：只有管理员用户可以删除文档
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有管理员可以删除文档")
 
     deleted_count, cleanup_list = await document_service.delete_documents_batch(db, body.ids, str(current_user.id), org_id)
     if cleanup_list:
@@ -210,8 +212,9 @@ async def delete_document(
     org, member = org_context
     org_id = org.id if org else None
 
-    if org and member.role not in ("owner", "admin", "editor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有 owner/admin/editor 可以删除文档")
+    # 权限检查：只有管理员用户可以删除文档
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足，只有管理员可以删除文档")
 
     success, filename = await document_service.delete_document(db, document_id, str(current_user.id), org_id)
     if not success:

@@ -34,8 +34,8 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isOrgEditor = computed(() => {
-    const role = currentMemberRole.value
-    return role === 'owner' || role === 'admin' || role === 'editor'
+    // 知识库操作权限基于用户角色，只有管理员可以操作
+    return user.value?.role === 'admin'
   })
 
   function setTokens(access: string, refresh: string) {
