@@ -35,6 +35,7 @@ class UserInfo(BaseModel):
     role: str
     status: str
     created_at: str
+    organizations: list[dict] | None = None
 
     class Config:
         from_attributes = True

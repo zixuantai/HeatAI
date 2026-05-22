@@ -72,8 +72,12 @@ async def logout(
 
 
 @router.get("/me")
-async def get_me(current_user: CurrentUser):
+async def get_me(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
     user = current_user
+    organizations = await auth_service.get_user_organizations(db, user.id)
     return {
         "code": 0,
         "message": "success",
@@ -86,7 +90,8 @@ async def get_me(current_user: CurrentUser):
             "avatar": user.avatar,
             "role": user.role,
             "status": user.status,
-            "created_at": user.created_at.isoformat() if user.created_at else ""
+            "created_at": user.created_at.isoformat() if user.created_at else "",
+            "organizations": organizations
         }
     }
 

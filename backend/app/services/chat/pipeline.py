@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 from app.services.retrieval.reranker_service import reranker_service
 from app.services.chat.engine.query_rewriter import query_rewriter
@@ -10,6 +11,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+org_id_context: contextvars.ContextVar[str | None] = contextvars.ContextVar("org_id", default=None)
+
 
 class ChatPipeline:
 
@@ -19,11 +22,11 @@ class ChatPipeline:
     def bind_kb_search(self):
         if not self._kb_search_bound:
             async def _kb_search_fn(query: str) -> list:
-                results = await asyncio.to_thread(reranker_service.search_and_rerank, query)
+                org_id = org_id_context.get()
+                results = await asyncio.to_thread(reranker_service.search_and_rerank, query, org_id=org_id)
                 return results
 
             tool_executor.set_search_fn(_kb_search_fn)
-            # 同步设置 LangChain tool 的模块级搜索函数
             from app.services.chat.engine.tools import set_kb_search_fn
             set_kb_search_fn(_kb_search_fn)
             self._kb_search_bound = True
@@ -42,14 +45,17 @@ class ChatPipeline:
         logger.info("=" * 60)
 
     @staticmethod
-    async def merge_expanded_results(main_results: list, rewrite_result: dict) -> list:
+    async def merge_expanded_results(
+        main_results: list,
+        rewrite_result: dict,
+        org_id: str | None = None,
+    ) -> list:
         expanded_queries = rewrite_result.get("expanded_queries", [])
         if not expanded_queries:
             return main_results
 
         threshold = settings.SIMILARITY_THRESHOLD
 
-        # ── Skip expanded search if main results are already sufficient ──
         if main_results:
             min_score = settings.EXPANDED_MIN_MAIN_SCORE
             min_count = settings.EXPANDED_SKIP_COUNT
@@ -65,15 +71,13 @@ class ChatPipeline:
             key = f"{r.get('document_id', '')}_{r.get('chunk_index', 0)}"
             seen_keys.add(key)
 
-        # ── Batch BGE encode all expanded queries at once ──
         expanded_texts = [BGE_QUERY_INSTRUCTION + eq for eq in expanded_queries]
         expanded_embs = await asyncio.to_thread(embedding_service.encode, expanded_texts)
 
         async def _search_one_expanded(eq: str, query_emb: list):
             try:
-                # BM25 and Milvus are independent — run in parallel
-                bm25_task = asyncio.to_thread(bm25_service.search, eq, 3)
-                milvus_task = asyncio.to_thread(milvus_service.search, query_emb, 3)
+                bm25_task = asyncio.to_thread(bm25_service.search, eq, 3, org_id)
+                milvus_task = asyncio.to_thread(milvus_service.search, query_emb, 3, org_id)
                 bm25_res_raw, vector_res_raw = await asyncio.gather(bm25_task, milvus_task)
 
                 bm25_res = reranker_service.filter_by_threshold(bm25_res_raw, threshold)
@@ -122,8 +126,8 @@ class ChatPipeline:
         return None
 
     @staticmethod
-    async def search_knowledge_base(message: str) -> list:
-        results = await asyncio.to_thread(reranker_service.search_and_rerank, message)
+    async def search_knowledge_base(message: str, org_id: str | None = None) -> list:
+        results = await asyncio.to_thread(reranker_service.search_and_rerank, message, org_id=org_id)
         if results:
             logger.info(f"[对话] 检索到 {len(results)} 条相关文档")
         return results

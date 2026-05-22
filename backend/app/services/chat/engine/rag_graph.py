@@ -34,6 +34,7 @@ class RAGState(TypedDict, total=False):
     session_id: str
     user_id: int
     db: AsyncSession
+    org_id: str | None
     need_kb: bool
     skip_rewrite: bool
     context_messages: list[dict]
@@ -60,13 +61,14 @@ async def _fast_path_node(state: RAGState) -> dict:
     db = state["db"]
     sid = state["session_id"]
     uid = state["user_id"]
+    org_id = state.get("org_id")
 
     rewrite_result = chat_pipeline.build_rewrite_result(msg, state["skip_rewrite"])
     chat_pipeline.log_rewrite_result(rewrite_result)
 
     search_results = []
     if need_kb:
-        search_results = await chat_pipeline.search_knowledge_base(msg)
+        search_results = await chat_pipeline.search_knowledge_base(msg, org_id=org_id)
 
     ctx = await context_builder.build(db, sid, uid, msg)
     return {
@@ -82,6 +84,7 @@ async def _rewrite_and_search_node(state: RAGState) -> dict:
     db = state["db"]
     sid = state["session_id"]
     uid = state["user_id"]
+    org_id = state.get("org_id")
 
     # 与改写请求并行启动上下文构建（匹配原有 asyncio.create_task 行为）
     ctx_task = asyncio.create_task(
@@ -94,9 +97,9 @@ async def _rewrite_and_search_node(state: RAGState) -> dict:
     search_results = []
     if need_kb:
         search_query = rewrite_result["rewritten_query"]
-        search_results = await chat_pipeline.search_knowledge_base(search_query)
+        search_results = await chat_pipeline.search_knowledge_base(search_query, org_id=org_id)
         search_results = await chat_pipeline.merge_expanded_results(
-            search_results, rewrite_result
+            search_results, rewrite_result, org_id=org_id
         )
 
     ctx = await ctx_task

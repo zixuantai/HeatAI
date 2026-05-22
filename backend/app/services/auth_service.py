@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserSession, TokenBlacklist
+from app.models.organization import Organization, OrganizationMember
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
 
@@ -153,6 +154,25 @@ class AuthService:
         await db.commit()
         await db.refresh(user)
         return user
+
+    @staticmethod
+    async def get_user_organizations(db: AsyncSession, user_id: str) -> list[dict]:
+        result = await db.execute(
+            select(Organization, OrganizationMember)
+            .join(OrganizationMember, Organization.id == OrganizationMember.organization_id)
+            .where(OrganizationMember.user_id == user_id)
+            .order_by(OrganizationMember.joined_at.desc())
+        )
+        rows = result.all()
+        return [
+            {
+                "id": row[0].id,
+                "name": row[0].name,
+                "role": row[1].role,
+                "joined_at": row[1].joined_at.isoformat() if row[1].joined_at else None
+            }
+            for row in rows
+        ]
 
 
 auth_service = AuthService()

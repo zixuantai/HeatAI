@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db, async_session
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, CurrentOrganization
 from app.schemas.chat import ChatRequest
 from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate, SessionPinUpdate
 from app.services.chat import chat_service, chat_pipeline, conversation_service, voice_service, query_rewriter
+from app.services.chat.pipeline import org_id_context
 from app.services.chat.engine.rag_graph import rag_graph, RAGState
 from app.services.memory.context_builder import context_builder
 
@@ -53,9 +54,14 @@ def _event_to_sse(event: dict) -> dict:
 async def ask(
     req: ChatRequest,
     current_user: CurrentUser,
+    org_context: CurrentOrganization,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
     try:
+        org, member = org_context
+        org_id = org.id if org else None
+        org_id_context.set(org_id)
+
         session_id = req.session_id
         if session_id:
             session = await conversation_service.get_session(db, session_id, current_user.id)
@@ -83,6 +89,7 @@ async def ask(
                 "session_id": session_id,
                 "user_id": current_user.id,
                 "db": db,
+                "org_id": org_id,
             }
             state = await rag_graph.ainvoke(initial)
             result = await chat_service.ask(
@@ -115,9 +122,14 @@ async def ask(
 async def stream_chat(
     req: ChatRequest,
     current_user: CurrentUser,
+    org_context: CurrentOrganization,
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
     logger.info(f"[对话] 收到请求，quick_mode={req.quick_mode}, message={req.message[:50]}..., images={len(req.images) if req.images else 0}")
+    org, member = org_context
+    org_id = org.id if org else None
+    org_id_context.set(org_id)
+
     session_id = req.session_id
     if session_id:
         session = await conversation_service.get_session(db, session_id, current_user.id)
@@ -175,6 +187,7 @@ async def stream_chat(
                     "session_id": session_id,
                     "user_id": current_user.id,
                     "db": db,
+                    "org_id": org_id,
                 }
 
                 # SSE: analyzing（仅 LLM 改写时发送）

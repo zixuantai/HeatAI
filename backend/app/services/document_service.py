@@ -31,16 +31,23 @@ class DocumentService:
         user_id: str,
         file_bytes: bytes,
         original_filename: str,
+        org_id: str | None = None,
     ) -> Document:
         upload_start = time.time()
         content_hash = hashlib.sha256(file_bytes).hexdigest()
 
+        dedup_conditions = [
+            Document.content_hash == content_hash,
+            Document.status == "completed",
+        ]
+        if org_id:
+            dedup_conditions.append(Document.organization_id == org_id)
+        else:
+            dedup_conditions.append(Document.user_id == user_id)
+            dedup_conditions.append(Document.organization_id.is_(None))
+
         result = await db.execute(
-            select(Document).where(
-                Document.user_id == user_id,
-                Document.content_hash == content_hash,
-                Document.status == "completed",
-            )
+            select(Document).where(*dedup_conditions)
         )
         existing = result.scalars().first()
         if existing:
@@ -50,6 +57,7 @@ class DocumentService:
 
         doc_record = Document(
             user_id=user_id,
+            organization_id=org_id,
             filename="",
             original_filename=original_filename,
             file_type=original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else "unknown",
@@ -166,14 +174,14 @@ class DocumentService:
                 logger.info(f"[Milvus 插入] 分块 #{i}: chunk_id={chunk_id}, document_id={doc_id}, "
                            f"content_size={len(chunk['content'])}字符")
             try:
-                milvus_service.insert(chunks, embeddings)
+                milvus_service.insert(chunks, embeddings, org_id=org_id)
                 logger.info(f"[Milvus 插入] ✅ 成功插入 {len(chunks)} 条向量, 耗时: {time.time() - insert_start:.2f}s")
             except Exception as e:
                 logger.error(f"[Milvus 插入] ❌ 插入失败: {type(e).__name__}: {e}")
                 raise
 
             bm25_start = time.time()
-            bm25_service.add_chunks(chunks)
+            bm25_service.add_chunks(chunks, org_id=org_id)
             logger.info(f"[BM25 索引] ✅ 已添加 {len(chunks)} 个分块, 耗时: {time.time() - bm25_start:.2f}s")
 
             doc_record.chunk_count = len(chunks)
@@ -204,7 +212,7 @@ class DocumentService:
                 logger.warning(f"[回滚] Milvus 清理失败 ({doc_record.id}): {cleanup_err}")
 
             try:
-                bm25_service.remove_by_document_id(doc_record.id)
+                bm25_service.remove_by_document_id(doc_record.id, org_id=org_id)
                 logger.info(f"[回滚] 已清理 BM25 中 {doc_record.id} 的索引")
             except Exception as cleanup_err:
                 logger.warning(f"[回滚] BM25 清理失败 ({doc_record.id}): {cleanup_err}")
@@ -218,8 +226,15 @@ class DocumentService:
         limit: int = 50,
         offset: int = 0,
         search: str | None = None,
+        org_id: str | None = None,
     ) -> tuple[list[Document], int]:
-        conditions = [Document.user_id == user_id]
+        conditions = []
+        if org_id:
+            conditions.append(Document.organization_id == org_id)
+        else:
+            conditions.append(Document.user_id == user_id)
+            conditions.append(Document.organization_id.is_(None))
+
         if search:
             conditions.append(Document.original_filename.ilike(f"%{search}%"))
 
@@ -243,8 +258,15 @@ class DocumentService:
         db: AsyncSession,
         user_id: str,
         search: str | None = None,
+        org_id: str | None = None,
     ) -> list[str]:
-        conditions = [Document.user_id == user_id]
+        conditions = []
+        if org_id:
+            conditions.append(Document.organization_id == org_id)
+        else:
+            conditions.append(Document.user_id == user_id)
+            conditions.append(Document.organization_id.is_(None))
+
         if search:
             conditions.append(Document.original_filename.ilike(f"%{search}%"))
         result = await db.execute(
@@ -253,18 +275,22 @@ class DocumentService:
         return [row[0] for row in result.all()]
 
     @staticmethod
-    async def get_document(db: AsyncSession, document_id: str, user_id: str) -> Document | None:
+    async def get_document(db: AsyncSession, document_id: str, user_id: str, org_id: str | None = None) -> Document | None:
+        conditions = [Document.id == document_id]
+        if org_id:
+            conditions.append(Document.organization_id == org_id)
+        else:
+            conditions.append(Document.user_id == user_id)
+            conditions.append(Document.organization_id.is_(None))
+
         result = await db.execute(
-            select(Document).where(
-                Document.id == document_id,
-                Document.user_id == user_id,
-            )
+            select(Document).where(*conditions)
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def delete_document(db: AsyncSession, document_id: str, user_id: str) -> tuple[bool, str | None]:
-        document = await DocumentService.get_document(db, document_id, user_id)
+    async def delete_document(db: AsyncSession, document_id: str, user_id: str, org_id: str | None = None) -> tuple[bool, str | None]:
+        document = await DocumentService.get_document(db, document_id, user_id, org_id)
         if not document:
             return False, None
 
@@ -276,7 +302,7 @@ class DocumentService:
         return True, filename
 
     @staticmethod
-    def cleanup_document_resources(document_id: str, filename: str):
+    def cleanup_document_resources(document_id: str, filename: str, org_id: str | None = None):
         try:
             file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), filename)
             if os.path.exists(file_path):
@@ -290,18 +316,18 @@ class DocumentService:
             logger.warning(f"Milvus 删除失败 [{document_id}]: {e}")
 
         try:
-            bm25_service.remove_by_document_id(document_id)
+            bm25_service.remove_by_document_id(document_id, org_id=org_id)
         except Exception as e:
             logger.warning(f"BM25 删除失败 [{document_id}]: {e}")
 
         logger.info(f"文档 {document_id} 资源清理完成")
 
     @staticmethod
-    async def delete_documents_batch(db: AsyncSession, document_ids: list[str], user_id: str) -> tuple[int, list[tuple[str, str]]]:
+    async def delete_documents_batch(db: AsyncSession, document_ids: list[str], user_id: str, org_id: str | None = None) -> tuple[int, list[tuple[str, str]]]:
         cleanup_list: list[tuple[str, str]] = []
         deleted_count = 0
         for document_id in document_ids:
-            document = await DocumentService.get_document(db, document_id, user_id)
+            document = await DocumentService.get_document(db, document_id, user_id, org_id)
             if not document:
                 continue
 
@@ -315,7 +341,7 @@ class DocumentService:
         return deleted_count, cleanup_list
 
     @staticmethod
-    def cleanup_documents_batch(cleanup_list: list[tuple[str, str]]):
+    def cleanup_documents_batch(cleanup_list: list[tuple[str, str]], org_id: str | None = None):
         for document_id, filename in cleanup_list:
             try:
                 file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), filename)
@@ -331,7 +357,7 @@ class DocumentService:
 
         bm25_removed_ids = [did for did, _ in cleanup_list]
         try:
-            bm25_service.remove_by_document_ids(bm25_removed_ids)
+            bm25_service.remove_by_document_ids(bm25_removed_ids, org_id=org_id)
         except Exception as e:
             logger.warning(f"BM25 批量删除失败: {e}")
 
@@ -341,17 +367,25 @@ class DocumentService:
     async def get_stats(
         db: AsyncSession,
         user_id: str,
+        org_id: str | None = None,
     ) -> dict:
         from sqlalchemy import case
 
+        conditions = []
+        if org_id:
+            conditions.append(Document.organization_id == org_id)
+        else:
+            conditions.append(Document.user_id == user_id)
+            conditions.append(Document.organization_id.is_(None))
+
         result = await db.execute(
-            select(func.count(Document.id)).where(Document.user_id == user_id)
+            select(func.count(Document.id)).where(*conditions)
         )
         total = result.scalar() or 0
 
         result = await db.execute(
             select(Document.file_type, func.count(Document.id))
-            .where(Document.user_id == user_id)
+            .where(*conditions)
             .group_by(Document.file_type)
             .order_by(func.count(Document.id).desc())
         )
@@ -362,7 +396,7 @@ class DocumentService:
                 Document.category,
                 func.count(Document.id).label("count"),
             )
-            .where(Document.user_id == user_id)
+            .where(*conditions)
             .group_by(Document.category)
             .order_by(func.count(Document.id).desc())
         )
@@ -375,15 +409,15 @@ class DocumentService:
         }
 
     @staticmethod
-    async def get_chunks(db: AsyncSession, document_id: str, user_id: str) -> List[Dict[str, Any]]:
-        document = await DocumentService.get_document(db, document_id, user_id)
+    async def get_chunks(db: AsyncSession, document_id: str, user_id: str, org_id: str | None = None) -> List[Dict[str, Any]]:
+        document = await DocumentService.get_document(db, document_id, user_id, org_id)
         if not document:
             return []
         return milvus_service.get_document_chunks(document_id)
 
     @staticmethod
-    async def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        return reranker_service.search_and_rerank(query, top_k=top_k)
+    async def search(query: str, top_k: int = 5, org_id: str | None = None) -> List[Dict[str, Any]]:
+        return reranker_service.search_and_rerank(query, top_k=top_k, org_id=org_id)
 
     @staticmethod
     async def rerank_search(
@@ -391,12 +425,14 @@ class DocumentService:
         top_k: int = 5,
         bm25_weight: float | None = None,
         bge_weight: float | None = None,
+        org_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         return reranker_service.search_and_rerank(
             query=query,
             top_k=top_k,
             bm25_weight=bm25_weight,
             bge_weight=bge_weight,
+            org_id=org_id,
         )
 
 

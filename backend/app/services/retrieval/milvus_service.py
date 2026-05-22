@@ -56,6 +56,10 @@ class MilvusService:
             self._create_collection_if_not_exists()
             self._initialized = True
 
+    def _has_org_field(self) -> bool:
+        fields = self._get_schema_field_names()
+        return "organization_id" in fields
+
     def _check_collection_compatible(self, collection_name: str) -> bool:
         from pymilvus import DataType
         desc = self._client.describe_collection(collection_name)
@@ -106,6 +110,7 @@ class MilvusService:
             FieldSchema(name="chunk_index", dtype=DataType.INT64),
             FieldSchema(name="created_at", dtype=DataType.VARCHAR, max_length=32),
             FieldSchema(name="version", dtype=DataType.INT64),
+            FieldSchema(name="organization_id", dtype=DataType.VARCHAR, max_length=64),
         ]
         schema = CollectionSchema(fields=fields, description="Document chunks collection")
 
@@ -133,7 +138,7 @@ class MilvusService:
         except Exception as e:
             logger.warning(f"向量索引创建跳过 (可能已被自动创建): {e}")
 
-        for scalar_field in ["document_id", "chunk_index"]:
+        for scalar_field in ["document_id", "chunk_index", "organization_id"]:
             try:
                 self._client.create_index(
                     collection_name=collection_name,
@@ -147,7 +152,7 @@ class MilvusService:
         self._client.load_collection(collection_name)
         time.sleep(1)
 
-    def insert(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]]) -> List[str]:
+    def insert(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]], org_id: str | None = None) -> List[str]:
         self._ensure_initialized()
 
         from datetime import datetime, timezone, timedelta
@@ -174,6 +179,9 @@ class MilvusService:
                 "created_at": now_iso,
                 "version": chunk["metadata"].get("version", 1),
             }
+
+            if "organization_id" in schema_fields:
+                entry["organization_id"] = org_id or ""
 
             entry.update(self._fill_extra_schema_fields(schema_fields, entry, chunk))
 
@@ -246,9 +254,14 @@ class MilvusService:
         self,
         query_embedding: List[float],
         top_k: int = 5,
+        org_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         self._ensure_initialized()
         search_start = time.time()
+
+        filter_expr = None
+        if self._has_org_field():
+            filter_expr = f'organization_id == "{org_id or ""}"'
 
         try:
             results = self._client.search(
@@ -257,6 +270,7 @@ class MilvusService:
                 limit=top_k,
                 output_fields=["content", "source", "title", "document_id", "chunk_index", "created_at", "version"],
                 search_params={"ef": settings.MILVUS_HNSW_EF_SEARCH},
+                filter=filter_expr,
             )
         except Exception as e:
             logger.error(f"[Milvus 检索] ❌ 检索失败: {type(e).__name__}: {e}")
@@ -315,11 +329,15 @@ class MilvusService:
         offset = 0
         batch_size = 1000
 
+        output_fields = ["id", "content", "chunk_index", "title", "source", "document_id", "created_at", "version"]
+        if self._has_org_field():
+            output_fields.append("organization_id")
+
         while True:
             res = self._client.query(
                 collection_name=settings.MILVUS_COLLECTION_NAME,
                 filter="id != ''",
-                output_fields=["id", "content", "chunk_index", "title", "source", "document_id", "created_at", "version"],
+                output_fields=output_fields,
                 limit=batch_size,
                 offset=offset,
             )

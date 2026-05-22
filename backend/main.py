@@ -40,6 +40,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.voice import router as voice_router
+from app.api.v1.organizations import router as organizations_router
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,7 @@ async def lifespan(app: FastAPI):
         await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT"))
         await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS category VARCHAR(50)"))
         await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS minhash_sig TEXT"))
+        await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS organization_id UUID"))
         await conn.commit()
 
     await asyncio.get_running_loop().run_in_executor(None, _startup_init)
@@ -109,6 +111,7 @@ app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat_router, prefix=settings.API_V1_PREFIX)
 app.include_router(documents_router, prefix=settings.API_V1_PREFIX)
 app.include_router(voice_router, prefix=settings.API_V1_PREFIX)
+app.include_router(organizations_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/")

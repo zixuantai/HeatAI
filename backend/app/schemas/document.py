@@ -11,6 +11,7 @@ class DocumentInfo(BaseModel):
     chunk_count: int
     status: str
     error_message: str | None = None
+    organization_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
