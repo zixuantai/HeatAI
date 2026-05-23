@@ -2,7 +2,7 @@ import logging
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from app.core.database import get_db
 from app.core.dependencies import CurrentUser
 from app.models.organization import Organization, OrganizationMember
@@ -31,7 +31,7 @@ async def create_organization(
 ):
     try:
         org, invite_code = await organization_service.create_organization(
-            db, current_user.id, req.name, req.description
+            db, current_user.id, req.name, req.description, req.avatar, req.phone, req.email
         )
         return {
             "code": 0,
@@ -41,6 +41,9 @@ async def create_organization(
                     id=org.id,
                     name=org.name,
                     description=org.description,
+                    avatar=org.avatar,
+                    phone=org.phone,
+                    email=org.email,
                     invite_code=org.invite_code,
                     created_by=org.created_by,
                     created_at=org.created_at.isoformat() if org.created_at else ""
@@ -55,6 +58,8 @@ async def create_organization(
                 ).model_dump(mode="json")
             }
         }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         logger.exception(f"创建组织失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -72,17 +77,31 @@ async def list_my_organizations(
         .order_by(OrganizationMember.joined_at.desc())
     )
     rows = result.all()
-    organizations = [
-        OrganizationOut(
-            id=row[0].id,
-            name=row[0].name,
-            description=row[0].description,
-            invite_code=row[0].invite_code,
-            created_by=row[0].created_by,
-            created_at=row[0].created_at.isoformat() if row[0].created_at else ""
-        ).model_dump(mode="json")
-        for row in rows
-    ]
+    
+    organizations = []
+    for row in rows:
+        org = row[0]
+        member_count_result = await db.execute(
+            select(func.count(OrganizationMember.id))
+            .where(OrganizationMember.organization_id == org.id)
+        )
+        member_count = member_count_result.scalar() or 0
+        
+        organizations.append(
+            OrganizationOut(
+                id=org.id,
+                name=org.name,
+                description=org.description,
+                avatar=org.avatar,
+                phone=org.phone,
+                email=org.email,
+                invite_code=org.invite_code,
+                created_by=org.created_by,
+                created_at=org.created_at.isoformat() if org.created_at else "",
+                member_count=member_count
+            ).model_dump(mode="json")
+        )
+    
     return {"code": 0, "message": "success", "data": organizations}
 
 
@@ -115,6 +134,9 @@ async def get_organization(
             id=org.id,
             name=org.name,
             description=org.description,
+            avatar=org.avatar,
+            phone=org.phone,
+            email=org.email,
             invite_code=org.invite_code,
             created_by=org.created_by,
             created_at=org.created_at.isoformat() if org.created_at else ""

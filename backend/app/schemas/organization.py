@@ -5,15 +5,22 @@ from datetime import datetime
 class OrganizationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="组织名称")
     description: str | None = Field(None, max_length=500, description="组织描述")
+    avatar: str | None = Field(None, description="组织头像（Base64编码）")
+    phone: str | None = Field(None, max_length=20, description="联系电话")
+    email: str | None = Field(None, max_length=100, description="联系邮箱")
 
 
 class OrganizationOut(BaseModel):
     id: str
     name: str
     description: str | None = None
+    avatar: str | None = None
+    phone: str | None = None
+    email: str | None = None
     invite_code: str
     created_by: str
     created_at: str
+    member_count: int = 0
 
     class Config:
         from_attributes = True
@@ -52,4 +59,4 @@ class JoinByInviteCode(BaseModel):
 
 
 class UpdateMemberRole(BaseModel):
-    role: str = Field(..., pattern="^(admin|editor|viewer)$", description="角色：admin/editor/viewer")
+    role: str = Field(..., pattern="^admin$", description="角色：admin")

@@ -28,14 +28,18 @@ export const useAuthStore = defineStore('auth', () => {
     return membership?.role || null
   })
 
+  const isOrgOwner = computed(() => {
+    return currentMemberRole.value === 'owner'
+  })
+
   const isOrgAdmin = computed(() => {
     const role = currentMemberRole.value
     return role === 'owner' || role === 'admin'
   })
 
   const isOrgEditor = computed(() => {
-    // 知识库操作权限基于用户角色，只有管理员可以操作
-    return user.value?.role === 'admin'
+    const role = currentMemberRole.value
+    return role === 'owner' || role === 'admin'
   })
 
   function setTokens(access: string, refresh: string) {
@@ -138,6 +142,7 @@ export const useAuthStore = defineStore('auth', () => {
     isAdmin,
     currentOrg,
     currentMemberRole,
+    isOrgOwner,
     isOrgAdmin,
     isOrgEditor,
     setTokens,

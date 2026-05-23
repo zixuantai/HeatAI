@@ -15,11 +15,23 @@ class OrganizationService:
         db: AsyncSession,
         user_id: str,
         name: str,
-        description: str | None = None
+        description: str | None = None,
+        avatar: str | None = None,
+        phone: str | None = None,
+        email: str | None = None
     ) -> tuple[Organization, InviteCode]:
+        existing_org = await db.execute(
+            select(Organization).where(Organization.created_by == user_id)
+        )
+        if existing_org.scalar_one_or_none():
+            raise ValueError("您已经创建过组织，一个管理员只能创建一个组织")
+
         org = Organization(
             name=name,
             description=description,
+            avatar=avatar,
+            phone=phone,
+            email=email,
             created_by=user_id,
             invite_code=generate_invite_code()
         )
@@ -86,7 +98,7 @@ class OrganizationService:
         member = OrganizationMember(
             organization_id=invite.organization_id,
             user_id=user_id,
-            role="viewer"
+            role="admin"
         )
         db.add(member)
 

@@ -38,6 +38,21 @@ async def migrate():
         """))
         print("[OK] messages table created")
 
+        await conn.execute(text("""
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS avatar TEXT
+        """))
+        print("[OK] organizations.avatar column added")
+
+        await conn.execute(text("""
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS phone VARCHAR(20)
+        """))
+        print("[OK] organizations.phone column added")
+
+        await conn.execute(text("""
+            ALTER TABLE organizations ADD COLUMN IF NOT EXISTS email VARCHAR(100)
+        """))
+        print("[OK] organizations.email column added")
+
     print("Migration completed!")
 
 if __name__ == "__main__":

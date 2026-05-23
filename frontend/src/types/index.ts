@@ -185,17 +185,21 @@ export interface Organization {
   id: string
   name: string
   description: string | null
+  avatar: string | null
+  phone: string | null
+  email: string | null
   invite_code: string
   created_by: string
   created_at: string
   updated_at: string
+  member_count: number
 }
 
 export interface OrganizationMember {
   id: string
   organization_id: string
   user_id: string
-  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  role: 'owner' | 'admin'
   joined_at: string
   username?: string
   nickname?: string
@@ -217,6 +221,9 @@ export interface InviteCode {
 export interface CreateOrganizationRequest {
   name: string
   description?: string
+  avatar?: string
+  phone?: string
+  email?: string
 }
 
 export interface JoinByInviteCodeRequest {
