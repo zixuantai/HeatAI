@@ -100,6 +100,8 @@ export interface SessionInfo {
   title: string
   message_count: number
   is_pinned: boolean
+  knowledge_base_id: string | null
+  knowledge_base_name: string | null
   created_at: string
   updated_at: string
 }
@@ -237,4 +239,49 @@ export interface CreateInviteCodeRequest {
 
 export interface UpdateMemberRoleRequest {
   role: string
+}
+
+export interface KnowledgeBase {
+  id: string
+  name: string
+  description: string | null
+  avatar: string | null
+  cover_color: string | null
+  owner_id: string
+  owner_name: string | null
+  owner_avatar: string | null
+  status: string
+  doc_count: number
+  view_count: number
+  like_count: number
+  is_recommended: boolean
+  is_liked: boolean
+  is_favorited: boolean
+  is_joined: boolean
+  member_count: number
+  quick_questions: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeBaseListResponse {
+  total: number
+  items: KnowledgeBase[]
+}
+
+export interface CreateKnowledgeBaseRequest {
+  name: string
+  description?: string
+  avatar?: string
+  cover_color?: string
+  quick_questions?: string[]
+}
+
+export interface UpdateKnowledgeBaseRequest {
+  name?: string
+  description?: string
+  avatar?: string
+  cover_color?: string
+  quick_questions?: string[]
+  is_recommended?: boolean
 }

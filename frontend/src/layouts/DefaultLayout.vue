@@ -76,7 +76,14 @@
             :class="{ active: activeSessionId === sess.id, pinned: sess.is_pinned }"
             @click="handleSelectSession(sess.id)"
           >
-            <div class="session-item-title">{{ sess.title }}</div>
+            <el-tooltip
+              :content="sess.title"
+              placement="top"
+              :show-after="500"
+              :disabled="sess.title.length < 15"
+            >
+              <div class="session-item-title">{{ sess.title }}</div>
+            </el-tooltip>
             <span v-if="sess.is_pinned" class="session-pin-icon" @click.stop="handleTogglePin(sess)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="17" x2="12" y2="22"/>
@@ -325,7 +332,14 @@
           :class="{ active: activeSessionId === sess.id }"
           @click="handleSearchSelect(sess.id)"
         >
-          <div class="search-result-title">{{ sess.title }}</div>
+          <el-tooltip
+            :content="sess.title"
+            placement="top"
+            :show-after="500"
+            :disabled="sess.title.length < 15"
+          >
+            <div class="search-result-title">{{ sess.title }}</div>
+          </el-tooltip>
           <div class="search-result-meta">
             <span>{{ formatYearMonth(sess.created_at) }}</span>
           </div>
@@ -394,7 +408,7 @@ const {
 } = useSettings(() => authStore.user?.id)
 
 const activeSessionId = computed(() => {
-  return (route.params.sessionId as string) || null
+  return (route.params.sessionId as string) || (route.query.sessionId as string) || null
 })
 
 const isChatRoute = computed(() => {
@@ -608,7 +622,12 @@ function handleSearchConversations() {
 }
 
 function handleSelectSession(sessionId: string) {
-  router.push(`/chat/${sessionId}`)
+  const sess = sessions.value.find(s => s.id === sessionId)
+  if (sess?.knowledge_base_id) {
+    router.push(`/plaza/${sess.knowledge_base_id}/chat?sessionId=${sessionId}`)
+  } else {
+    router.push(`/chat/${sessionId}`)
+  }
 }
 
 async function handleDeleteClick(sess: SessionInfo) {
@@ -638,10 +657,15 @@ async function handleTogglePin(sess: SessionInfo) {
 
 async function handleDeleteSession(sessionId: string) {
   try {
+    const sess = sessions.value.find(s => s.id === sessionId)
     await deleteSessionApi(sessionId)
     sessions.value = sessions.value.filter(s => s.id !== sessionId)
     if (activeSessionId.value === sessionId) {
-      router.push('/chat')
+      if (sess?.knowledge_base_id) {
+        router.push(`/plaza/${sess.knowledge_base_id}/chat`)
+      } else {
+        router.push('/chat')
+      }
     }
     ElMessage.success('对话已删除')
   } catch (e: unknown) {

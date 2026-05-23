@@ -153,6 +153,7 @@ class BM25Service:
         query: str,
         top_k: int = 5,
         org_id: str | None = None,
+        document_ids: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
         org_key = self._get_org_key(org_id)
         idx = self._get_index(org_key)
@@ -162,12 +163,17 @@ class BM25Service:
         query_tokens = self._tokenize(query)
         scores = idx.searcher.get_scores(query_tokens)
 
+        doc_id_set = set(document_ids) if document_ids is not None else None
         indexed = [(i, float(s)) for i, s in enumerate(scores) if s > 0]
         indexed.sort(key=lambda x: x[1], reverse=True)
 
         results: List[Dict[str, Any]] = []
-        for i, score in indexed[:top_k]:
+        for i, score in indexed:
+            if len(results) >= top_k:
+                break
             chunk = idx.corpus_chunks[i]
+            if doc_id_set is not None and chunk.get("document_id", "") not in doc_id_set:
+                continue
             results.append({
                 "content": chunk.get("content", ""),
                 "source": chunk.get("source", ""),

@@ -63,12 +63,55 @@ async def ask(
         org_id_context.set(org_id)
 
         session_id = req.session_id
+        kb_doc_ids = None
+        kb_name = None
+        if req.knowledge_base_id:
+            from app.services.knowledge_base_service import knowledge_base_service
+            kb = await knowledge_base_service.get(db, req.knowledge_base_id)
+            if not kb:
+                raise HTTPException(status_code=404, detail="知识库不存在")
+            kb_name = kb.name
+            kb_doc_ids_list = await knowledge_base_service.get_document_ids(db, req.knowledge_base_id)
+            kb_doc_ids = kb_doc_ids_list
+
+            if kb.owner_id != str(current_user.id):
+                member_info = await knowledge_base_service.get_user_member_info(
+                    db, req.knowledge_base_id, str(current_user.id)
+                )
+                if not member_info["is_joined"]:
+                    msg_count = await knowledge_base_service.count_user_kb_messages(
+                        db, req.knowledge_base_id, str(current_user.id)
+                    )
+                    if msg_count >= 3:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="您已用完免费对话次数，请加入知识库后继续对话"
+                        )
+
+        # 使用知识库作者的组织ID进行检索，确保能检索到作者上传的文档
+        from app.models.organization import OrganizationMember
+        from sqlalchemy import select as sa_select
+        owner_org_result = await db.execute(
+            sa_select(OrganizationMember.organization_id).where(
+                OrganizationMember.user_id == kb.owner_id,
+                OrganizationMember.is_active == True
+            ).limit(1)
+        )
+        owner_org_id = owner_org_result.scalar_one_or_none()
+        if owner_org_id:
+            org_id = str(owner_org_id)
+            org_id_context.set(str(owner_org_id))
+
         if session_id:
             session = await conversation_service.get_session(db, session_id, current_user.id)
             if not session:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
         else:
-            session = await conversation_service.create_session(db, current_user.id)
+            session = await conversation_service.create_session(
+                db, current_user.id,
+                knowledge_base_id=req.knowledge_base_id,
+                knowledge_base_name=kb_name,
+            )
             session_id = session.id
 
         await conversation_service.save_message(db, session_id, "user", req.message)
@@ -90,6 +133,7 @@ async def ask(
                 "user_id": current_user.id,
                 "db": db,
                 "org_id": org_id,
+                "document_ids": kb_doc_ids,
             }
             state = await rag_graph.ainvoke(initial)
             result = await chat_service.ask(
@@ -116,6 +160,9 @@ async def ask(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    except Exception as e:
+        logger.exception(f"[ask] 未预期错误: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.post("/stream")
@@ -131,12 +178,56 @@ async def stream_chat(
     org_id_context.set(org_id)
 
     session_id = req.session_id
+    kb_doc_ids = None
+    kb_name = None
+    kb_org_id = None
+    if req.knowledge_base_id:
+        from app.services.knowledge_base_service import knowledge_base_service
+        kb = await knowledge_base_service.get(db, req.knowledge_base_id)
+        if not kb:
+            raise HTTPException(status_code=404, detail="知识库不存在")
+        kb_name = kb.name
+        kb_doc_ids_list = await knowledge_base_service.get_document_ids(db, req.knowledge_base_id)
+        kb_doc_ids = kb_doc_ids_list
+
+        if kb.owner_id != str(current_user.id):
+            member_info = await knowledge_base_service.get_user_member_info(
+                db, req.knowledge_base_id, str(current_user.id)
+            )
+            if not member_info["is_joined"]:
+                msg_count = await knowledge_base_service.count_user_kb_messages(
+                    db, req.knowledge_base_id, str(current_user.id)
+                )
+                if msg_count >= 3:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="您已用完免费对话次数，请加入知识库后继续对话"
+                    )
+
+        from app.models.organization import OrganizationMember
+        from sqlalchemy import select as sa_select
+        owner_org_result = await db.execute(
+            sa_select(OrganizationMember.organization_id).where(
+                OrganizationMember.user_id == kb.owner_id,
+                OrganizationMember.is_active == True
+            ).limit(1)
+        )
+        owner_org_id = owner_org_result.scalar_one_or_none()
+        if owner_org_id:
+            kb_org_id = owner_org_id
+            org_id = str(owner_org_id)
+            org_id_context.set(str(owner_org_id))
+
     if session_id:
         session = await conversation_service.get_session(db, session_id, current_user.id)
         if not session:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
     else:
-        session = await conversation_service.create_session(db, current_user.id)
+        session = await conversation_service.create_session(
+            db, current_user.id,
+            knowledge_base_id=req.knowledge_base_id,
+            knowledge_base_name=kb_name,
+        )
         session_id = session.id
 
     await conversation_service.save_message(db, session_id, "user", req.message)
@@ -188,6 +279,7 @@ async def stream_chat(
                     "user_id": current_user.id,
                     "db": db,
                     "org_id": org_id,
+                    "document_ids": kb_doc_ids,
                 }
 
                 # SSE: analyzing（仅 LLM 改写时发送）

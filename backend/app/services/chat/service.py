@@ -329,6 +329,24 @@ class ChatService:
                 if delta:
                     yield {"type": "content", "content": delta}
 
+    @staticmethod
+    async def _call_model(
+        messages: list[dict],
+        stream: bool = False,
+        enable_tools: bool = False,
+        model: str | None = None,
+    ):
+        from dashscope import Generation
+
+        return await asyncio.to_thread(
+            Generation.call,
+            model=model or settings.MEMORY_LLM_MODEL,
+            messages=messages,
+            result_format="message",
+            api_key=_get_api_key(),
+            stream=stream,
+        )
+
 
 # ── 辅助函数 ──────────────────────────────────────────────────
 
@@ -388,7 +406,7 @@ def _convert_event_to_sse(event: dict) -> list:
 
 
 def _serialize_tool_output(output) -> str:
-    """将工具输出序列化为字符串（兼容前端期望的 JSON 字符串）。"""
+    """将工具输出序列列化为字符串（兼容前端期望的 JSON 字符串）。"""
     import json as _json
     if isinstance(output, str):
         return output

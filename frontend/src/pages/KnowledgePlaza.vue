@@ -50,55 +50,63 @@
           @click="handleCardClick(kb)"
         >
           <div class="kb-card-cover">
-            <div class="kb-card-cover-icon" :style="{ background: kb.coverColor || 'var(--gradient-primary)' }">
+            <div class="kb-card-cover-icon" :style="{ background: kb.cover_color || 'var(--gradient-primary)' }">
               <el-icon :size="28"><FolderOpened /></el-icon>
             </div>
           </div>
           <div class="kb-card-body">
             <div class="kb-card-title-row">
               <h3 class="kb-card-title">{{ kb.name }}</h3>
-              <el-tag v-if="kb.isRecommended" type="warning" size="small" effect="dark">精选</el-tag>
+              <el-tag v-if="kb.is_recommended" type="warning" size="small" effect="dark">精选</el-tag>
             </div>
             <p class="kb-card-desc">{{ kb.description || '暂无描述' }}</p>
             <div class="kb-card-meta">
               <span class="kb-card-meta-item">
                 <el-icon :size="14"><Document /></el-icon>
-                {{ kb.docCount }} 份文档
+                {{ kb.doc_count }} 份文档
               </span>
               <span class="kb-card-meta-item">
                 <el-icon :size="14"><User /></el-icon>
-                {{ kb.ownerName }}
+                {{ kb.owner_name || '未知' }}
               </span>
               <span class="kb-card-meta-item">
                 <el-icon :size="14"><View /></el-icon>
-                {{ kb.viewCount }} 次浏览
+                {{ kb.view_count }} 次浏览
               </span>
             </div>
             <div class="kb-card-footer">
-              <span class="kb-card-date">{{ formatDate(kb.createdAt) }}</span>
+              <span class="kb-card-date">{{ formatDate(kb.created_at) }}</span>
               <div class="kb-card-actions">
                 <button 
                   class="kb-action-btn" 
-                  :class="{ 'is-liked': kb.isLiked }"
+                  :class="{ 'is-liked': kb.is_liked }"
                   @click.stop="handleLike(kb)"
                 >
-                  <svg v-if="!kb.isLiked" class="thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <svg v-if="!kb.is_liked" class="thumb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                   </svg>
                   <svg v-else class="thumb-icon" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                   </svg>
-                  <span>{{ kb.likeCount }}</span>
+                  <span>{{ kb.like_count }}</span>
                 </button>
                 <button 
                   class="kb-action-btn"
-                  :class="{ 'is-favorited': kb.isFavorited }"
+                  :class="{ 'is-favorited': kb.is_favorited }"
                   @click.stop="handleFavorite(kb)"
                 >
                   <el-icon :size="14">
-                    <component :is="kb.isFavorited ? StarFilled : Star" />
+                    <component :is="kb.is_favorited ? StarFilled : Star" />
                   </el-icon>
                   <span>收藏</span>
+                </button>
+                <button
+                  v-if="activeTab === 'mine'"
+                  class="kb-action-btn delete-btn"
+                  @click.stop="handleDelete(kb)"
+                >
+                  <el-icon :size="14"><Delete /></el-icon>
+                  <span>删除</span>
                 </button>
               </div>
             </div>
@@ -125,6 +133,8 @@
         @size-change="handleSizeChange"
       />
     </div>
+
+    <CreateKnowledgeBaseDialog v-model="showCreateDialog" @created="handleCreated" />
   </div>
 </template>
 
@@ -132,24 +142,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Search, Plus, FolderOpened, Document, User, View, Star, StarFilled, Collection, CollectionTag, Promotion
+  Search, Plus, FolderOpened, Document, User, View, Star, StarFilled, Promotion, Delete
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-
-interface KnowledgeBase {
-  id: string
-  name: string
-  description: string
-  ownerName: string
-  docCount: number
-  viewCount: number
-  likeCount: number
-  isRecommended: boolean
-  isLiked?: boolean
-  isFavorited?: boolean
-  coverColor?: string
-  createdAt: string
-}
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { KnowledgeBase } from '@/types'
+import { getKnowledgeBasesApi, toggleLikeApi, toggleFavoriteApi, deleteKnowledgeBaseApi } from '@/api/knowledgeBases'
+import CreateKnowledgeBaseDialog from '@/components/plaza/CreateKnowledgeBaseDialog.vue'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -159,6 +157,7 @@ const currentPage = ref(1)
 const pageSize = ref(8)
 const total = ref(0)
 const knowledgeBases = ref<KnowledgeBase[]>([])
+const showCreateDialog = ref(false)
 
 const tabs = [
   { key: 'recommended', label: '精选推荐' },
@@ -167,123 +166,29 @@ const tabs = [
   { key: 'mine', label: '我的' }
 ]
 
-const coverColors = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
-  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
-]
-
-const mockData: KnowledgeBase[] = [
-  {
-    id: '1',
-    name: '供热工程技术规范知识库',
-    description: '包含供热工程设计、施工、验收等全流程技术规范文档',
-    ownerName: '技术部',
-    docCount: 156,
-    viewCount: 2340,
-    likeCount: 89,
-    isRecommended: true,
-    createdAt: '2026-05-20T10:00:00Z'
-  },
-  {
-    id: '2',
-    name: '热力学基础知识库',
-    description: '涵盖热力学基本原理、传热学、流体力学等基础知识',
-    ownerName: '研发部',
-    docCount: 98,
-    viewCount: 1890,
-    likeCount: 67,
-    isRecommended: true,
-    createdAt: '2026-05-18T14:30:00Z'
-  },
-  {
-    id: '3',
-    name: '智能供热系统知识库',
-    description: '介绍智能供热系统的架构、算法和优化策略',
-    ownerName: 'AI团队',
-    docCount: 234,
-    viewCount: 3560,
-    likeCount: 156,
-    isRecommended: false,
-    createdAt: '2026-05-15T09:15:00Z'
-  },
-  {
-    id: '4',
-    name: '供热管网设计手册',
-    description: '管网规划、设计计算、材料选型等专业资料',
-    ownerName: '设计院',
-    docCount: 78,
-    viewCount: 1230,
-    likeCount: 45,
-    isRecommended: false,
-    createdAt: '2026-05-12T16:45:00Z'
-  },
-  {
-    id: '5',
-    name: '节能减排政策法规',
-    description: '国家及地方供热行业节能减排相关政策法规汇编',
-    ownerName: '政策研究室',
-    docCount: 67,
-    viewCount: 890,
-    likeCount: 34,
-    isRecommended: true,
-    createdAt: '2026-05-10T11:20:00Z'
-  },
-  {
-    id: '6',
-    name: '锅炉运行维护知识库',
-    description: '各类锅炉设备的运行规程、维护保养和故障处理',
-    ownerName: '运维部',
-    docCount: 145,
-    viewCount: 2100,
-    likeCount: 78,
-    isRecommended: false,
-    createdAt: '2026-05-08T08:30:00Z'
-  }
-]
+const sortMap: Record<string, string> = {
+  recommended: 'recommended',
+  popular: 'popular',
+  latest: 'latest',
+  mine: 'mine'
+}
 
 async function loadKnowledgeBases() {
   loading.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  let filtered = [...mockData]
-  
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.trim().toLowerCase()
-    filtered = filtered.filter(kb => 
-      kb.name.toLowerCase().includes(query) || 
-      kb.description.toLowerCase().includes(query)
-    )
+  try {
+    const result = await getKnowledgeBasesApi({
+      search: searchQuery.value.trim() || undefined,
+      sort_by: sortMap[activeTab.value] || 'latest',
+      limit: pageSize.value,
+      offset: (currentPage.value - 1) * pageSize.value
+    })
+    knowledgeBases.value = result.items
+    total.value = result.total
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载失败')
+  } finally {
+    loading.value = false
   }
-  
-  switch (activeTab.value) {
-    case 'recommended':
-      filtered = filtered.filter(kb => kb.isRecommended)
-      break
-    case 'popular':
-      filtered.sort((a, b) => b.viewCount - a.viewCount)
-      break
-    case 'latest':
-      filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      break
-    case 'mine':
-      filtered = []
-      break
-  }
-  
-  total.value = filtered.length
-  const start = (currentPage.value - 1) * pageSize.value
-  knowledgeBases.value = filtered.slice(start, start + pageSize.value).map((kb, i) => ({
-    ...kb,
-    coverColor: coverColors[i % coverColors.length]
-  }))
-  
-  loading.value = false
 }
 
 function handleTabChange(tab: string) {
@@ -304,29 +209,51 @@ function handleClearSearch() {
 }
 
 function handleCreate() {
-  ElMessage.info('创建知识库功能开发中...')
+  showCreateDialog.value = true
+}
+
+function handleCreated() {
+  loadKnowledgeBases()
 }
 
 function handleCardClick(kb: KnowledgeBase) {
-  ElMessage.info(`查看知识库: ${kb.name}`)
+  router.push(`/plaza/${kb.id}/chat`)
 }
 
-function handleLike(kb: KnowledgeBase) {
-  if (kb.isLiked) {
-    kb.isLiked = false
-    kb.likeCount--
-  } else {
-    kb.isLiked = true
-    kb.likeCount++
+async function handleLike(kb: KnowledgeBase) {
+  try {
+    const result = await toggleLikeApi(kb.id)
+    kb.is_liked = result.is_liked
+    kb.like_count += result.is_liked ? 1 : -1
+  } catch (error: any) {
+    ElMessage.error(error.message || '操作失败')
   }
 }
 
-function handleFavorite(kb: KnowledgeBase) {
-  kb.isFavorited = !kb.isFavorited
-  if (kb.isFavorited) {
-    ElMessage.success('收藏成功')
-  } else {
-    ElMessage.info('已取消收藏')
+async function handleFavorite(kb: KnowledgeBase) {
+  try {
+    const result = await toggleFavoriteApi(kb.id)
+    kb.is_favorited = result.is_favorited
+    ElMessage.success(result.is_favorited ? '收藏成功' : '已取消收藏')
+  } catch (error: any) {
+    ElMessage.error(error.message || '操作失败')
+  }
+}
+
+async function handleDelete(kb: KnowledgeBase) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除知识库「${kb.name}」吗？删除后所有关联的对话将无法访问。`,
+      '确认删除',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    await deleteKnowledgeBaseApi(kb.id)
+    ElMessage.success('知识库已删除')
+    loadKnowledgeBases()
+  } catch (error: any) {
+    if (error !== 'cancel' && error !== 'close') {
+      ElMessage.error(error.message || '删除失败')
+    }
   }
 }
 
@@ -394,7 +321,7 @@ onMounted(() => {
 }
 
 .plaza-search-input {
-  width: 380px;
+  width: 560px;
   height: 38px;
 }
 
@@ -636,6 +563,12 @@ onMounted(() => {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: rgba(79, 70, 229, 0.08);
+}
+
+.kb-action-btn.delete-btn:hover {
+  border-color: var(--color-error);
+  color: var(--color-error);
+  background: rgba(229, 62, 62, 0.08);
 }
 
 .plaza-pagination {

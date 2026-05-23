@@ -80,7 +80,8 @@ export const useChatStore = defineStore('chat', () => {
     onServerAudio?: (audioBase64: string) => void,
     onSessionCreated?: (sessionId: string) => void,
     onStreamError?: (error: string) => void,
-    onStreamDone?: () => void
+    onStreamDone?: () => void,
+    knowledgeBaseId?: string | null
   ) {
     const state = getOrCreate(storeKey)
 
@@ -222,7 +223,7 @@ export const useChatStore = defineStore('chat', () => {
       const stored = localStorage.getItem(`heatai_personalization_${userId}_${k}`)
       personalization[k] = stored !== null ? Number(stored) : 0
     }
-    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, voiceType, images, personalization)
+    const controller = askStreamApi(content, apiSessionId, callbacks, quickMode, voiceType, images, personalization, knowledgeBaseId || null)
     state.abortController = controller
   }
 

@@ -17,6 +17,8 @@ class SessionOut(BaseModel):
     title: str
     message_count: int
     is_pinned: bool = False
+    knowledge_base_id: str | None = None
+    knowledge_base_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

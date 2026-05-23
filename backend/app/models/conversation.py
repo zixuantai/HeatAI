@@ -14,6 +14,8 @@ class ConversationSession(Base):
     title: Mapped[str] = mapped_column(String(200), default="新对话")
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    knowledge_base_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), nullable=True, index=True)
+    knowledge_base_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

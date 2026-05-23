@@ -49,6 +49,7 @@ class ChatPipeline:
         main_results: list,
         rewrite_result: dict,
         org_id: str | None = None,
+        document_ids: list[str] | None = None,
     ) -> list:
         expanded_queries = rewrite_result.get("expanded_queries", [])
         if not expanded_queries:
@@ -76,8 +77,8 @@ class ChatPipeline:
 
         async def _search_one_expanded(eq: str, query_emb: list):
             try:
-                bm25_task = asyncio.to_thread(bm25_service.search, eq, 3, org_id)
-                milvus_task = asyncio.to_thread(milvus_service.search, query_emb, 3, org_id)
+                bm25_task = asyncio.to_thread(bm25_service.search, eq, 3, org_id, document_ids)
+                milvus_task = asyncio.to_thread(milvus_service.search, query_emb, 3, org_id, document_ids)
                 bm25_res_raw, vector_res_raw = await asyncio.gather(bm25_task, milvus_task)
 
                 bm25_res = reranker_service.filter_by_threshold(bm25_res_raw, threshold)
@@ -126,8 +127,8 @@ class ChatPipeline:
         return None
 
     @staticmethod
-    async def search_knowledge_base(message: str, org_id: str | None = None) -> list:
-        results = await asyncio.to_thread(reranker_service.search_and_rerank, message, org_id=org_id)
+    async def search_knowledge_base(message: str, org_id: str | None = None, document_ids: list[str] | None = None) -> list:
+        results = await asyncio.to_thread(reranker_service.search_and_rerank, message, org_id=org_id, document_ids=document_ids)
         if results:
             logger.info(f"[对话] 检索到 {len(results)} 条相关文档")
         return results

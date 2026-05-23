@@ -19,6 +19,7 @@ class ChatRequest(BaseModel):
     voice: str = Field("longanhuan", description="TTS音色名称")
     images: list[str] = Field(default_factory=list, description="图片base64列表，用于视觉模型")
     personalization: dict[str, int] = Field(default_factory=dict, description="个性化参数，key为gentle/enthusiastic/structure/emoji，value为-1减弱/0默认/1增强")
+    knowledge_base_id: str | None = Field(None, description="知识库ID，限定检索范围")
 
 
 class ChatResponse(BaseModel):

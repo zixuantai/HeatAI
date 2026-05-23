@@ -14,8 +14,19 @@ logger = logging.getLogger(__name__)
 class ConversationService:
 
     @staticmethod
-    async def create_session(db: AsyncSession, user_id: str, title: str = "新对话") -> ConversationSession:
-        session = ConversationSession(user_id=user_id, title=title)
+    async def create_session(
+        db: AsyncSession,
+        user_id: str,
+        title: str = "新对话",
+        knowledge_base_id: str | None = None,
+        knowledge_base_name: str | None = None,
+    ) -> ConversationSession:
+        session = ConversationSession(
+            user_id=user_id,
+            title=title,
+            knowledge_base_id=knowledge_base_id,
+            knowledge_base_name=knowledge_base_name,
+        )
         db.add(session)
         await db.commit()
         await db.refresh(session)
@@ -76,7 +87,9 @@ class ConversationService:
                 title = content[:30] + ("..." if len(content) > 30 else "")
                 session.title = title
                 await db.commit()
-                asyncio.ensure_future(ConversationService._auto_generate_title(session_id, content))
+                asyncio.ensure_future(
+                    ConversationService._auto_generate_title(session_id, content, session.knowledge_base_name)
+                )
 
         short_term_memory.add_turn(session_id, role, content)
         return message
@@ -148,9 +161,11 @@ class ConversationService:
         )
 
     @staticmethod
-    async def _auto_generate_title(session_id: str, user_message: str) -> None:
+    async def _auto_generate_title(session_id: str, user_message: str, kb_name: str | None = None) -> None:
         try:
             title = await ConversationService._generate_title_via_llm(user_message)
+            if kb_name:
+                title = f"【{kb_name}】{title}"
             from app.core.database import async_session
             async with async_session() as db:
                 session = await db.get(ConversationSession, session_id)

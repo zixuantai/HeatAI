@@ -77,6 +77,11 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'KnowledgePlaza',
         component: () => import('@/pages/KnowledgePlaza.vue')
+      },
+      {
+        path: ':kbId/chat',
+        name: 'KnowledgeBaseChat',
+        component: () => import('@/pages/KnowledgeBaseChat.vue')
       }
     ]
   }

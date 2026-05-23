@@ -255,13 +255,20 @@ class MilvusService:
         query_embedding: List[float],
         top_k: int = 5,
         org_id: str | None = None,
+        document_ids: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
         self._ensure_initialized()
         search_start = time.time()
 
-        filter_expr = None
+        filter_parts = []
         if self._has_org_field():
-            filter_expr = f'organization_id == "{org_id or ""}"'
+            filter_parts.append(f'organization_id == "{org_id or ""}"')
+        if document_ids is not None:
+            if len(document_ids) == 0:
+                return []
+            ids_str = ", ".join(f'"{did}"' for did in document_ids)
+            filter_parts.append(f"document_id in [{ids_str}]")
+        filter_expr = " and ".join(filter_parts) if filter_parts else None
 
         try:
             results = self._client.search(
