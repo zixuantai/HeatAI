@@ -67,6 +67,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/Organizations.vue')
       }
     ]
+  },
+  {
+    path: '/plaza',
+    component: () => import('@/layouts/DefaultLayout.vue'),
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'KnowledgePlaza',
+        component: () => import('@/pages/KnowledgePlaza.vue')
+      }
+    ]
   }
 ]
 

@@ -35,6 +35,16 @@
             <span v-show="!collapsed">知识库</span>
           </div>
         </el-tooltip>
+        <el-tooltip content="知识库广场" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            :class="{ active: isPlazaRoute }"
+            @click="handleNavToPlaza"
+          >
+            <el-icon :size="20"><Promotion /></el-icon>
+            <span v-show="!collapsed">知识库广场</span>
+          </div>
+        </el-tooltip>
         <el-tooltip content="搜索对话" placement="right" :disabled="!collapsed" :show-after="300">
           <div
             class="nav-item"
@@ -328,7 +338,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding, Promotion } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -397,6 +407,10 @@ const isNewChatRoute = computed(() => {
 
 const isDocumentsRoute = computed(() => {
   return route.path.startsWith('/documents')
+})
+
+const isPlazaRoute = computed(() => {
+  return route.path.startsWith('/plaza')
 })
 
 const isOrganizationsRoute = computed(() => {
@@ -567,6 +581,14 @@ function handleNavToDocuments() {
     return
   }
   router.push('/documents')
+}
+
+function handleNavToPlaza() {
+  if (!authStore.isAuthenticated) {
+    router.push({ name: 'Login', query: { redirect: '/plaza' } })
+    return
+  }
+  router.push('/plaza')
 }
 
 function handleNavToOrganizations() {
