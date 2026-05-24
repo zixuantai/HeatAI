@@ -230,6 +230,7 @@
             {{ q }}
           </el-tag>
         </div>
+        <BottomCards v-if="messages.length === 0" variant="kbChat" />
         <p v-if="messages.length > 0" class="input-hint">内容由AI生成，仅供参考</p>
       </div>
       </div>
@@ -258,6 +259,7 @@ import { useChatStore } from '@/store/modules/chat'
 import MessageActions from '@/components/chat/MessageActions.vue'
 import SourcePanel from '@/components/chat/SourcePanel.vue'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
+import BottomCards from '@/components/chat/BottomCards.vue'
 import { renderMarkdownCached } from '@/composables/chat/useMarkdown'
 import type { SourceItem } from '@/composables/chat/useSourceExtractor'
 import { useImageUpload } from '@/composables/chat/useImageUpload'
@@ -653,6 +655,7 @@ watch(sessionId, (newId, oldId) => {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
 }
 
 .source-slide-enter-active,
@@ -804,6 +807,7 @@ watch(sessionId, (newId, oldId) => {
   justify-content: center;
   align-items: center;
   overflow-y: hidden;
+  padding-top: 2vh;
 }
 
 .kb-welcome {
@@ -812,7 +816,6 @@ watch(sessionId, (newId, oldId) => {
   flex-direction: column;
   align-items: center;
   padding: 0 20px 12px;
-  margin-top: -60px;
   gap: 20px;
 }
 

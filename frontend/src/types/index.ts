@@ -285,3 +285,8 @@ export interface UpdateKnowledgeBaseRequest {
   quick_questions?: string[]
   is_recommended?: boolean
 }
+
+export interface UserStats {
+  ai_answer_count: number
+  exceed_percentage: number
+}

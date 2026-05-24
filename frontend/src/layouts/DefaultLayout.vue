@@ -4,6 +4,7 @@
       <div class="aside-header" :class="{ collapsed }">
         <div class="brand-area">
           <span class="brand-icon">🔥</span>
+          <span v-show="!collapsed" class="brand-name">HeatAI</span>
         </div>
         <el-tooltip :content="collapsed ? '展开侧边栏' : '收起侧边栏'" placement="right" :show-after="300">
           <div class="collapse-btn" @click="collapsed = !collapsed">

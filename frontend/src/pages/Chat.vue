@@ -1,13 +1,7 @@
 <template>
   <div class="chat-page-wrapper" :class="{ 'panel-open': sourcePanelVisible }">
     <div class="chat-container" :class="{ 'has-messages': messages.length > 0 }">
-      <div class="chat-topbar">
-        <div class="topbar-brand">
-          <span class="topbar-text">HeatAI</span>
-        </div>
-      </div>
-
-    <div class="chat-body" :class="{ 'is-empty': messages.length === 0 }">
+      <div class="chat-body" :class="{ 'is-empty': messages.length === 0 }">
       <div v-if="messages.length === 0" class="chat-welcome">
         <h2>欢迎使用 HeatAI 供热智能客服</h2>
         <p>我是您的供热服务助手，可以帮您解答供暖相关问题</p>
@@ -173,6 +167,7 @@
             {{ q }}
           </el-tag>
         </div>
+        <BottomCards v-if="messages.length === 0" variant="chat" />
         <p v-if="messages.length > 0" class="input-hint">内容由AI生成，仅供参考</p>
       </div>
     </div>
@@ -201,6 +196,7 @@ import { useChatStore } from '@/store/modules/chat'
 import VoiceInput from '@/components/chat/VoiceInput.vue'
 import MessageActions from '@/components/chat/MessageActions.vue'
 import SourcePanel from '@/components/chat/SourcePanel.vue'
+import BottomCards from '@/components/chat/BottomCards.vue'
 import { useAudioPlayer } from '@/composables/chat/useAudioPlayer'
 import { renderMarkdownCached } from '@/composables/chat/useMarkdown'
 import { useImageUpload } from '@/composables/chat/useImageUpload'
@@ -600,6 +596,7 @@ async function handleSend() {
   display: flex;
   height: 100vh;
   overflow: hidden;
+  position: relative;
 }
 
 /* ── Slide transition for source panel ─────────────── */
@@ -662,32 +659,6 @@ async function handleSend() {
   pointer-events: none;
 }
 
-/* ── Top Bar ─────────────────────────────────────────── */
-.chat-topbar {
-  display: flex;
-  align-items: center;
-  padding: 20px 16px;
-  flex-shrink: 0;
-  background: transparent;
-  position: relative;
-  z-index: 1;
-}
-
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.topbar-text {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-extrabold);
-  color: var(--color-text-main);
-  letter-spacing: var(--tracking-tight);
-  line-height: 1;
-  padding-top: 2px;
-}
-
 /* ── Body Area ───────────────────────────────────────── */
 .chat-body {
   flex: 1;
@@ -702,6 +673,7 @@ async function handleSend() {
   justify-content: center;
   align-items: center;
   overflow-y: hidden;
+  padding-top: 20vh;
 }
 
 /* ── Welcome Page (Empty State) ──────────────────────── */
@@ -711,7 +683,6 @@ async function handleSend() {
   flex-direction: column;
   align-items: center;
   padding: 0 20px 12px;
-  margin-top: -56px;
 }
 
 .chat-welcome h2 {
