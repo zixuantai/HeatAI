@@ -26,6 +26,15 @@
             <span v-show="!collapsed">新对话</span>
           </div>
         </el-tooltip>
+        <el-tooltip content="搜索对话" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            @click="handleSearchConversations"
+          >
+            <el-icon :size="20"><Search /></el-icon>
+            <span v-show="!collapsed">搜索对话</span>
+          </div>
+        </el-tooltip>
         <el-tooltip content="知识库" placement="right" :disabled="!collapsed" :show-after="300">
           <div
             class="nav-item"
@@ -36,25 +45,6 @@
             <span v-show="!collapsed">知识库</span>
           </div>
         </el-tooltip>
-        <el-tooltip content="知识库广场" placement="right" :disabled="!collapsed" :show-after="300">
-          <div
-            class="nav-item"
-            :class="{ active: isPlazaRoute }"
-            @click="handleNavToPlaza"
-          >
-            <el-icon :size="20"><Promotion /></el-icon>
-            <span v-show="!collapsed">知识库广场</span>
-          </div>
-        </el-tooltip>
-        <el-tooltip content="搜索对话" placement="right" :disabled="!collapsed" :show-after="300">
-          <div
-            class="nav-item"
-            @click="handleSearchConversations"
-          >
-            <el-icon :size="20"><Search /></el-icon>
-            <span v-show="!collapsed">搜索对话</span>
-          </div>
-        </el-tooltip>
         <el-tooltip content="组织" placement="right" :disabled="!collapsed" :show-after="300">
           <div
             class="nav-item"
@@ -63,6 +53,16 @@
           >
             <el-icon :size="20"><OfficeBuilding /></el-icon>
             <span v-show="!collapsed">组织</span>
+          </div>
+        </el-tooltip>
+        <el-tooltip content="知识库广场" placement="right" :disabled="!collapsed" :show-after="300">
+          <div
+            class="nav-item"
+            :class="{ active: isPlazaRoute }"
+            @click="handleNavToPlaza"
+          >
+            <el-icon :size="20"><Promotion /></el-icon>
+            <span v-show="!collapsed">知识库广场</span>
           </div>
         </el-tooltip>
       </div>
