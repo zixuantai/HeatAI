@@ -8,21 +8,6 @@
     @closed="handleClosed"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="create-kb-form">
-      <el-form-item label="知识库名称" prop="name">
-        <el-input v-model="form.name" placeholder="请输入知识库名称" maxlength="50" show-word-limit />
-      </el-form-item>
-
-      <el-form-item label="知识库简介" prop="description">
-        <el-input
-          v-model="form.description"
-          type="textarea"
-          placeholder="请输入知识库简介"
-          :rows="3"
-          maxlength="200"
-          show-word-limit
-        />
-      </el-form-item>
-
       <el-form-item label="知识库头像">
         <div class="kb-avatar-picker">
           <div class="avatar-preview-area">
@@ -53,6 +38,21 @@
             </div>
           </div>
         </div>
+      </el-form-item>
+
+      <el-form-item label="知识库名称" prop="name">
+        <el-input v-model="form.name" placeholder="请输入知识库名称" maxlength="50" show-word-limit />
+      </el-form-item>
+
+      <el-form-item label="知识库简介" prop="description">
+        <el-input
+          v-model="form.description"
+          type="textarea"
+          placeholder="请输入知识库简介"
+          :rows="3"
+          maxlength="200"
+          show-word-limit
+        />
       </el-form-item>
 
       <el-form-item label="上传文档">
@@ -377,15 +377,18 @@ function handleClosed() {
 .default-avatar-item {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
   border: 3px solid transparent;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .default-avatar-item:hover {

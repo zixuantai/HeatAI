@@ -108,6 +108,14 @@
                   <el-icon :size="14"><Delete /></el-icon>
                   <span>删除</span>
                 </button>
+                <button
+                  v-if="activeTab === 'mine'"
+                  class="kb-action-btn doc-mgmt-btn"
+                  @click.stop="handleDocManagement(kb)"
+                >
+                  <el-icon :size="14"><FolderOpened /></el-icon>
+                  <span>文档管理</span>
+                </button>
               </div>
             </div>
           </div>
@@ -135,6 +143,11 @@
     </div>
 
     <CreateKnowledgeBaseDialog v-model="showCreateDialog" @created="handleCreated" />
+    <DocumentManagementDialog
+      v-model="showDocMgmtDialog"
+      :kb-id="selectedKbId"
+      :kb-name="selectedKbName"
+    />
   </div>
 </template>
 
@@ -148,6 +161,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import type { KnowledgeBase } from '@/types'
 import { getKnowledgeBasesApi, toggleLikeApi, toggleFavoriteApi, deleteKnowledgeBaseApi } from '@/api/knowledgeBases'
 import CreateKnowledgeBaseDialog from '@/components/plaza/CreateKnowledgeBaseDialog.vue'
+import DocumentManagementDialog from '@/components/plaza/DocumentManagementDialog.vue'
 
 const router = useRouter()
 const searchQuery = ref('')
@@ -158,6 +172,9 @@ const pageSize = ref(8)
 const total = ref(0)
 const knowledgeBases = ref<KnowledgeBase[]>([])
 const showCreateDialog = ref(false)
+const showDocMgmtDialog = ref(false)
+const selectedKbId = ref('')
+const selectedKbName = ref('')
 
 const tabs = [
   { key: 'recommended', label: '精选推荐' },
@@ -216,6 +233,12 @@ function handleCreate() {
 
 function handleCreated() {
   loadKnowledgeBases()
+}
+
+function handleDocManagement(kb: KnowledgeBase) {
+  selectedKbId.value = kb.id
+  selectedKbName.value = kb.name
+  showDocMgmtDialog.value = true
 }
 
 function handleCardClick(kb: KnowledgeBase) {
@@ -569,6 +592,12 @@ onMounted(() => {
 }
 
 .kb-action-btn.delete-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.08);
+}
+
+.kb-action-btn.doc-mgmt-btn:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
   background: rgba(79, 70, 229, 0.08);
