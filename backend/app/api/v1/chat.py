@@ -10,6 +10,7 @@ from app.core.dependencies import CurrentUser, CurrentOrganization
 from app.schemas.chat import ChatRequest
 from app.schemas.conversation import SessionOut, SessionDetailOut, SessionCreate, SessionUpdate, SessionPinUpdate
 from app.services.chat import chat_service, chat_pipeline, conversation_service, voice_service, query_rewriter
+from app.services.chat.conversation import get_user_stats
 from app.services.chat.pipeline import org_id_context
 from app.services.chat.engine.rag_graph import rag_graph, RAGState
 from app.services.memory.context_builder import context_builder
@@ -347,6 +348,15 @@ async def stream_chat(
             "X-Accel-Buffering": "no",
         }
     )
+
+
+@router.get("/stats", response_model=dict)
+async def get_chat_stats(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    stats = await get_user_stats(db, str(current_user.id))
+    return {"code": 0, "message": "success", "data": stats}
 
 
 @router.get("/sessions", response_model=dict)

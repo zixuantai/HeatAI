@@ -4,7 +4,6 @@
     <div class="bottom-card stats-card clickable-card" @click="showStatsDialog = true">
       <p class="stats-line-1">截止 {{ todayDate }}，AI已为你解答了</p>
       <div class="stats-line-2">
-        <!-- 左翼 -->
         <svg class="wing wing-left" width="44" height="40" viewBox="0 0 44 40" fill="none">
           <ellipse cx="22" cy="8" rx="16" ry="4" transform="rotate(28 22 8)" fill="#8b5cf6" opacity="0.8"/>
           <ellipse cx="24" cy="16" rx="15" ry="3.5" transform="rotate(10 24 16)" fill="#a78bfa" opacity="0.7"/>
@@ -12,9 +11,8 @@
           <ellipse cx="28" cy="32" rx="10" ry="2.5" transform="rotate(-25 28 32)" fill="#ddd6fe" opacity="0.5"/>
         </svg>
 
-        <span class="stats-count">{{ stats.ai_answer_count }} 次</span>
+        <span class="stats-count">{{ stats.total_count }} 次</span>
 
-        <!-- 右翼 -->
         <svg class="wing wing-right" width="44" height="40" viewBox="0 0 44 40" fill="none">
           <ellipse cx="22" cy="8" rx="16" ry="4" transform="rotate(-28 22 8)" fill="#8b5cf6" opacity="0.8"/>
           <ellipse cx="20" cy="16" rx="15" ry="3.5" transform="rotate(-10 20 16)" fill="#a78bfa" opacity="0.7"/>
@@ -35,8 +33,26 @@
       :close-on-click-modal="true"
       destroy-on-close
     >
-      <div class="stats-dialog-placeholder">
-        <p>详细信息待后续迭代升级</p>
+      <div class="stats-dialog-body">
+        <div class="stats-dialog-total">
+          <span class="stats-dialog-total-label">总次数</span>
+          <span class="stats-dialog-total-count">{{ stats.total_count }}</span>
+        </div>
+        <div v-if="stats.general_count > 0" class="stats-dialog-item">
+          <span class="stats-dialog-item-label">新对话</span>
+          <span class="stats-dialog-item-count">{{ stats.general_count }} 次</span>
+        </div>
+        <div v-if="stats.kb_breakdown.length > 0" class="stats-dialog-divider">
+          <span>各知识库次数明细</span>
+        </div>
+        <div
+          v-for="kb in stats.kb_breakdown"
+          :key="kb.kb_id"
+          class="stats-dialog-item"
+        >
+          <span class="stats-dialog-item-label">{{ kb.kb_name }}</span>
+          <span class="stats-dialog-item-count">{{ kb.count }} 次</span>
+        </div>
       </div>
     </el-dialog>
 
@@ -73,8 +89,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { Promotion, FolderOpened } from '@element-plus/icons-vue'
+import { getChatStatsApi } from '@/api/chat'
+import type { UserStats } from '@/types'
 
 defineProps<{
   variant: 'chat' | 'kbChat'
@@ -82,7 +100,21 @@ defineProps<{
 
 const showStatsDialog = ref(false)
 
-const stats = { ai_answer_count: 0, exceed_percentage: 0 }
+const stats = ref<UserStats>({
+  total_count: 0,
+  general_count: 0,
+  kb_breakdown: [],
+  exceed_percentage: 0,
+})
+
+onMounted(async () => {
+  try {
+    const data = await getChatStatsApi()
+    stats.value = data
+  } catch {
+    // 静默失败，保持默认值
+  }
+})
 
 const todayDate = computed(() => {
   const now = new Date()
@@ -290,10 +322,59 @@ const todayDate = computed(() => {
   }
 }
 
-.stats-dialog-placeholder {
-  text-align: center;
-  padding: 40px 0;
-  color: var(--color-text-muted);
+.stats-dialog-body {
+  padding: 4px 0;
+}
+
+.stats-dialog-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: 8px;
+}
+
+.stats-dialog-total-label {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-main);
+}
+
+.stats-dialog-total-count {
+  font-size: 24px;
+  font-weight: var(--font-weight-extrabold);
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stats-dialog-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.stats-dialog-item-label {
   font-size: var(--font-size-sm);
+  color: var(--color-text-main);
+  font-weight: var(--font-weight-medium);
+}
+
+.stats-dialog-item-count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+
+.stats-dialog-divider {
+  padding: 12px 0 6px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 </style>

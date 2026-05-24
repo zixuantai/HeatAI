@@ -1,5 +1,5 @@
 import { request } from '@/utils/request'
-import type { ChatResponseData, SessionInfo, SessionDetail, ToolCallInfo, ToolResultInfo, SourceRef } from '@/types'
+import type { ChatResponseData, SessionInfo, SessionDetail, ToolCallInfo, ToolResultInfo, SourceRef, UserStats } from '@/types'
 
 export function askApi(message: string, sessionId?: string): Promise<ChatResponseData> {
   return request<ChatResponseData>({
@@ -205,4 +205,8 @@ export function togglePinSessionApi(sessionId: string, isPinned: boolean): Promi
     url: `/chat/sessions/${sessionId}/pin`,
     data: { is_pinned: isPinned }
   })
+}
+
+export function getChatStatsApi(): Promise<UserStats> {
+  return request<UserStats>({ method: 'GET', url: '/chat/stats' })
 }

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.models.user import User
@@ -202,3 +202,86 @@ class ConversationService:
 
 
 conversation_service = ConversationService()
+
+
+async def get_user_stats(
+    db: AsyncSession,
+    user_id: str,
+) -> dict:
+    """获取用户对话次数统计：总数、普通对话、各知识库分项、排名百分比"""
+
+    # 用户总消息数
+    total_result = await db.execute(
+        select(func.count(Message.id))
+        .join(ConversationSession, Message.session_id == ConversationSession.id)
+        .where(
+            ConversationSession.user_id == user_id,
+            Message.role == "user",
+        )
+    )
+    total_count = total_result.scalar() or 0
+
+    # 普通对话（无知识库）消息数
+    general_result = await db.execute(
+        select(func.count(Message.id))
+        .join(ConversationSession, Message.session_id == ConversationSession.id)
+        .where(
+            ConversationSession.user_id == user_id,
+            ConversationSession.knowledge_base_id == None,
+            Message.role == "user",
+        )
+    )
+    general_count = general_result.scalar() or 0
+
+    # 各知识库消息数分项
+    kb_result = await db.execute(
+        select(
+            ConversationSession.knowledge_base_id,
+            ConversationSession.knowledge_base_name,
+            func.count(Message.id),
+        )
+        .join(Message, Message.session_id == ConversationSession.id)
+        .where(
+            ConversationSession.user_id == user_id,
+            ConversationSession.knowledge_base_id != None,
+            Message.role == "user",
+        )
+        .group_by(ConversationSession.knowledge_base_id, ConversationSession.knowledge_base_name)
+        .order_by(func.count(Message.id).desc())
+    )
+    kb_breakdown = [
+        {"kb_id": row[0], "kb_name": row[1] or "未知知识库", "count": row[2]}
+        for row in kb_result.all()
+    ]
+
+    # 排名百分比：统计消息数少于当前用户的用户数 / 总用户数
+    rank_result = await db.execute(
+        select(func.count(func.distinct(ConversationSession.user_id)))
+        .select_from(
+            select(
+                ConversationSession.user_id,
+                func.count(Message.id).label("cnt"),
+            )
+            .join(Message, Message.session_id == ConversationSession.id)
+            .where(Message.role == "user")
+            .group_by(ConversationSession.user_id)
+            .having(func.count(Message.id) < total_count)
+            .subquery()
+        )
+    )
+    users_below = rank_result.scalar() or 0
+
+    total_users_result = await db.execute(
+        select(func.count(func.distinct(ConversationSession.user_id)))
+        .join(Message, Message.session_id == ConversationSession.id)
+        .where(Message.role == "user")
+    )
+    total_users = total_users_result.scalar() or 1
+    exceed_percentage = round(users_below / total_users * 100)
+
+    return {
+        "total_count": total_count,
+        "general_count": general_count,
+        "kb_breakdown": kb_breakdown,
+        "exceed_percentage": exceed_percentage,
+    }

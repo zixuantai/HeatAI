@@ -287,7 +287,15 @@ export interface UpdateKnowledgeBaseRequest {
   is_recommended?: boolean
 }
 
+export interface KBStatsEntry {
+  kb_id: string
+  kb_name: string
+  count: number
+}
+
 export interface UserStats {
-  ai_answer_count: number
+  total_count: number
+  general_count: number
+  kb_breakdown: KBStatsEntry[]
   exceed_percentage: number
 }
