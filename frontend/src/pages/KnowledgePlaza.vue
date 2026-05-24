@@ -88,7 +88,7 @@
                   <svg v-else class="thumb-icon" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0">
                     <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
                   </svg>
-                  <span>{{ kb.like_count }}</span>
+                  <span>点赞 {{ kb.like_count }}</span>
                 </button>
                 <button 
                   class="kb-action-btn"
@@ -98,7 +98,7 @@
                   <el-icon :size="14">
                     <component :is="kb.is_favorited ? StarFilled : Star" />
                   </el-icon>
-                  <span>收藏</span>
+                  <span>收藏 {{ kb.favorite_count }}</span>
                 </button>
                 <button
                   v-if="activeTab === 'mine'"
@@ -163,14 +163,16 @@ const tabs = [
   { key: 'recommended', label: '精选推荐' },
   { key: 'popular', label: '最热' },
   { key: 'latest', label: '最新' },
-  { key: 'mine', label: '我的' }
+  { key: 'mine', label: '我的' },
+  { key: 'joined', label: '我加入的' }
 ]
 
 const sortMap: Record<string, string> = {
   recommended: 'recommended',
   popular: 'popular',
   latest: 'latest',
-  mine: 'mine'
+  mine: 'mine',
+  joined: 'joined'
 }
 
 async function loadKnowledgeBases() {
@@ -234,6 +236,7 @@ async function handleFavorite(kb: KnowledgeBase) {
   try {
     const result = await toggleFavoriteApi(kb.id)
     kb.is_favorited = result.is_favorited
+    kb.favorite_count += result.is_favorited ? 1 : -1
     ElMessage.success(result.is_favorited ? '收藏成功' : '已取消收藏')
   } catch (error: any) {
     ElMessage.error(error.message || '操作失败')
@@ -566,9 +569,9 @@ onMounted(() => {
 }
 
 .kb-action-btn.delete-btn:hover {
-  border-color: var(--color-error);
-  color: var(--color-error);
-  background: rgba(229, 62, 62, 0.08);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.08);
 }
 
 .plaza-pagination {

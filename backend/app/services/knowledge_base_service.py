@@ -60,37 +60,8 @@ class KnowledgeBaseService:
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[KnowledgeBase], int]:
-        conditions = [KnowledgeBase.status == "active"]
-
-        if search:
-            conditions.append(
-                KnowledgeBase.name.ilike(f"%{search}%")
-            )
-
-        if sort_by == "mine" and user_id:
-            conditions.append(KnowledgeBase.owner_id == user_id)
-        elif sort_by == "recommended":
-            conditions.append(KnowledgeBase.is_recommended == True)
-
-        count_result = await db.execute(
-            select(func.count(KnowledgeBase.id)).where(*conditions)
-        )
-        total = count_result.scalar() or 0
-
-        query = select(KnowledgeBase).where(*conditions)
-        if sort_by == "popular":
-            query = query.order_by(KnowledgeBase.view_count.desc())
-        elif sort_by == "latest":
-            query = query.order_by(KnowledgeBase.created_at.desc())
-        elif sort_by == "recommended":
-            query = query.order_by(KnowledgeBase.is_recommended.desc(), KnowledgeBase.created_at.desc())
-        else:
-            query = query.order_by(KnowledgeBase.created_at.desc())
-
-        query = query.limit(limit).offset(offset)
-        result = await db.execute(query)
-        bases = list(result.scalars().all())
-        return bases, total
+        from app.services.knowledge_base_listing import list_bases as listing_list_bases
+        return await listing_list_bases(db, user_id, search, sort_by, limit, offset)
 
     @staticmethod
     async def update(
@@ -209,6 +180,12 @@ class KnowledgeBaseService:
 
         if favorite:
             await db.delete(favorite)
+            kb_result = await db.execute(
+                select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+            )
+            kb = kb_result.scalar_one_or_none()
+            if kb and kb.favorite_count > 0:
+                kb.favorite_count -= 1
             await db.commit()
             return False
         else:
@@ -217,6 +194,12 @@ class KnowledgeBaseService:
                 user_id=user_id,
             )
             db.add(favorite)
+            kb_result = await db.execute(
+                select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+            )
+            kb = kb_result.scalar_one_or_none()
+            if kb:
+                kb.favorite_count += 1
             await db.commit()
             return True
 

@@ -254,6 +254,7 @@ export interface KnowledgeBase {
   doc_count: number
   view_count: number
   like_count: number
+  favorite_count: number
   is_recommended: boolean
   is_liked: boolean
   is_favorited: boolean

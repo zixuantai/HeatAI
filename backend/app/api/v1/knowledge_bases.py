@@ -49,7 +49,7 @@ async def list_knowledge_bases(
     current_user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
     search: str | None = Query(default=None, max_length=200),
-    sort_by: str = Query(default="latest", pattern="^(latest|popular|recommended|mine)$"),
+    sort_by: str = Query(default="latest", pattern="^(latest|popular|recommended|mine|joined)$"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):

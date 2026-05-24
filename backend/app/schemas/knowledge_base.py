@@ -37,6 +37,7 @@ class KnowledgeBaseOut(BaseModel):
     doc_count: int = 0
     view_count: int = 0
     like_count: int = 0
+    favorite_count: int = 0
     is_recommended: bool = False
     is_liked: bool = False
     is_favorited: bool = False
