@@ -1,5 +1,5 @@
-import { post, get, put } from '@/utils/request'
-import type { LoginRequest, RegisterRequest, TokenResponse, UserInfo, RefreshResponse, UpdateUserRequest } from '@/types'
+import { post, get, put, del } from '@/utils/request'
+import type { LoginRequest, RegisterRequest, TokenResponse, UserInfo, RefreshResponse, UpdateUserRequest, DeleteAccountRequest } from '@/types'
 
 export function loginApi(data: LoginRequest): Promise<TokenResponse> {
   return post<TokenResponse>('/auth/login', data)
@@ -23,4 +23,8 @@ export function updateCurrentUserApi(data: UpdateUserRequest): Promise<UserInfo>
 
 export function logoutApi(): Promise<null> {
   return post<null>('/auth/logout')
+}
+
+export function deleteAccountApi(data: DeleteAccountRequest): Promise<null> {
+  return del<null>('/auth/account', data)
 }

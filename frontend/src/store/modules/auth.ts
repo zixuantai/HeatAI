@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { UserInfo, Organization, OrganizationMember } from '@/types'
-import { loginApi, registerApi, refreshTokenApi, getCurrentUserApi, updateCurrentUserApi, logoutApi } from '@/api/auth'
+import { loginApi, registerApi, refreshTokenApi, getCurrentUserApi, updateCurrentUserApi, logoutApi, deleteAccountApi } from '@/api/auth'
 import { getMyOrganizationsApi } from '@/api/organizations'
 import type { UpdateUserRequest } from '@/types'
 
@@ -125,6 +125,14 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = updatedUser
   }
 
+  async function deleteAccount(password: string) {
+    await deleteAccountApi({ password })
+    clearTokens()
+    user.value = null
+    organizations.value = []
+    setCurrentOrg(null)
+  }
+
   async function initAuth() {
     if (accessToken.value) {
       await fetchCurrentUser()
@@ -155,6 +163,7 @@ export const useAuthStore = defineStore('auth', () => {
     refreshAccessToken,
     logout,
     updateProfile,
+    deleteAccount,
     initAuth
   }
 })

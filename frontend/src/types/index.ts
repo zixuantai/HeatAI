@@ -20,6 +20,10 @@ export interface UpdateUserRequest {
   avatar?: string | null
 }
 
+export interface DeleteAccountRequest {
+  password: string
+}
+
 export interface LoginRequest {
   username: string
   password: string

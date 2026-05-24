@@ -84,8 +84,8 @@ export async function put<T = unknown>(url: string, data?: unknown): Promise<T> 
   return request<T>({ method: 'PUT', url, data })
 }
 
-export async function del<T = unknown>(url: string): Promise<T> {
-  return request<T>({ method: 'DELETE', url })
+export async function del<T = unknown>(url: string, data?: unknown): Promise<T> {
+  return request<T>({ method: 'DELETE', url, data })
 }
 
 export default instance

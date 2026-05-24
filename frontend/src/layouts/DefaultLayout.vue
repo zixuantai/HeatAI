@@ -171,6 +171,11 @@
         <el-icon><SwitchButton /></el-icon>
         <span>退出登录</span>
       </div>
+      <div class="user-menu-divider"></div>
+      <div class="user-menu-item user-menu-item--danger" @click="handleDeleteAccount">
+        <el-icon><WarningFilled /></el-icon>
+        <span>注销账号</span>
+      </div>
     </div>
   </Teleport>
 
@@ -353,7 +358,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding, Promotion } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding, Promotion, WarningFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -517,6 +522,63 @@ async function handleLogoutClick() {
       type: 'warning'
     })
     await authStore.logout()
+    router.push('/login')
+  } catch {
+    // 用户取消
+  }
+}
+
+async function handleDeleteAccount() {
+  popoverVisible.value = false
+
+  // 第一次确认：是否确认要执行注销操作
+  try {
+    await ElMessageBox.confirm(
+      '是否确认要执行注销操作？',
+      '注销账号',
+      {
+        confirmButtonText: '确认注销',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+        customClass: 'delete-account-dialog'
+      }
+    )
+  } catch {
+    return
+  }
+
+  // 第二次确认：提示注销后该账号会消失
+  try {
+    await ElMessageBox.confirm(
+      '注销后该账号会消失，知识库、文档、对话记录等所有数据将被永久删除且无法恢复。',
+      '最后确认',
+      {
+        confirmButtonText: '确认注销',
+        cancelButtonText: '取消',
+        type: 'warning',
+        confirmButtonClass: 'el-button--danger',
+        customClass: 'delete-account-dialog'
+      }
+    )
+  } catch {
+    return
+  }
+
+  // 密码验证
+  try {
+    const { value } = await ElMessageBox.prompt('请输入当前密码以确认注销', '安全验证', {
+      confirmButtonText: '确认注销',
+      cancelButtonText: '取消',
+      inputType: 'password',
+      inputValidator: (val: string) => {
+        if (!val) return '请输入密码'
+        if (val.length < 6) return '密码长度至少6位'
+        return true
+      }
+    })
+    await authStore.deleteAccount(value)
+    ElMessage.success('账号已注销')
     router.push('/login')
   } catch {
     // 用户取消
@@ -1644,5 +1706,10 @@ watch(() => route.path, () => {
   border-color: var(--color-primary) !important;
   color: #fff !important;
   box-shadow: var(--shadow-button) !important;
+}
+
+/* ── 注销确认弹窗 ────────────────────────────────── */
+.delete-account-dialog {
+  --el-messagebox-width: 480px;
 }
 </style>

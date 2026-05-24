@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_refresh_token, CurrentUser
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshResponse, UserInfo, UserUpdateRequest
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshResponse, UserInfo, UserUpdateRequest, DeleteAccountRequest
 from app.services.auth_service import auth_service
 from app.models.user import User
 
@@ -122,5 +122,18 @@ async def update_me(
                 "created_at": user.created_at.isoformat() if user.created_at else ""
             }
         }
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/account")
+async def delete_account(
+    req: DeleteAccountRequest,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    try:
+        await auth_service.delete_account(db, current_user, req.password)
+        return {"code": 0, "message": "账号已注销", "data": None}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

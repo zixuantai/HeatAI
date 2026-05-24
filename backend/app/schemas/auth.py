@@ -48,3 +48,7 @@ class UserUpdateRequest(BaseModel):
     phone: str | None = Field(None, max_length=20, description="手机号")
     nickname: str | None = Field(None, max_length=50, description="昵称")
     avatar: str | None = Field(None, description="头像(base64)")
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str = Field(..., min_length=6, max_length=20, description="当前密码")

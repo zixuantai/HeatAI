@@ -1,10 +1,19 @@
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, update
+import os
+from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserSession, TokenBlacklist
-from app.models.organization import Organization, OrganizationMember
+from app.models.organization import Organization, OrganizationMember, InviteCode
+from app.models.conversation import ConversationSession, Message
+from app.models.document import Document
+from app.models.knowledge_base import KnowledgeBase, KnowledgeBaseLike, KnowledgeBaseFavorite, KnowledgeBaseMember, KnowledgeBaseDocument
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
+from app.services.retrieval.milvus_service import milvus_service
+from app.services.retrieval.bm25_service import bm25_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -174,6 +183,100 @@ class AuthService:
             }
             for row in rows
         ]
+
+    @staticmethod
+    async def delete_account(db: AsyncSession, user: User, password: str) -> None:
+        if not verify_password(password, user.password_hash):
+            raise ValueError("密码错误")
+
+        user_id = user.id
+
+        # ── 收集所有文档信息（用于后续清理 Milvus / BM25 / 文件）──
+        # 用户直接上传的文档
+        user_docs_result = await db.execute(
+            select(Document.id, Document.filename, Document.organization_id)
+            .where(Document.user_id == user_id)
+        )
+        user_docs = user_docs_result.all()  # [(id, filename, org_id), ...]
+
+        # 知识库关联的文档
+        kb_docs_result = await db.execute(
+            select(KnowledgeBaseDocument.document_id)
+            .where(KnowledgeBaseDocument.knowledge_base_id.in_(
+                select(KnowledgeBase.id).where(KnowledgeBase.owner_id == user_id)
+            ))
+        )
+        kb_doc_ids = kb_docs_result.scalars().all()
+
+        # ── 删除用户会话 ──
+        await db.execute(delete(UserSession).where(UserSession.user_id == user_id))
+
+        # ── 删除用户创建的组织（级联删除其成员和邀请码）──
+        org_ids = (await db.execute(select(Organization.id).where(Organization.created_by == user_id))).scalars().all()
+        if org_ids:
+            await db.execute(delete(InviteCode).where(InviteCode.organization_id.in_(org_ids)))
+            await db.execute(delete(OrganizationMember).where(OrganizationMember.organization_id.in_(org_ids)))
+        await db.execute(delete(Organization).where(Organization.created_by == user_id))
+
+        # ── 删除组织成员关系（用户加入的其他组织）──
+        await db.execute(delete(OrganizationMember).where(OrganizationMember.user_id == user_id))
+
+        # ── 删除用户创建的邀请码 ──
+        await db.execute(delete(InviteCode).where(InviteCode.created_by == user_id))
+
+        # ── 删除对话和消息 ──
+        session_ids = (await db.execute(select(ConversationSession.id).where(ConversationSession.user_id == user_id))).scalars().all()
+        if session_ids:
+            await db.execute(delete(Message).where(Message.session_id.in_(session_ids)))
+        await db.execute(delete(ConversationSession).where(ConversationSession.user_id == user_id))
+
+        # ── 删除知识库相关数据 ──
+        kb_ids = (await db.execute(select(KnowledgeBase.id).where(KnowledgeBase.owner_id == user_id))).scalars().all()
+        if kb_ids:
+            await db.execute(delete(KnowledgeBaseDocument).where(KnowledgeBaseDocument.knowledge_base_id.in_(kb_ids)))
+            await db.execute(delete(KnowledgeBaseLike).where(KnowledgeBaseLike.knowledge_base_id.in_(kb_ids)))
+            await db.execute(delete(KnowledgeBaseFavorite).where(KnowledgeBaseFavorite.knowledge_base_id.in_(kb_ids)))
+            await db.execute(delete(KnowledgeBaseMember).where(KnowledgeBaseMember.knowledge_base_id.in_(kb_ids)))
+        await db.execute(delete(KnowledgeBaseMember).where(KnowledgeBaseMember.user_id == user_id))
+        await db.execute(delete(KnowledgeBaseLike).where(KnowledgeBaseLike.user_id == user_id))
+        await db.execute(delete(KnowledgeBaseFavorite).where(KnowledgeBaseFavorite.user_id == user_id))
+        await db.execute(delete(KnowledgeBase).where(KnowledgeBase.owner_id == user_id))
+
+        # ── 删除用户文档（SQL）──
+        await db.execute(delete(Document).where(Document.user_id == user_id))
+
+        # ── 删除用户 ──
+        await db.execute(delete(User).where(User.id == user_id))
+
+        await db.commit()
+
+        # ── 清理外部资源（Milvus / BM25 / 文件系统）──
+        all_doc_ids = [doc[0] for doc in user_docs] + list(kb_doc_ids)
+        for doc_id in set(all_doc_ids):
+            try:
+                milvus_service.delete_by_document_id(doc_id)
+            except Exception as e:
+                logger.warning(f"Milvus 删除失败 [doc={doc_id}]: {e}")
+
+        for doc_id in set(kb_doc_ids):
+            try:
+                bm25_service.remove_by_document_id(doc_id)
+            except Exception as e:
+                logger.warning(f"BM25 删除失败 [doc={doc_id}]: {e}")
+
+        for doc_id, filename, org_id in user_docs:
+            try:
+                bm25_service.remove_by_document_id(doc_id, org_id=org_id)
+            except Exception as e:
+                logger.warning(f"BM25 删除失败 [doc={doc_id}]: {e}")
+            try:
+                file_path = os.path.join(os.path.abspath(settings.UPLOAD_DIR), filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                logger.warning(f"文件删除失败 [doc={doc_id}]: {e}")
+
+        logger.info(f"账号注销完成: user_id={user_id}, 清理文档数={len(user_docs)}")
 
 
 auth_service = AuthService()
