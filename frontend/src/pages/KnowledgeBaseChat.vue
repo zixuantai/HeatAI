@@ -8,19 +8,7 @@
           </svg>
           <span>返回知识库广场</span>
         </button>
-        <div class="topbar-actions">
-          <button
-            class="new-chat-btn"
-            title="基于当前知识库开启新对话"
-            @click="handleNewChat"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            <span>新建对话</span>
-          </button>
-        </div>
+        
       </div>
 
       <div class="chat-body" :class="{ 'is-empty': messages.length === 0 }">
@@ -119,7 +107,15 @@
         </div>
 
       <div class="chat-input-area">
-        <div class="input-wrapper" :class="{ 'voice-active': isVoiceMode, 'is-expanded': isMultiLine }">
+        <div class="input-row">
+          <button
+            v-if="messages.length > 0"
+            class="new-chat-kb-btn"
+            @click="handleNewChat"
+          >
+            基于此知识库新建对话
+          </button>
+          <div class="input-wrapper" :class="{ 'voice-active': isVoiceMode, 'is-expanded': isMultiLine }">
           <input
             ref="fileInputRef"
             type="file"
@@ -219,6 +215,7 @@
               <rect x="4" y="4" width="16" height="16" rx="3" />
             </svg>
           </button>
+        </div>
         </div>
         <div v-if="messages.length === 0 && displayQuickQuestions.length > 0" class="quick-questions-bottom">
           <el-tag
@@ -727,12 +724,6 @@ watch(sessionId, (newId, oldId) => {
   z-index: 10;
 }
 
-.topbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .back-btn {
   display: flex;
   align-items: center;
@@ -757,41 +748,6 @@ watch(sessionId, (newId, oldId) => {
 
 .back-btn:active {
   transform: scale(0.97);
-}
-
-.new-chat-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-main);
-  cursor: pointer;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  font-family: var(--font-family);
-  border-radius: var(--radius-full);
-  transition: all var(--transition-base);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.new-chat-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: rgba(79, 70, 229, 0.06);
-}
-
-.new-chat-btn:active {
-  transform: scale(0.97);
-}
-
-.topbar-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-main);
-  letter-spacing: var(--tracking-tight);
 }
 
 .chat-body {
@@ -1187,6 +1143,47 @@ img.creator-avatar-small {
   flex-shrink: 0;
   position: relative;
   z-index: 1;
+}
+
+.input-row {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+}
+
+.new-chat-kb-btn {
+  position: absolute;
+  right: calc(100% + 80px);
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all var(--transition-base);
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.35);
+  letter-spacing: 0.02em;
+  height: 40px;
+}
+
+.new-chat-kb-btn:hover {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  transform: translateY(calc(-50% - 2px));
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.5);
+}
+
+.new-chat-kb-btn:active {
+  transform: translateY(-50%) scale(0.97);
 }
 
 .quick-mode-toggle {
