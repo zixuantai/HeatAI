@@ -1,9 +1,16 @@
 <template>
   <div class="org-page">
-    <div class="org-sidebar">
-      <div class="org-sidebar-spacer"></div>
+    <div class="org-sidebar" :class="{ collapsed }">
+      <div class="org-sidebar-header">
+        <div v-show="!collapsed" class="org-sidebar-spacer"></div>
+        <div class="org-sidebar-toggle" @click="collapsed = !collapsed">
+          <el-icon :size="18">
+            <component :is="collapsed ? ArrowRight : ArrowLeft" />
+          </el-icon>
+        </div>
+      </div>
 
-      <div class="org-avatar-section">
+      <div v-show="!collapsed" class="org-avatar-section">
         <div v-if="selectedOrg?.avatar" class="org-main-avatar-wrapper" :style="isGradient(selectedOrg.avatar) ? { background: selectedOrg.avatar } : {}">
           <img v-if="!isGradient(selectedOrg.avatar)" :src="selectedOrg.avatar" class="org-main-avatar-img" alt="组织头像" />
           <el-icon v-else :size="48" color="#fff"><OfficeBuilding /></el-icon>
@@ -13,7 +20,7 @@
         </div>
       </div>
 
-      <div class="org-info-section" v-if="selectedOrg">
+      <div v-show="!collapsed" class="org-info-section" v-if="selectedOrg">
         <h2 class="org-info-name">{{ selectedOrg.name }}</h2>
         <p class="org-info-desc">{{ selectedOrg.description || '暂无描述' }}</p>
         <div class="org-info-meta">
@@ -38,27 +45,14 @@
         </div>
       </div>
 
-      <div class="org-info-section org-info-empty" v-else>
-        <p class="org-empty-text">暂无组织信息</p>
-        <p class="org-empty-hint">请从右侧列表选择或创建一个组织</p>
+      <div v-show="!collapsed" class="org-info-section org-info-empty" v-else>
+        <p class="org-empty-text">还未加入组织</p>
+        <p class="org-empty-hint">请创建或加入一个组织</p>
       </div>
 
-      <div class="org-actions">
+      <div v-show="!collapsed" class="org-actions">
         <template v-if="authStore.isAdmin">
-          <div 
-            class="org-action-card" 
-            :class="{ 'org-action-card-disabled': organizations.length === 0 }"
-            @click="organizations.length > 0 && (activeView = 'manage')"
-          >
-            <div class="org-action-card-icon org-action-card-icon-manage">
-              <el-icon :size="24"><Setting /></el-icon>
-            </div>
-            <div class="org-action-card-content">
-              <span class="org-action-card-title">管理我的组织</span>
-              <span class="org-action-card-hint">{{ organizations.length > 0 ? '查看和管理已加入的组织' : '暂无组织可管理' }}</span>
-            </div>
-          </div>
-          <div 
+          <div
             class="org-action-card"
             :class="{ 'org-action-card-disabled': hasCreatedOrg }"
             @click="!hasCreatedOrg && (showCreateDialog = true)"
@@ -73,20 +67,7 @@
           </div>
         </template>
         <template v-else>
-          <div 
-            class="org-action-card" 
-            :class="{ 'org-action-card-disabled': organizations.length === 0 }"
-            @click="organizations.length > 0 && (activeView = 'manage')"
-          >
-            <div class="org-action-card-icon org-action-card-icon-view">
-              <el-icon :size="24"><View /></el-icon>
-            </div>
-            <div class="org-action-card-content">
-              <span class="org-action-card-title">查看组织</span>
-              <span class="org-action-card-hint">{{ organizations.length > 0 ? '查看已加入的组织' : '暂未加入任何组织' }}</span>
-            </div>
-          </div>
-          <div 
+          <div
             class="org-action-card"
             :class="{ 'org-action-card-disabled': hasJoinedOrg }"
             @click="!hasJoinedOrg && (showJoinDialog = true)"
@@ -103,84 +84,14 @@
       </div>
     </div>
 
-    <div class="org-main">
-      <template v-if="activeView === 'list'">
-        <div class="org-search-bar">
-          <el-input
-            v-model="searchQuery"
-            placeholder="搜索组织..."
-            clearable
-            size="large"
-            class="org-search-input"
-            @input="handleSearch"
-            @clear="handleClearSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <span class="org-count">共 {{ filteredOrganizations.length }} 个组织</span>
-        </div>
-
-        <div class="org-list" v-loading="loading">
-          <div
-            v-for="org in filteredOrganizations"
-            :key="org.id"
-            class="org-card"
-            :class="{ 'org-card-active': authStore.currentOrgId === org.id }"
-            @click="handleSelectOrg(org)"
-          >
-            <div class="org-card-left">
-              <div v-if="org.avatar" class="org-card-avatar-wrapper" :style="isGradient(org.avatar) ? { background: org.avatar } : {}">
-                <img v-if="!isGradient(org.avatar)" :src="org.avatar" class="org-card-avatar-img" alt="组织头像" />
-                <el-icon v-else :size="24" color="#fff"><OfficeBuilding /></el-icon>
-              </div>
-              <div v-else class="org-card-avatar-placeholder" :style="{ background: getCoverColor(org.name) }">
-                {{ org.name.charAt(0) }}
-              </div>
-            </div>
-
-            <div class="org-card-body">
-              <div class="org-card-header">
-                <h3 class="org-card-title">{{ org.name }}</h3>
-                <el-tag v-if="authStore.currentOrgId === org.id" type="success" size="small" effect="dark">当前</el-tag>
-              </div>
-              <p class="org-card-desc">{{ org.description || '暂无描述' }}</p>
-              <div class="org-card-footer">
-                <span class="org-card-date">{{ formatDate(org.created_at) }}</span>
-                <div class="org-card-actions">
-                  <el-tooltip content="复制邀请码" placement="top" :show-after="300">
-                    <button class="org-action-btn" @click.stop="handleCopyInviteCode(org)">
-                      <el-icon :size="14"><CopyDocument /></el-icon>
-                    </button>
-                  </el-tooltip>
-                  <el-tooltip v-if="authStore.currentOrgId !== org.id" content="切换到此组织" placement="top" :show-after="300">
-                    <button class="org-action-btn org-action-btn-primary" @click.stop="handleSelectOrg(org)">
-                      <el-icon :size="14"><Switch /></el-icon>
-                    </button>
-                  </el-tooltip>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <el-empty
-            v-if="!loading && filteredOrganizations.length === 0"
-            description="暂无组织"
-            class="org-list-empty"
-          />
-        </div>
+    <div class="org-main" :class="{ collapsed }">
+      <template v-if="organizations.length > 0">
+        <Documents />
       </template>
-
-      <template v-else-if="activeView === 'manage'">
-        <div class="org-manage-header">
-          <el-button :icon="ArrowLeft" @click="activeView = 'list'">返回组织列表</el-button>
-          <h2 class="org-manage-title">管理我的组织</h2>
-        </div>
-        <div class="org-manage-content">
-          <el-empty description="管理功能开发中..." />
-        </div>
-      </template>
+      <div v-else class="org-no-org-hint">
+        <el-icon :size="48"><OfficeBuilding /></el-icon>
+        <p class="org-no-org-text">还未加入组织</p>
+      </div>
     </div>
 
     <el-dialog
@@ -332,22 +243,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import {
-  Search, Plus, Key, CopyDocument, Switch, Camera, Calendar, OfficeBuilding, Setting, ArrowLeft, User, View, Hide, CirclePlusFilled, Connection
+  Plus, Key, CopyDocument, Camera, Calendar, OfficeBuilding, User, View, Hide, CirclePlusFilled, Connection, ArrowRight, ArrowLeft
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/modules/auth'
 import { createOrganizationApi, joinByInviteCodeApi } from '@/api/organizations'
 import type { Organization } from '@/types'
+import Documents from '@/pages/Documents.vue'
 
 const authStore = useAuthStore()
-const loading = ref(false)
-const searchQuery = ref('')
+const collapsed = ref(false)
 const showCreateDialog = ref(false)
 const showJoinDialog = ref(false)
 const createLoading = ref(false)
 const joinLoading = ref(false)
 const avatarInputRef = ref<HTMLInputElement | null>(null)
-const activeView = ref<'list' | 'manage'>('list')
 const showInviteCode = ref(false)
 
 const joinForm = ref({
@@ -390,34 +300,6 @@ const selectedOrg = computed(() => {
   return organizations.value.find(o => o.id === authStore.currentOrgId) || organizations.value[0] || null
 })
 
-const filteredOrganizations = computed(() => {
-  if (!searchQuery.value.trim()) return organizations.value
-  const query = searchQuery.value.trim().toLowerCase()
-  return organizations.value.filter(
-    org => org.name.toLowerCase().includes(query) ||
-           (org.description && org.description.toLowerCase().includes(query))
-  )
-})
-
-const coverColors = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
-  'linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)',
-]
-
-function getCoverColor(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return coverColors[Math.abs(hash) % coverColors.length]
-}
-
 function isGradient(avatar: string): boolean {
   return avatar.startsWith('linear-gradient')
 }
@@ -427,12 +309,6 @@ function formatDate(dateStr: string): string {
   const d = new Date(dateStr)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-
-function handleSearch() {}
-
-function handleClearSearch() {
-  searchQuery.value = ''
 }
 
 function triggerAvatarUpload() {
@@ -533,16 +409,6 @@ async function handleJoin() {
   }
 }
 
-function handleSelectOrg(org: Organization) {
-  if (authStore.currentOrgId === org.id) {
-    authStore.setCurrentOrg(null)
-    ElMessage.info('已退出当前组织')
-  } else {
-    authStore.setCurrentOrg(org.id)
-    ElMessage.success(`已切换到组织: ${org.name}`)
-  }
-}
-
 function handleCopyInviteCode(org: Organization) {
   navigator.clipboard.writeText(org.invite_code).then(() => {
     ElMessage.success('邀请码已复制到剪贴板')
@@ -552,11 +418,10 @@ function handleCopyInviteCode(org: Organization) {
 }
 
 onMounted(async () => {
-  loading.value = true
   try {
     await authStore.fetchOrganizations()
-  } finally {
-    loading.value = false
+  } catch {
+    // ignore
   }
 })
 </script>
@@ -575,12 +440,52 @@ onMounted(async () => {
   border-right: 1px solid var(--color-border-light);
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 20px 24px 24px;
+  flex-shrink: 0;
+  transition: width var(--transition-base);
+  overflow: hidden;
+}
+
+.org-sidebar.collapsed {
+  width: 50px;
+  padding: 20px 0 24px;
+  align-items: center;
+}
+
+.org-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.org-sidebar.collapsed .org-sidebar-header {
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.org-sidebar-toggle {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
   flex-shrink: 0;
 }
 
+.org-sidebar-toggle:hover {
+  background: var(--color-bg);
+  color: var(--color-primary);
+}
+
 .org-sidebar-spacer {
-  flex: 0.3;
+  flex: 1;
 }
 
 .org-avatar-section {
@@ -734,22 +639,12 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.org-action-card-icon-manage {
-  background: var(--gradient-primary);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-}
-
 .org-action-card-icon-create {
   background: var(--gradient-primary);
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
 
 .org-action-card-icon-join {
-  background: var(--gradient-primary);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
-}
-
-.org-action-card-icon-view {
   background: var(--gradient-primary);
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
@@ -789,28 +684,6 @@ onMounted(async () => {
   color: var(--color-text-muted);
 }
 
-.org-manage-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 24px 32px;
-}
-
-.org-manage-title {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-main);
-  margin: 0;
-}
-
-.org-manage-content {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-}
-
 .org-main {
   flex: 1;
   display: flex;
@@ -818,192 +691,35 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-.org-search-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 40px 32px 24px;
-}
-
-.org-search-input {
-  flex: 1;
-  max-width: 600px;
-}
-
-.org-search-input :deep(.el-input__wrapper) {
-  border-radius: var(--radius-full) !important;
-  box-shadow: none !important;
-  border: 1px solid var(--color-border) !important;
-  background: transparent !important;
-  padding: 0 20px;
-  transition: border-color var(--transition-base), box-shadow var(--transition-base);
-}
-
-.org-search-input :deep(.el-input__wrapper:hover) {
-  border-color: var(--color-primary) !important;
-}
-
-.org-search-input :deep(.el-input.is-focus .el-input__wrapper) {
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
-  background: rgba(79, 70, 229, 0.03) !important;
-}
-
-.org-count {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  font-weight: var(--font-weight-medium);
-  white-space: nowrap;
-}
-
-.org-list {
-  flex: 1;
-  padding: 24px 32px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.org-list-empty {
-  margin-top: 80px;
-}
-
-.org-card {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border-light);
-  padding: 20px 24px;
-  cursor: pointer;
-  box-shadow: var(--neu-card);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-}
-
-.org-card:hover {
-  transform: translateX(4px);
-  box-shadow: var(--neu-card-hover);
-  border-color: var(--color-primary);
-}
-
-.org-card-active {
-  border-color: var(--color-primary);
-  box-shadow: var(--neu-card), 0 0 0 2px rgba(79, 70, 229, 0.15);
-}
-
-.org-card-left {
-  flex-shrink: 0;
-}
-
-.org-card-avatar-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.org-card-avatar-img {
+.org-main :deep(.documents-page) {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 24px 28px 32px;
 }
 
-.org-card-avatar-placeholder {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
+.org-main.collapsed {
+  align-items: center;
+}
+
+.org-main.collapsed :deep(.documents-page) {
+  max-width: 1200px;
+}
+
+.org-no-org-hint {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  font-size: 20px;
-  font-weight: var(--font-weight-bold);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.org-card-body {
+  gap: 16px;
   flex: 1;
-  min-width: 0;
+  color: var(--color-text-muted);
 }
 
-.org-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-}
-
-.org-card-title {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-main);
+.org-no-org-text {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
   margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.org-card-desc {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  margin: 0 0 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.org-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.org-card-date {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.org-card-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.org-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 150ms ease;
-  font-family: var(--font-family);
-}
-
-.org-action-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  background: rgba(79, 70, 229, 0.04);
-}
-
-.org-action-btn-primary {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-}
-
-.org-action-btn-primary:hover {
-  background: var(--color-primary);
-  color: #fff;
 }
 
 .org-dialog-content {
@@ -1233,20 +949,6 @@ onMounted(async () => {
 
   .org-create-btn {
     width: 100%;
-  }
-
-  .org-search-bar {
-    padding: 16px;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .org-search-input {
-    max-width: 100%;
-  }
-
-  .org-list {
-    padding: 16px;
   }
 }
 </style>

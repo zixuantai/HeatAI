@@ -46,15 +46,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/documents',
-    component: () => import('@/layouts/DefaultLayout.vue'),
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'Documents',
-        component: () => import('@/pages/Documents.vue')
-      }
-    ]
+    redirect: '/organizations'
   },
   {
     path: '/organizations',

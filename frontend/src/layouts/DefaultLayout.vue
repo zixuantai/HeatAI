@@ -35,24 +35,14 @@
             <span v-show="!collapsed">搜索对话</span>
           </div>
         </el-tooltip>
-        <el-tooltip content="知识库" placement="right" :disabled="!collapsed" :show-after="300">
-          <div
-            class="nav-item"
-            :class="{ active: isDocumentsRoute }"
-            @click="handleNavToDocuments"
-          >
-            <el-icon :size="20"><FolderOpened /></el-icon>
-            <span v-show="!collapsed">知识库</span>
-          </div>
-        </el-tooltip>
-        <el-tooltip content="组织" placement="right" :disabled="!collapsed" :show-after="300">
+        <el-tooltip content="组织知识库" placement="right" :disabled="!collapsed" :show-after="300">
           <div
             class="nav-item"
             :class="{ active: isOrganizationsRoute }"
             @click="handleNavToOrganizations"
           >
             <el-icon :size="20"><OfficeBuilding /></el-icon>
-            <span v-show="!collapsed">组织</span>
+            <span v-show="!collapsed">组织知识库</span>
           </div>
         </el-tooltip>
         <el-tooltip content="知识库广场" placement="right" :disabled="!collapsed" :show-after="300">
@@ -358,7 +348,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, FolderOpened, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding, Promotion, WarningFilled } from '@element-plus/icons-vue'
+import { SwitchButton, Edit, ArrowRight, Delete, ChatDotRound, MoreFilled, Search, Setting, User, Camera, Headset, Sunny, MagicStick, OfficeBuilding, Promotion, WarningFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/modules/auth'
 import { ElMessageBox, ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSessionsApi, deleteSessionApi, updateSessionTitleApi, togglePinSessionApi } from '@/api/chat'
@@ -423,10 +413,6 @@ const isChatRoute = computed(() => {
 
 const isNewChatRoute = computed(() => {
   return route.path === '/chat'
-})
-
-const isDocumentsRoute = computed(() => {
-  return route.path.startsWith('/documents')
 })
 
 const isPlazaRoute = computed(() => {
@@ -650,14 +636,6 @@ async function loadSessions() {
 
 function handleNewChat() {
   router.push('/chat')
-}
-
-function handleNavToDocuments() {
-  if (!authStore.isAuthenticated) {
-    router.push({ name: 'Login', query: { redirect: '/documents' } })
-    return
-  }
-  router.push('/documents')
 }
 
 function handleNavToPlaza() {
