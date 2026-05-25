@@ -51,6 +51,18 @@
       </div>
 
       <div v-show="!collapsed" class="org-actions">
+        <div
+          class="org-action-card"
+          @click="handleGoToChat"
+        >
+          <div class="org-action-card-icon org-action-card-icon-chat">
+            <el-icon :size="24"><ChatDotRound /></el-icon>
+          </div>
+          <div class="org-action-card-content">
+            <span class="org-action-card-title">去对话</span>
+            <span class="org-action-card-hint">前往AI对话页面</span>
+          </div>
+        </div>
         <template v-if="authStore.isAdmin">
           <div
             class="org-action-card"
@@ -242,8 +254,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
-  Plus, Key, CopyDocument, Camera, Calendar, OfficeBuilding, User, View, Hide, CirclePlusFilled, Connection, ArrowRight, ArrowLeft
+  Plus, Key, CopyDocument, Camera, Calendar, OfficeBuilding, User, View, Hide, CirclePlusFilled, Connection, ArrowRight, ArrowLeft, ChatDotRound
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/modules/auth'
@@ -252,6 +265,7 @@ import type { Organization } from '@/types'
 import Documents from '@/pages/Documents.vue'
 
 const authStore = useAuthStore()
+const router = useRouter()
 const collapsed = ref(false)
 const showCreateDialog = ref(false)
 const showJoinDialog = ref(false)
@@ -417,6 +431,10 @@ async function handleJoin() {
   } finally {
     joinLoading.value = false
   }
+}
+
+function handleGoToChat() {
+  router.push('/chat')
 }
 
 function handleCopyInviteCode(org: Organization) {
@@ -655,6 +673,11 @@ onMounted(async () => {
 }
 
 .org-action-card-icon-join {
+  background: var(--gradient-primary);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.org-action-card-icon-chat {
   background: var(--gradient-primary);
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
 }
