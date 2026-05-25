@@ -50,8 +50,19 @@
           @click="handleCardClick(kb)"
         >
           <div class="kb-card-cover">
-            <div class="kb-card-cover-icon" :style="{ background: kb.cover_color || 'var(--gradient-primary)' }">
-              <el-icon :size="28"><FolderOpened /></el-icon>
+            <div
+              v-if="isImageAvatar(kb.avatar)"
+              class="kb-card-cover-icon"
+            >
+              <img :src="kb.avatar || ''" alt="头像" class="kb-card-cover-img" />
+            </div>
+            <div
+              v-else
+              class="kb-card-cover-icon"
+              :style="{ background: getCardCoverBg(kb) }"
+            >
+              <span v-if="kb.avatar" class="kb-card-cover-emoji">{{ getDefaultAvatarEmoji(kb.avatar) }}</span>
+              <el-icon v-else :size="28"><FolderOpened /></el-icon>
             </div>
           </div>
           <div class="kb-card-body">
@@ -301,6 +312,21 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+function isImageAvatar(avatar: string | null): boolean {
+  if (!avatar) return false
+  return avatar.startsWith('data:') || avatar.startsWith('http') || avatar.startsWith('/')
+}
+
+function getCardCoverBg(kb: KnowledgeBase): string {
+  if (kb.avatar && !isImageAvatar(kb.avatar)) return kb.avatar
+  return kb.cover_color || 'var(--gradient-primary)'
+}
+
+function getDefaultAvatarEmoji(avatar: string | null): string {
+  if (!avatar) return ''
+  return '🔥'
+}
+
 onMounted(() => {
   loadKnowledgeBases()
 })
@@ -479,6 +505,18 @@ onMounted(() => {
   justify-content: center;
   color: #fff;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.kb-card-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kb-card-cover-emoji {
+  font-size: 28px;
+  line-height: 1;
 }
 
 .kb-card-body {

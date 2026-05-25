@@ -4,7 +4,10 @@
     title="创建知识库"
     width="880px"
     :close-on-click-modal="false"
+    :close-on-press-escape="!processing"
+    :show-close="!processing"
     destroy-on-close
+    class="create-kb-dialog"
     @closed="handleClosed"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="create-kb-form">
@@ -112,15 +115,24 @@
     </el-form>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">创建并发布</el-button>
+      <el-button @click="visible = false" :disabled="processing">取消</el-button>
+      <el-button type="primary" :loading="processing" @click="handleSubmit">创建并发布</el-button>
     </template>
+
+    <!-- 处理中遮罩 -->
+    <div v-if="processing" class="processing-overlay">
+      <div class="processing-dialog">
+        <el-icon class="processing-icon is-loading" :size="48"><Loading /></el-icon>
+        <h3 class="processing-title">正在处理中</h3>
+        <p class="processing-desc">正在上传文档并进行智能解析，可能需要等待较长时间，请耐心等待...</p>
+      </div>
+    </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
-import { Plus, Delete, MagicStick, Upload } from '@element-plus/icons-vue'
+import { Plus, Delete, MagicStick, Upload, Loading } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules, type UploadFile } from 'element-plus'
 import { createKnowledgeBaseApi, uploadDocumentToKbApi, generateQuickQuestionsApi, previewQuickQuestionsApi } from '@/api/knowledgeBases'
 
@@ -150,7 +162,7 @@ const emit = defineEmits<Emits>()
 const visible = ref(false)
 const formRef = ref<FormInstance>()
 const uploadRef = ref()
-const submitting = ref(false)
+const processing = ref(false)
 const generatingQuestions = ref(false)
 const avatarPreview = ref<string | null>(null)
 const selectedDefaultAvatar = ref<string>('')
@@ -255,7 +267,7 @@ async function handleSubmit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
-  submitting.value = true
+  processing.value = true
   try {
     const kb = await createKnowledgeBaseApi({
       name: form.name.trim(),
@@ -266,7 +278,6 @@ async function handleSubmit() {
     })
 
     if (selectedFiles.value.length > 0) {
-      ElMessage.info(`正在上传 ${selectedFiles.value.length} 个文档...`)
       for (const file of selectedFiles.value) {
         try {
           await uploadDocumentToKbApi(kb.id, file)
@@ -282,7 +293,7 @@ async function handleSubmit() {
   } catch (error: any) {
     ElMessage.error(error.message || '创建失败')
   } finally {
-    submitting.value = false
+    processing.value = false
   }
 }
 
@@ -301,6 +312,10 @@ function handleClosed() {
 <style scoped>
 .create-kb-form {
   padding: 10px 0;
+}
+
+.create-kb-dialog :deep(.el-dialog__body) {
+  position: relative;
 }
 
 .kb-avatar-picker {
@@ -456,5 +471,52 @@ function handleClosed() {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   margin-top: 4px;
+}
+
+.processing-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: var(--radius-lg);
+}
+
+.processing-dialog {
+  text-align: center;
+  padding: 48px 40px;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  max-width: 400px;
+}
+
+.processing-icon {
+  color: var(--color-primary);
+  animation: rotating 1.2s linear infinite;
+}
+
+@keyframes rotating {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.processing-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 20px 0 12px;
+}
+
+.processing-desc {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0;
 }
 </style>

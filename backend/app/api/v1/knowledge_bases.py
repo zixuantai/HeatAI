@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from app.core.database import get_db
-from app.core.dependencies import CurrentUser, CurrentOrganization
+from app.core.dependencies import CurrentUser
 from app.schemas.knowledge_base import (
     KnowledgeBaseCreate,
     KnowledgeBaseOut,
@@ -268,7 +268,6 @@ async def list_knowledge_base_documents(
 async def upload_document_to_kb(
     kb_id: str,
     current_user: CurrentUser,
-    org_context: CurrentOrganization,
     db: Annotated[AsyncSession, Depends(get_db)],
     file: UploadFile = File(...),
 ):
@@ -295,8 +294,7 @@ async def upload_document_to_kb(
     if len(file_bytes) == 0:
         raise HTTPException(status_code=400, detail="文件不能为空")
 
-    org, member = org_context
-    upload_org_id = str(org.id) if org else None
+    upload_org_id = None
 
     try:
         document = await document_service.upload_and_process(

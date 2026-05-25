@@ -5,6 +5,8 @@ from app.core.config import settings
 _SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[。！？.!?；;])\s*")
 _NATURAL_BREAKS_RE = re.compile(r"[\s,，、；;。！？.!?：:]")
 
+_CHARS_PER_TOKEN = 1.0
+
 
 class TextChunker:
 
@@ -12,8 +14,16 @@ class TextChunker:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
+    @property
+    def _max_safe_chars(self) -> int:
+        return int(settings.BGE_MAX_TOKENS * _CHARS_PER_TOKEN)
+
+    def _effective_size(self) -> int:
+        return min(self.chunk_size, self._max_safe_chars)
+
     def chunk(self, text: str, metadata: Dict[str, Any] | None = None) -> List[Dict[str, Any]]:
         base_meta = metadata or {}
+        eff_size = self._effective_size()
 
         paragraphs = self._split_paragraphs(text)
 
@@ -27,7 +37,7 @@ class TextChunker:
             if not para:
                 continue
 
-            if len(current_chunk) + len(para) + 2 <= self.chunk_size:
+            if len(current_chunk) + len(para) + 2 <= eff_size:
                 if current_chunk:
                     current_chunk += "\n\n" + para
                 else:
@@ -44,7 +54,7 @@ class TextChunker:
                     }
                     chunks_data.append(chunk_entry)
 
-                if len(para) > self.chunk_size:
+                if len(para) > eff_size:
                     sub_chunks = self._force_split(para, base_meta)
                     chunks_data.extend(sub_chunks)
                     current_chunk = ""
@@ -107,24 +117,25 @@ class TextChunker:
 
     def _force_split(self, para: str, base_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         chunks = []
+        eff_size = self._effective_size()
         sentences = _SENTENCE_BOUNDARY_RE.split(para)
         current_text = ""
         for sent in sentences:
             sent = sent.strip()
             if not sent:
                 continue
-            if len(current_text) + len(sent) + 1 <= self.chunk_size:
+            if len(current_text) + len(sent) + 1 <= eff_size:
                 current_text += sent if not current_text else " " + sent
             else:
                 if current_text:
                     chunks.append({"content": current_text, "metadata": base_meta.copy()})
-                if len(sent) > self.chunk_size:
-                    step = self.chunk_size - self.chunk_overlap
+                if len(sent) > eff_size:
+                    step = eff_size - self.chunk_overlap
                     if step < 1:
                         step = 1
                     pos = 0
                     while pos < len(sent):
-                        end = self._find_safe_cut(sent, pos + self.chunk_size)
+                        end = self._find_safe_cut(sent, pos + eff_size)
                         chunk_text = sent[pos:end]
                         if chunk_text:
                             chunks.append({"content": chunk_text, "metadata": base_meta.copy()})
@@ -138,10 +149,11 @@ class TextChunker:
 
     def _split_long_sentences(self, chunks_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         result: List[Dict[str, Any]] = []
+        eff_size = self._effective_size()
 
         for chunk in chunks_data:
             content = chunk["content"]
-            if len(content) <= self.chunk_size:
+            if len(content) <= eff_size:
                 result.append(chunk)
                 continue
 
@@ -154,7 +166,7 @@ class TextChunker:
                 if not sent:
                     continue
 
-                if len(sub_chunk) + len(sent) + 1 <= self.chunk_size:
+                if len(sub_chunk) + len(sent) + 1 <= eff_size:
                     sub_chunk += sent if not sub_chunk else " " + sent
                 else:
                     if sub_chunk:

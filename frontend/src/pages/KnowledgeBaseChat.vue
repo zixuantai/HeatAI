@@ -18,8 +18,14 @@
           </div>
           <div v-else-if="kbInfo" class="kb-welcome-content">
             <div class="kb-avatar-area">
-              <div class="kb-avatar" :style="kbInfo.avatar ? {} : { background: kbInfo.cover_color || 'var(--gradient-primary)' }">
-                <img v-if="kbInfo.avatar" :src="kbInfo.avatar" alt="知识库头像" class="kb-avatar-img" />
+              <div
+                class="kb-avatar"
+                :style="{
+                  background: kbAvatarIsImage ? undefined : (kbInfo.avatar || kbInfo.cover_color || 'var(--gradient-primary)')
+                }"
+              >
+                <img v-if="kbAvatarIsImage" :src="kbInfo.avatar || ''" alt="知识库头像" class="kb-avatar-img" />
+                <span v-else-if="kbInfo.avatar" class="kb-avatar-text kb-avatar-emoji">🔥</span>
                 <span v-else class="kb-avatar-text">{{ kbInfo.name.charAt(0) }}</span>
               </div>
             </div>
@@ -301,6 +307,12 @@ const inputPlaceholder = computed(() => {
   if (!kbInfo.value) return '有问题，尽管问'
   if (isOwner.value || isJoined.value) return '有问题，尽管问'
   return '未加入知识库，可体验问答3次'
+})
+
+const kbAvatarIsImage = computed(() => {
+  const av = kbInfo.value?.avatar
+  if (!av) return false
+  return av.startsWith('data:') || av.startsWith('http') || av.startsWith('/')
 })
 
 const ownerAvatarIsImage = computed(() => {
