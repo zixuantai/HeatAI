@@ -101,11 +101,19 @@ export function uploadDocumentToKbApi(kbId: string, file: File): Promise<{ docum
   })
 }
 
-export function getKbDocumentsApi(kbId: string, limit = 50, offset = 0): Promise<{ total: number; items: any[] }> {
+export function getKbDocumentsApi(kbId: string, limit = 50, offset = 0, search?: string): Promise<{ total: number; items: any[] }> {
   return request<{ total: number; items: any[] }>({
     method: 'GET',
     url: `/knowledge-bases/${kbId}/documents`,
-    params: { limit, offset }
+    params: search ? { limit, offset, search } : { limit, offset }
+  })
+}
+
+export function getAllKbDocumentIdsApi(kbId: string, search?: string): Promise<{ ids: string[]; total: number }> {
+  return request<{ ids: string[]; total: number }>({
+    method: 'GET',
+    url: `/knowledge-bases/${kbId}/documents/ids`,
+    params: search ? { search } : undefined
   })
 }
 
@@ -113,5 +121,13 @@ export function removeDocumentFromKbApi(kbId: string, documentId: string): Promi
   return request<void>({
     method: 'DELETE',
     url: `/knowledge-bases/${kbId}/documents/${documentId}`
+  })
+}
+
+export function removeDocumentsFromKbBatchApi(kbId: string, ids: string[]): Promise<{ removed_count: number }> {
+  return request<{ removed_count: number }>({
+    method: 'DELETE',
+    url: `/knowledge-bases/${kbId}/documents/batch`,
+    data: { ids }
   })
 }

@@ -1,6 +1,7 @@
 import logging
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File, Body
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 from app.core.database import get_db
@@ -249,12 +250,13 @@ async def list_knowledge_base_documents(
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=200),
 ):
     kb = await knowledge_base_service.get(db, kb_id)
     if not kb:
         raise HTTPException(status_code=404, detail="知识库不存在")
 
-    documents, total = await knowledge_base_service.list_documents(db, kb_id, limit, offset)
+    documents, total = await knowledge_base_service.list_documents(db, kb_id, limit, offset, search)
     from app.schemas.document import DocumentInfo
     items = [DocumentInfo.model_validate(doc).model_dump(mode="json") for doc in documents]
     return {
@@ -262,6 +264,43 @@ async def list_knowledge_base_documents(
         "message": "success",
         "data": {"total": total, "items": items},
     }
+
+
+@router.get("/{kb_id}/documents/ids", response_model=dict)
+async def list_kb_all_document_ids(
+    kb_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    search: str | None = Query(default=None, max_length=200),
+):
+    kb = await knowledge_base_service.get(db, kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    ids = await knowledge_base_service.list_all_document_ids(db, kb_id, search)
+    return {
+        "code": 0,
+        "message": "success",
+        "data": {"ids": ids, "total": len(ids)},
+    }
+
+
+@router.delete("/{kb_id}/documents/batch", response_model=dict)
+async def remove_documents_from_kb_batch(
+    kb_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    body: "dict" = Body(...),
+):
+    ids: list[str] = body.get("ids", [])
+    kb = await knowledge_base_service.get(db, kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    if kb.owner_id != str(current_user.id):
+        raise HTTPException(status_code=403, detail="无权限操作此知识库")
+    if not ids:
+        raise HTTPException(status_code=400, detail="请指定要移除的文档")
+    removed = await knowledge_base_service.remove_documents(db, kb_id, ids)
+    return {"code": 0, "message": f"已移除 {removed} 个文档", "data": {"removed_count": removed}}
 
 
 @router.post("/{kb_id}/documents/upload", response_model=dict, status_code=status.HTTP_201_CREATED)

@@ -158,6 +158,7 @@
       v-model="showDocMgmtDialog"
       :kb-id="selectedKbId"
       :kb-name="selectedKbName"
+      @updated="handleCreated"
     />
   </div>
 </template>

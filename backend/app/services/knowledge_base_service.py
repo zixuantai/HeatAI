@@ -357,19 +357,68 @@ class KnowledgeBaseService:
         return True
 
     @staticmethod
-    async def list_documents(
-        db: AsyncSession, kb_id: str, limit: int = 50, offset: int = 0
-    ) -> tuple[list[Document], int]:
-        count_result = await db.execute(
-            select(func.count(KnowledgeBaseDocument.id)).where(
-                KnowledgeBaseDocument.knowledge_base_id == kb_id
+    async def remove_documents(
+        db: AsyncSession, kb_id: str, document_ids: list[str]
+    ) -> int:
+        result = await db.execute(
+            select(KnowledgeBaseDocument).where(
+                KnowledgeBaseDocument.knowledge_base_id == kb_id,
+                KnowledgeBaseDocument.document_id.in_(document_ids),
             )
+        )
+        links = result.scalars().all()
+        if not links:
+            return 0
+
+        removed_count = len(links)
+        for link in links:
+            await db.delete(link)
+
+        kb_result = await db.execute(
+            select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+        )
+        kb = kb_result.scalar_one_or_none()
+        if kb:
+            kb.doc_count = max(0, kb.doc_count - removed_count)
+
+        await db.commit()
+        return removed_count
+
+    @staticmethod
+    async def list_all_document_ids(
+        db: AsyncSession, kb_id: str, search: str | None = None
+    ) -> list[str]:
+        from app.models.document import Document
+        conditions = [KnowledgeBaseDocument.knowledge_base_id == kb_id]
+        query = select(KnowledgeBaseDocument.document_id).where(*conditions)
+        if search:
+            query = query.join(Document, KnowledgeBaseDocument.document_id == Document.id).where(
+                Document.original_filename.ilike(f"%{search}%")
+            )
+        result = await db.execute(query.order_by(KnowledgeBaseDocument.created_at.desc()))
+        return [row[0] for row in result.all()]
+
+    @staticmethod
+    async def list_documents(
+        db: AsyncSession, kb_id: str, limit: int = 50, offset: int = 0,
+        search: str | None = None,
+    ) -> tuple[list[Document], int]:
+        link_conditions = [KnowledgeBaseDocument.knowledge_base_id == kb_id]
+        if search:
+            link_conditions.append(
+                KnowledgeBaseDocument.document_id.in_(
+                    select(Document.id).where(Document.original_filename.ilike(f"%{search}%"))
+                )
+            )
+
+        count_result = await db.execute(
+            select(func.count(KnowledgeBaseDocument.id)).where(*link_conditions)
         )
         total = count_result.scalar() or 0
 
         links_result = await db.execute(
             select(KnowledgeBaseDocument)
-            .where(KnowledgeBaseDocument.knowledge_base_id == kb_id)
+            .where(*link_conditions)
             .order_by(KnowledgeBaseDocument.created_at.desc())
             .limit(limit)
             .offset(offset)

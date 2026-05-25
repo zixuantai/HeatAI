@@ -90,8 +90,6 @@ def _build_conditions(user_id: str | None, search: str | None, sort_by: str):
 
     if sort_by == "mine" and user_id:
         conditions.append(KnowledgeBase.owner_id == user_id)
-    elif sort_by == "recommended":
-        conditions.append(KnowledgeBase.is_recommended == True)
 
     if sort_by == "joined" and user_id:
         member_query = (
