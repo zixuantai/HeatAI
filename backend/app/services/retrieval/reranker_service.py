@@ -364,15 +364,16 @@ class RerankerService:
         bge_weight: float | None = None,
         org_id: str | None = None,
         document_ids: List[str] | None = None,
+        knowledge_base_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         total_start = time.time()
         recall_top_k = settings.RERANK_RECALL_TOP_K
 
-        _log_header(f"RAG Pipeline  |  recall={recall_top_k}  final={top_k}  org={org_id or '(global)'}")
+        _log_header(f"RAG Pipeline  |  recall={recall_top_k}  final={top_k}  org={org_id or '(global)'}  kb={knowledge_base_id or '(global)'}")
         _log_row("query", query[:80])
 
         t0 = time.time()
-        bm25_results = bm25_service.search(query, top_k=recall_top_k, org_id=org_id, document_ids=document_ids)
+        bm25_results = bm25_service.search(query, top_k=recall_top_k, org_id=org_id, document_ids=document_ids, knowledge_base_id=knowledge_base_id)
         bm25_results = self.filter_by_threshold(bm25_results)
         _log_stage("bm25", f"{len(bm25_results)} hits  |  {_fmt_time(time.time() - t0)}")
 
@@ -382,7 +383,7 @@ class RerankerService:
         _log_stage("embed", f"query vectorized  |  {_fmt_time(time.time() - t0)}")
 
         t0 = time.time()
-        vector_results = milvus_service.search(query_embedding, top_k=recall_top_k, org_id=org_id, document_ids=document_ids)
+        vector_results = milvus_service.search(query_embedding, top_k=recall_top_k, org_id=org_id, document_ids=document_ids, knowledge_base_id=knowledge_base_id)
         vector_results = self.filter_by_threshold(vector_results)
         _log_stage("vector", f"{len(vector_results)} hits  |  {_fmt_time(time.time() - t0)}")
 

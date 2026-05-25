@@ -9,13 +9,15 @@ logger = logging.getLogger(__name__)
 
 
 class _OrgIndex:
-    __slots__ = ("searcher", "corpus_chunks", "tokenized_corpus", "chunk_ids")
+    __slots__ = ("searcher", "corpus_chunks", "tokenized_corpus", "chunk_ids", "org_id", "knowledge_base_id")
 
-    def __init__(self):
+    def __init__(self, org_id: str = "", knowledge_base_id: str = ""):
         self.searcher = None
         self.corpus_chunks: List[Dict[str, Any]] = []
         self.tokenized_corpus: List[List[str]] = []
         self.chunk_ids: List[str] = []
+        self.org_id = org_id
+        self.knowledge_base_id = knowledge_base_id
 
 
 class BM25Service:
@@ -67,13 +69,16 @@ class BM25Service:
         return [t for t in tokens if t.strip()]
 
     @staticmethod
-    def _get_org_key(org_id: str | None) -> str:
-        return org_id or ""
+    def _get_org_key(org_id: str | None, knowledge_base_id: str | None = None) -> str:
+        if knowledge_base_id:
+            return f"kb:{knowledge_base_id}"
+        return f"org:{org_id or ''}"
 
-    def _get_index(self, org_key: str) -> _OrgIndex:
-        if org_key not in self._indexes:
-            self._indexes[org_key] = _OrgIndex()
-        return self._indexes[org_key]
+    def _get_index(self, org_id: str | None = None, knowledge_base_id: str | None = None) -> _OrgIndex:
+        key = self._get_org_key(org_id, knowledge_base_id)
+        if key not in self._indexes:
+            self._indexes[key] = _OrgIndex(org_id=org_id or "", knowledge_base_id=knowledge_base_id or "")
+        return self._indexes[key]
 
     def _build_index_for_org(self, idx: _OrgIndex):
         from rank_bm25 import BM25Okapi
@@ -103,21 +108,25 @@ class BM25Service:
         from collections import defaultdict
         org_groups: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
         for chunk in chunks:
-            org_key = self._get_org_key(chunk.get("organization_id"))
-            org_groups[org_key].append(chunk)
+            meta = chunk.get("metadata", {})
+            kb_id = meta.get("knowledge_base_id", "")
+            org_id = meta.get("organization_id", "")
+            key = self._get_org_key(org_id, kb_id or None)
+            org_groups[key].append(chunk)
 
         if not org_groups:
             self.build_index([], "")
             return
 
-        for org_key, org_chunks in org_groups.items():
-            self.build_index(org_chunks, org_key)
-            label = org_key or "(global)"
-            logger.info(f"BM25 索引已构建: org={label}, chunks={len(org_chunks)}")
+        for key, group_chunks in org_groups.items():
+            idx = _OrgIndex()
+            idx.corpus_chunks = group_chunks
+            self._build_index_for_org(idx)
+            self._indexes[key] = idx
+            logger.info(f"BM25 索引已构建: key={key}, chunks={len(group_chunks)}")
 
-    def build_index(self, chunks: List[Dict[str, Any]], org_id: str | None = None):
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+    def build_index(self, chunks: List[Dict[str, Any]], org_id: str | None = None, knowledge_base_id: str | None = None):
+        idx = self._get_index(org_id, knowledge_base_id)
 
         if not chunks:
             idx.searcher = None
@@ -128,12 +137,11 @@ class BM25Service:
 
         idx.corpus_chunks = chunks
         self._build_index_for_org(idx)
-        label = org_key or "(global)"
-        logger.info(f"BM25 index built: org={label}, {len(chunks)} documents")
+        label = knowledge_base_id or org_id or "(global)"
+        logger.info(f"BM25 index built: key={label}, {len(chunks)} documents")
 
-    def ensure_index(self, org_id: str | None = None):
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+    def ensure_index(self, org_id: str | None = None, knowledge_base_id: str | None = None):
+        idx = self._get_index(org_id, knowledge_base_id)
         if idx.searcher is not None:
             return
         with self._lock:
@@ -141,12 +149,14 @@ class BM25Service:
                 return
             from app.services.retrieval.milvus_service import milvus_service
             all_chunks = milvus_service.get_all_chunks()
-            if org_key:
-                chunks = [c for c in all_chunks if self._get_org_key(c.get("organization_id")) == org_key]
+            if knowledge_base_id:
+                chunks = [c for c in all_chunks if c.get("knowledge_base_id") == knowledge_base_id]
+            elif org_id:
+                chunks = [c for c in all_chunks if c.get("organization_id") == org_id]
             else:
                 chunks = [c for c in all_chunks if not c.get("organization_id")]
             if chunks:
-                self.build_index(chunks, org_key)
+                self.build_index(chunks, org_id, knowledge_base_id)
 
     def search(
         self,
@@ -154,11 +164,16 @@ class BM25Service:
         top_k: int = 5,
         org_id: str | None = None,
         document_ids: List[str] | None = None,
+        knowledge_base_id: str | None = None,
     ) -> List[Dict[str, Any]]:
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+        idx = self._get_index(org_id, knowledge_base_id)
         if not idx.searcher:
-            return []
+            if knowledge_base_id and document_ids:
+                idx = self._get_index(org_id)
+                if not idx.searcher:
+                    return []
+            else:
+                return []
 
         query_tokens = self._tokenize(query)
         scores = idx.searcher.get_scores(query_tokens)
@@ -187,11 +202,10 @@ class BM25Service:
 
         return results
 
-    def add_chunks(self, chunks: List[Dict[str, Any]], org_id: str | None = None):
+    def add_chunks(self, chunks: List[Dict[str, Any]], org_id: str | None = None, knowledge_base_id: str | None = None):
         if not chunks:
             return
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+        idx = self._get_index(org_id, knowledge_base_id)
 
         flat_chunks = []
         for c in chunks:
@@ -205,21 +219,21 @@ class BM25Service:
                 "chunk_index": meta.get("chunk_index", 0),
                 "created_at": meta.get("created_at", ""),
                 "version": meta.get("version", 1),
+                "knowledge_base_id": knowledge_base_id or "",
             }
             flat_chunks.append(flat)
         idx.corpus_chunks.extend(flat_chunks)
         self._build_index_for_org(idx)
-        label = org_key or "(global)"
-        logger.info(f"BM25 index: added {len(chunks)} chunks to org={label}, total: {len(idx.corpus_chunks)}")
+        label = knowledge_base_id or org_id or "(global)"
+        logger.info(f"BM25 index: added {len(chunks)} chunks to key={label}, total: {len(idx.corpus_chunks)}")
 
-    def remove_by_document_id(self, document_id: str, org_id: str | None = None):
-        self.delete_document_index(document_id, org_id)
+    def remove_by_document_id(self, document_id: str, org_id: str | None = None, knowledge_base_id: str | None = None):
+        self.delete_document_index(document_id, org_id, knowledge_base_id)
 
-    def remove_by_document_ids(self, document_ids: list[str], org_id: str | None = None):
+    def remove_by_document_ids(self, document_ids: list[str], org_id: str | None = None, knowledge_base_id: str | None = None):
         if not document_ids:
             return
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+        idx = self._get_index(org_id, knowledge_base_id)
         if not idx.corpus_chunks:
             return
 
@@ -235,9 +249,8 @@ class BM25Service:
         after = len(idx.corpus_chunks)
         logger.info(f"BM25 index: removed {before - after} chunks for {len(document_ids)} documents")
 
-    def delete_document_index(self, document_id: str, org_id: str | None = None):
-        org_key = self._get_org_key(org_id)
-        idx = self._get_index(org_key)
+    def delete_document_index(self, document_id: str, org_id: str | None = None, knowledge_base_id: str | None = None):
+        idx = self._get_index(org_id, knowledge_base_id)
         if not idx.corpus_chunks:
             return
 

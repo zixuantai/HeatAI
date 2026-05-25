@@ -15,6 +15,7 @@ from app.schemas.knowledge_base import (
     KBChatRequest,
 )
 from app.services.knowledge_base_service import knowledge_base_service
+from app.services.document_service import document_service
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +264,71 @@ async def list_knowledge_base_documents(
     }
 
 
+@router.post("/{kb_id}/documents/upload", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def upload_document_to_kb(
+    kb_id: str,
+    current_user: CurrentUser,
+    org_context: CurrentOrganization,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: UploadFile = File(...),
+):
+    from app.services.document_service import document_service
+    from app.services.processing.parser import DocumentParser
+
+    kb = await knowledge_base_service.get(db, kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="知识库不存在")
+    if kb.owner_id != str(current_user.id):
+        raise HTTPException(status_code=403, detail="无权限操作此知识库")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    supported = tuple(DocumentParser.SUPPORTED_TYPES)
+    if ext not in supported:
+        raise HTTPException(status_code=400, detail=f"不支持的文件类型: .{ext}")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="文件大小不能超过 50MB")
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="文件不能为空")
+
+    org, member = org_context
+    upload_org_id = str(org.id) if org else None
+
+    try:
+        document = await document_service.upload_and_process(
+            db=db,
+            user_id=str(current_user.id),
+            file_bytes=file_bytes,
+            original_filename=file.filename,
+            org_id=upload_org_id,
+            knowledge_base_id=kb_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        logger.exception(f"文档上传运行时异常: {file.filename} - {e}")
+        raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
+    except Exception as e:
+        logger.exception(f"文档上传处理异常: {file.filename} - {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
+
+    await knowledge_base_service.add_document(db, kb_id, document.id)
+
+    return {
+        "code": 0,
+        "message": "文档上传成功",
+        "data": {
+            "document_id": document.id,
+            "filename": document.original_filename,
+            "status": document.status,
+        },
+    }
+
+
 @router.post("/{kb_id}/documents/{document_id}", response_model=dict)
 async def add_document_to_knowledge_base(
     kb_id: str,
@@ -334,68 +400,6 @@ async def generate_quick_questions(
         "code": 0,
         "message": "快捷问题生成成功",
         "data": {"quick_questions": questions},
-    }
-
-
-@router.post("/{kb_id}/documents/upload", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def upload_document_to_kb(
-    kb_id: str,
-    current_user: CurrentUser,
-    org_context: CurrentOrganization,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    file: UploadFile = File(...),
-):
-    from app.services.document_service import document_service
-    from app.services.processing.parser import DocumentParser
-
-    kb = await knowledge_base_service.get(db, kb_id)
-    if not kb:
-        raise HTTPException(status_code=404, detail="知识库不存在")
-    if kb.owner_id != str(current_user.id):
-        raise HTTPException(status_code=403, detail="无权限操作此知识库")
-
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="文件名不能为空")
-
-    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
-    supported = tuple(DocumentParser.SUPPORTED_TYPES)
-    if ext not in supported:
-        raise HTTPException(status_code=400, detail=f"不支持的文件类型: .{ext}")
-
-    file_bytes = await file.read()
-    if len(file_bytes) > 50 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="文件大小不能超过 50MB")
-    if len(file_bytes) == 0:
-        raise HTTPException(status_code=400, detail="文件不能为空")
-
-    org, member = org_context
-    upload_org_id = str(org.id) if org else None
-
-    try:
-        document = await document_service.upload_and_process(
-            db=db,
-            user_id=str(current_user.id),
-            file_bytes=file_bytes,
-            original_filename=file.filename,
-            org_id=upload_org_id,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"文档处理失败: {e}")
-
-    await knowledge_base_service.add_document(db, kb_id, document.id)
-
-    return {
-        "code": 0,
-        "message": "文档上传成功",
-        "data": {
-            "document_id": document.id,
-            "filename": document.original_filename,
-            "status": document.status,
-        },
     }
 
 

@@ -12,6 +12,7 @@ from sqlalchemy import select, func
 
 from app.core.config import settings
 from app.models.document import Document
+from app.models.knowledge_base import KnowledgeBaseDocument
 from app.services.processing.pipeline import ProcessingPipeline
 from app.services.processing.corpus_dedup_service import CorpusDedupService
 from app.services.processing.classifier import document_classifier
@@ -26,12 +27,19 @@ logger = logging.getLogger(__name__)
 class DocumentService:
 
     @staticmethod
+    def _exclude_kb_docs():
+        return ~Document.id.in_(
+            select(KnowledgeBaseDocument.document_id)
+        )
+
+    @staticmethod
     async def upload_and_process(
         db: AsyncSession,
         user_id: str,
         file_bytes: bytes,
         original_filename: str,
         org_id: str | None = None,
+        knowledge_base_id: str | None = None,
     ) -> Document:
         upload_start = time.time()
         content_hash = hashlib.sha256(file_bytes).hexdigest()
@@ -90,7 +98,15 @@ class DocumentService:
 
             pipeline = ProcessingPipeline.default()
 
-            parsed_text, title = pipeline.parser.parse(file_bytes, original_filename)
+            try:
+                parsed_text, title = pipeline.parser.parse(file_bytes, original_filename)
+            except ValueError:
+                raise
+            except Exception as e:
+                ext = original_filename.rsplit(".", 1)[-1].lower() if "." in original_filename else ""
+                if ext == "pdf":
+                    raise ValueError(f"PDF文件无法打开，可能已损坏或不是有效的PDF格式: {e}")
+                raise ValueError(f"文件解析失败 ({type(e).__name__}): {e}")
             if not parsed_text or not parsed_text.strip():
                 raise ValueError("文档解析结果为空")
 
@@ -174,14 +190,14 @@ class DocumentService:
                 logger.info(f"[Milvus 插入] 分块 #{i}: chunk_id={chunk_id}, document_id={doc_id}, "
                            f"content_size={len(chunk['content'])}字符")
             try:
-                milvus_service.insert(chunks, embeddings, org_id=org_id)
+                milvus_service.insert(chunks, embeddings, org_id=org_id, knowledge_base_id=knowledge_base_id)
                 logger.info(f"[Milvus 插入] ✅ 成功插入 {len(chunks)} 条向量, 耗时: {time.time() - insert_start:.2f}s")
             except Exception as e:
                 logger.error(f"[Milvus 插入] ❌ 插入失败: {type(e).__name__}: {e}")
                 raise
 
             bm25_start = time.time()
-            bm25_service.add_chunks(chunks, org_id=org_id)
+            bm25_service.add_chunks(chunks, org_id=org_id, knowledge_base_id=knowledge_base_id)
             logger.info(f"[BM25 索引] ✅ 已添加 {len(chunks)} 个分块, 耗时: {time.time() - bm25_start:.2f}s")
 
             doc_record.chunk_count = len(chunks)
@@ -198,7 +214,7 @@ class DocumentService:
             return doc_record
 
         except Exception as e:
-            logger.error(f"[文档上传] ❌ 处理失败: {original_filename}, 错误: {type(e).__name__}: {e}")
+            logger.exception(f"[文档上传] ❌ 处理失败: {original_filename}, 错误: {type(e).__name__}: {e}")
             doc_record.status = "failed"
             doc_record.error_message = str(e)
             await db.commit()
@@ -212,7 +228,7 @@ class DocumentService:
                 logger.warning(f"[回滚] Milvus 清理失败 ({doc_record.id}): {cleanup_err}")
 
             try:
-                bm25_service.remove_by_document_id(doc_record.id, org_id=org_id)
+                bm25_service.remove_by_document_id(doc_record.id, org_id=org_id, knowledge_base_id=knowledge_base_id)
                 logger.info(f"[回滚] 已清理 BM25 中 {doc_record.id} 的索引")
             except Exception as cleanup_err:
                 logger.warning(f"[回滚] BM25 清理失败 ({doc_record.id}): {cleanup_err}")
@@ -234,6 +250,8 @@ class DocumentService:
         else:
             conditions.append(Document.user_id == user_id)
             conditions.append(Document.organization_id.is_(None))
+
+        conditions.append(DocumentService._exclude_kb_docs())
 
         if search:
             conditions.append(Document.original_filename.ilike(f"%{search}%"))
@@ -266,6 +284,8 @@ class DocumentService:
         else:
             conditions.append(Document.user_id == user_id)
             conditions.append(Document.organization_id.is_(None))
+
+        conditions.append(DocumentService._exclude_kb_docs())
 
         if search:
             conditions.append(Document.original_filename.ilike(f"%{search}%"))
@@ -377,6 +397,8 @@ class DocumentService:
         else:
             conditions.append(Document.user_id == user_id)
             conditions.append(Document.organization_id.is_(None))
+
+        conditions.append(DocumentService._exclude_kb_docs())
 
         result = await db.execute(
             select(func.count(Document.id)).where(*conditions)

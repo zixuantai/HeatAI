@@ -60,6 +60,10 @@ class MilvusService:
         fields = self._get_schema_field_names()
         return "organization_id" in fields
 
+    def _has_kb_field(self) -> bool:
+        fields = self._get_schema_field_names()
+        return "knowledge_base_id" in fields
+
     def _check_collection_compatible(self, collection_name: str) -> bool:
         from pymilvus import DataType
         desc = self._client.describe_collection(collection_name)
@@ -111,6 +115,7 @@ class MilvusService:
             FieldSchema(name="created_at", dtype=DataType.VARCHAR, max_length=32),
             FieldSchema(name="version", dtype=DataType.INT64),
             FieldSchema(name="organization_id", dtype=DataType.VARCHAR, max_length=64),
+            FieldSchema(name="knowledge_base_id", dtype=DataType.VARCHAR, max_length=64),
         ]
         schema = CollectionSchema(fields=fields, description="Document chunks collection")
 
@@ -138,7 +143,7 @@ class MilvusService:
         except Exception as e:
             logger.warning(f"向量索引创建跳过 (可能已被自动创建): {e}")
 
-        for scalar_field in ["document_id", "chunk_index", "organization_id"]:
+        for scalar_field in ["document_id", "chunk_index", "organization_id", "knowledge_base_id"]:
             try:
                 self._client.create_index(
                     collection_name=collection_name,
@@ -152,7 +157,7 @@ class MilvusService:
         self._client.load_collection(collection_name)
         time.sleep(1)
 
-    def insert(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]], org_id: str | None = None) -> List[str]:
+    def insert(self, chunks: List[Dict[str, Any]], embeddings: List[List[float]], org_id: str | None = None, knowledge_base_id: str | None = None) -> List[str]:
         self._ensure_initialized()
 
         from datetime import datetime, timezone, timedelta
@@ -182,6 +187,9 @@ class MilvusService:
 
             if "organization_id" in schema_fields:
                 entry["organization_id"] = org_id or ""
+
+            if "knowledge_base_id" in schema_fields:
+                entry["knowledge_base_id"] = knowledge_base_id or ""
 
             entry.update(self._fill_extra_schema_fields(schema_fields, entry, chunk))
 
@@ -256,6 +264,7 @@ class MilvusService:
         top_k: int = 5,
         org_id: str | None = None,
         document_ids: List[str] | None = None,
+        knowledge_base_id: str | None = None,
     ) -> List[Dict[str, Any]]:
         self._ensure_initialized()
         search_start = time.time()
@@ -268,6 +277,8 @@ class MilvusService:
                 return []
             ids_str = ", ".join(f'"{did}"' for did in document_ids)
             filter_parts.append(f"document_id in [{ids_str}]")
+        elif knowledge_base_id is not None and self._has_kb_field():
+            filter_parts.append(f'knowledge_base_id == "{knowledge_base_id}"')
         filter_expr = " and ".join(filter_parts) if filter_parts else None
 
         try:
@@ -339,6 +350,8 @@ class MilvusService:
         output_fields = ["id", "content", "chunk_index", "title", "source", "document_id", "created_at", "version"]
         if self._has_org_field():
             output_fields.append("organization_id")
+        if self._has_kb_field():
+            output_fields.append("knowledge_base_id")
 
         while True:
             res = self._client.query(

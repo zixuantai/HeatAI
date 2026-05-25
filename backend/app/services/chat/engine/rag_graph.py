@@ -40,6 +40,7 @@ class RAGState(TypedDict, total=False):
     context_messages: list[dict]
     search_results: list[dict]
     document_ids: list[str] | None
+    knowledge_base_id: str | None
 
 
 # ── 节点函数 ──────────────────────────────────────────────────
@@ -70,7 +71,8 @@ async def _fast_path_node(state: RAGState) -> dict:
     search_results = []
     if need_kb:
         doc_ids = state.get("document_ids")
-        search_results = await chat_pipeline.search_knowledge_base(msg, org_id=org_id, document_ids=doc_ids)
+        kb_id = state.get("knowledge_base_id")
+        search_results = await chat_pipeline.search_knowledge_base(msg, org_id=org_id, document_ids=doc_ids, knowledge_base_id=kb_id)
 
     ctx = await context_builder.build(db, sid, uid, msg)
     return {
@@ -100,9 +102,10 @@ async def _rewrite_and_search_node(state: RAGState) -> dict:
     if need_kb:
         search_query = rewrite_result["rewritten_query"]
         doc_ids = state.get("document_ids")
-        search_results = await chat_pipeline.search_knowledge_base(search_query, org_id=org_id, document_ids=doc_ids)
+        kb_id = state.get("knowledge_base_id")
+        search_results = await chat_pipeline.search_knowledge_base(search_query, org_id=org_id, document_ids=doc_ids, knowledge_base_id=kb_id)
         search_results = await chat_pipeline.merge_expanded_results(
-            search_results, rewrite_result, org_id=org_id, document_ids=doc_ids
+            search_results, rewrite_result, org_id=org_id, document_ids=doc_ids, knowledge_base_id=kb_id
         )
 
     ctx = await ctx_task

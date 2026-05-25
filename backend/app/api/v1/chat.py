@@ -128,13 +128,14 @@ async def ask(
             result = await chat_service.quick_ask(req.message, history_messages, req.personalization)
         else:
             # ── RAG 管线由 StateGraph 编排 ──
-            initial: RAGState = {
+            initial = {
                 "message": req.message,
                 "session_id": session_id,
                 "user_id": current_user.id,
                 "db": db,
                 "org_id": org_id,
                 "document_ids": kb_doc_ids,
+                "knowledge_base_id": req.knowledge_base_id,
             }
             state = await rag_graph.ainvoke(initial)
             result = await chat_service.ask(
@@ -281,6 +282,7 @@ async def stream_chat(
                     "db": db,
                     "org_id": org_id,
                     "document_ids": kb_doc_ids,
+                    "knowledge_base_id": req.knowledge_base_id,
                 }
 
                 # SSE: analyzing（仅 LLM 改写时发送）

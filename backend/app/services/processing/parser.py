@@ -32,37 +32,50 @@ class DocumentParser:
         if ext not in DocumentParser.SUPPORTED_TYPES:
             raise ValueError(f"不支持的文件类型: .{ext}")
 
-        if ext == "pdf":
-            return DocumentParser._parse_pdf(file_bytes, filename)
-        elif ext in ("docx", "doc"):
-            return DocumentParser._parse_docx(file_bytes, filename)
-        elif ext in ("html", "htm"):
-            return DocumentParser._parse_html(file_bytes, filename)
-        elif ext == "txt":
-            return DocumentParser._parse_txt(file_bytes, filename)
-        elif ext in ("md", "markdown"):
-            return DocumentParser._parse_markdown(file_bytes, filename)
-        elif ext == "csv":
-            return DocumentParser._parse_csv(file_bytes, filename)
-        elif ext == "json":
-            return DocumentParser._parse_json(file_bytes, filename)
-        elif ext in ("xlsx", "xls"):
-            return DocumentParser._parse_xlsx(file_bytes, filename)
-        elif ext in ("pptx", "ppt"):
-            return DocumentParser._parse_pptx(file_bytes, filename)
-        elif ext == "epub":
-            return DocumentParser._parse_epub(file_bytes, filename)
-        elif ext in DocumentParser.IMAGE_TYPES:
-            return DocumentParser._parse_image(file_bytes, filename)
-        else:
-            raise ValueError(f"不支持的文件类型: .{ext}")
+        try:
+            if ext == "pdf":
+                return DocumentParser._parse_pdf(file_bytes, filename)
+            elif ext in ("docx", "doc"):
+                return DocumentParser._parse_doc(file_bytes, filename)
+            elif ext in ("html", "htm"):
+                return DocumentParser._parse_html(file_bytes, filename)
+            elif ext == "txt":
+                return DocumentParser._parse_txt(file_bytes, filename)
+            elif ext in ("md", "markdown"):
+                return DocumentParser._parse_markdown(file_bytes, filename)
+            elif ext == "csv":
+                return DocumentParser._parse_csv(file_bytes, filename)
+            elif ext == "json":
+                return DocumentParser._parse_json(file_bytes, filename)
+            elif ext in ("xlsx", "xls"):
+                return DocumentParser._parse_xlsx(file_bytes, filename)
+            elif ext in ("pptx", "ppt"):
+                return DocumentParser._parse_pptx(file_bytes, filename)
+            elif ext == "epub":
+                return DocumentParser._parse_epub(file_bytes, filename)
+            elif ext in DocumentParser.IMAGE_TYPES:
+                return DocumentParser._parse_image(file_bytes, filename)
+            else:
+                raise ValueError(f"不支持的文件类型: .{ext}")
+        except ValueError:
+            raise
+        except MemoryError:
+            raise ValueError("文件解析时内存不足，文件可能过大")
+        except Exception as e:
+            ext_hint = f"文件扩展名为 .{ext}，" if ext else ""
+            raise ValueError(f"{ext_hint}文件解析失败: {type(e).__name__}: {e}")
 
     @staticmethod
     def _parse_pdf(file_bytes: bytes, filename: str) -> Tuple[str, str]:
         import pdfplumber
 
-        texts: List[str] = []
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        try:
+            pdf = pdfplumber.open(io.BytesIO(file_bytes))
+        except Exception as e:
+            raise ValueError(f"PDF文件无法打开，可能已损坏或不是有效的PDF格式: {e}")
+
+        try:
+            texts: List[str] = []
             for page in pdf.pages:
                 page_parts: List[str] = []
 
@@ -101,29 +114,45 @@ class DocumentParser:
                 if page_parts:
                     texts.append("\n".join(page_parts))
 
-        full_text = "\n\n---\n\n".join(texts)
-        total_chars = len(full_text.replace("\n", "").replace(" ", "").replace("-", ""))
+            full_text = "\n\n---\n\n".join(texts)
+            total_chars = len(full_text.replace("\n", "").replace(" ", "").replace("-", ""))
 
-        total_pages = len(pdf.pages)
-        if total_pages > 0 and total_chars / total_pages < 30:
-            logger.info(f"[PDF] 字符密度过低 ({total_chars}/{total_pages}页), 尝试OCR")
-            ocr = DocumentParser._get_ocr()
-            if ocr is not None:
-                ocr_texts: List[str] = []
-                for page in pdf.pages:
-                    img = page.to_image(resolution=200)
-                    ocr_result = ocr.ocr(img.original, cls=True)
-                    if ocr_result and ocr_result[0]:
-                        page_lines = [line[1][0] for line in ocr_result[0]]
-                        ocr_texts.append("\n".join(page_lines))
-                if ocr_texts:
-                    ocr_full = "\n\n---\n\n".join(ocr_texts)
-                    if len(ocr_full.replace("\n", "").strip()) > total_chars:
-                        logger.info(f"[PDF] OCR增强完成: {total_chars} → {len(ocr_full)} 字符")
-                        full_text = ocr_full
+            total_pages = len(pdf.pages)
+            if total_pages > 0 and total_chars / total_pages < 30:
+                logger.info(f"[PDF] 字符密度过低 ({total_chars}/{total_pages}页), 尝试OCR")
+                ocr = DocumentParser._get_ocr()
+                if ocr is not None:
+                    ocr_texts: List[str] = []
+                    for page in pdf.pages:
+                        img = page.to_image(resolution=200)
+                        ocr_result = ocr.ocr(img.original, cls=True)
+                        if ocr_result and ocr_result[0]:
+                            page_lines = [line[1][0] for line in ocr_result[0]]
+                            ocr_texts.append("\n".join(page_lines))
+                    if ocr_texts:
+                        ocr_full = "\n\n---\n\n".join(ocr_texts)
+                        if len(ocr_full.replace("\n", "").strip()) > total_chars:
+                            logger.info(f"[PDF] OCR增强完成: {total_chars} → {len(ocr_full)} 字符")
+                            full_text = ocr_full
 
-        title = filename.rsplit(".", 1)[0]
-        return full_text, title
+            title = filename.rsplit(".", 1)[0]
+            if not full_text.strip():
+                raise ValueError("PDF文件未能提取到任何文字内容，可能为扫描件且OCR未启用")
+            return full_text, title
+        finally:
+            try:
+                pdf.close()
+            except Exception:
+                pass
+
+    @staticmethod
+    def _parse_doc(file_bytes: bytes, filename: str) -> Tuple[str, str]:
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+        if ext == "docx":
+            return DocumentParser._parse_docx(file_bytes, filename)
+        else:
+            return DocumentParser._parse_old_doc(file_bytes, filename)
 
     @staticmethod
     def _parse_docx(file_bytes: bytes, filename: str) -> Tuple[str, str]:
@@ -160,6 +189,91 @@ class DocumentParser:
         full_text = "\n\n".join(paragraphs)
         title = filename.rsplit(".", 1)[0]
         return full_text, title
+
+    @staticmethod
+    def _parse_old_doc(file_bytes: bytes, filename: str) -> Tuple[str, str]:
+        title = filename.rsplit(".", 1)[0]
+
+        sig = file_bytes[:8]
+        if sig[:2] != b"\xd0\xcf":
+            try:
+                return DocumentParser._parse_docx(file_bytes, filename)
+            except Exception:
+                raise ValueError("无法识别该 .doc 文件格式，请将其另存为 .docx 格式后再上传")
+
+        try:
+            import olefile
+        except ImportError:
+            raise ValueError(
+                "解析旧版 .doc 格式需要 olefile 库，请运行: pip install olefile，"
+                "或将该文件另存为 .docx 格式后再上传"
+            )
+
+        try:
+            ole = olefile.OleFileIO(io.BytesIO(file_bytes))
+        except Exception:
+            raise ValueError("无法打开 .doc 文件，文件可能已损坏，请将其另存为 .docx 格式后再上传")
+
+        try:
+            word_stream = ole.openstream("WordDocument")
+            word_bytes = word_stream.read()
+        except Exception:
+            ole.close()
+            raise ValueError("无法读取 .doc 文件内容，请将其另存为 .docx 格式后再上传")
+
+        text_parts: List[str] = []
+
+        try:
+            fc_min = int.from_bytes(word_bytes[0x18:0x1C], "little")
+            piece_table_offset = int.from_bytes(word_bytes[0x1A2:0x1A6], "little")
+            base_offset = fc_min
+
+            piece_table_data = word_bytes[piece_table_offset:]
+            piece_count = (piece_table_data[0] | (piece_table_data[1] << 8)) + 1
+
+            pos = 2 + piece_count * 4 + 2
+            cp_start = 0
+            for i in range(piece_count - 1):
+                cp_end = int.from_bytes(piece_table_data[2 + i * 4:6 + i * 4], "little")
+
+                desc = int.from_bytes(piece_table_data[pos:pos + 8], "little")
+                pos += 8
+
+                fc_value = desc & 0x3FFFFFFF
+                is_unicode = not bool(desc & 0x40000000)
+
+                length = cp_end - cp_start
+                offset = (fc_value - base_offset) if fc_value >= base_offset else fc_value
+
+                if offset >= 0 and offset + length * (2 if is_unicode else 1) <= len(word_bytes):
+                    if is_unicode:
+                        chunk = word_bytes[offset:offset + length * 2].decode("utf-16-le", errors="replace")
+                    else:
+                        enc = "gbk"
+                        try:
+                            word_bytes[offset:offset + length].decode("cp1252")
+                            enc = "cp1252"
+                        except Exception:
+                            pass
+                        chunk = word_bytes[offset:offset + length].decode(enc, errors="replace")
+                    text_parts.append(chunk)
+
+                cp_start = cp_end
+
+            if not text_parts:
+                full_text = word_bytes.decode("utf-16-le", errors="replace")
+                printable = "".join(c for c in full_text if c.isprintable() or c in "\n\r\t")
+                if len(printable) < 10:
+                    raise ValueError("无法从 .doc 文件中提取有用文本，请另存为 .docx 格式后再上传")
+                return printable, title
+
+            full_text = "".join(text_parts)
+            if not full_text.strip():
+                raise ValueError("该 .doc 文件未能提取到文字内容，请另存为 .docx 格式后再上传")
+
+            return full_text, title
+        finally:
+            ole.close()
 
     @staticmethod
     def _parse_html(file_bytes: bytes, filename: str) -> Tuple[str, str]:
