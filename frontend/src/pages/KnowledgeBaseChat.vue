@@ -47,7 +47,7 @@
                 class="creator-avatar-small"
                 alt="创建者头像"
               />
-              <span v-else class="creator-avatar-small" :style="ownerAvatarGradientStyle">{{ (kbInfo.owner_name || kbInfo.name).charAt(0) }}</span>
+              <span v-else class="creator-avatar-small" :style="ownerAvatarGradientStyle">{{ ownerAvatarEmoji }}</span>
               <span class="creator-name">{{ kbInfo.owner_name || '未知用户' }}</span>
               <span class="meta-divider">|</span>
               <span class="member-count-text">{{ kbInfo.member_count || 0 }}人已加入</span>
@@ -324,7 +324,12 @@ const ownerAvatarIsImage = computed(() => {
 const ownerAvatarGradientStyle = computed(() => {
   const av = kbInfo.value?.owner_avatar
   if (!av) return {}
+  if (av.startsWith('http') || av.startsWith('data:') || av.startsWith('/')) return {}
   return { background: av }
+})
+
+const ownerAvatarEmoji = computed(() => {
+  return '👤'
 })
 
 const isOwner = computed(() => {
@@ -910,8 +915,8 @@ watch(sessionId, (newId, oldId) => {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--gradient-primary);
-  color: #fff;
+  background: var(--color-bg-secondary, #e5e7eb);
+  color: var(--color-text-muted, #6b7280);
   font-size: 12px;
   font-weight: var(--font-weight-bold);
   display: flex;

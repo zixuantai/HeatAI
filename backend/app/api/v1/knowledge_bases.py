@@ -114,7 +114,7 @@ async def get_knowledge_base(
         select(User.avatar).where(User.id == kb.owner_id)
     )
     owner_avatar = owner_result.scalar_one_or_none()
-    kb_data["owner_avatar"] = owner_avatar or kb.avatar
+    kb_data["owner_avatar"] = owner_avatar
 
     return {
         "code": 0,

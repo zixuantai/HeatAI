@@ -50,6 +50,14 @@ class DocumentService:
         ]
         if org_id:
             dedup_conditions.append(Document.organization_id == org_id)
+        elif knowledge_base_id:
+            dedup_conditions.append(
+                Document.id.in_(
+                    select(KnowledgeBaseDocument.document_id).where(
+                        KnowledgeBaseDocument.knowledge_base_id == knowledge_base_id
+                    )
+                )
+            )
         else:
             dedup_conditions.append(Document.user_id == user_id)
             dedup_conditions.append(Document.organization_id.is_(None))
