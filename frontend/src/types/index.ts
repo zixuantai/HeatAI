@@ -199,6 +199,7 @@ export interface Organization {
   created_at: string
   updated_at: string
   member_count: number
+  my_role?: string | null
 }
 
 export interface OrganizationMember {

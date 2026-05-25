@@ -21,6 +21,7 @@ class OrganizationOut(BaseModel):
     created_by: str
     created_at: str
     member_count: int = 0
+    my_role: str | None = None
 
     class Config:
         from_attributes = True

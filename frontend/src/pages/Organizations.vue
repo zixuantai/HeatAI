@@ -371,7 +371,7 @@ async function handleCreate() {
 
   createLoading.value = true
   try {
-    await createOrganizationApi({
+    const result = await createOrganizationApi({
       name: createForm.value.name.trim(),
       description: createForm.value.description.trim() || undefined,
       avatar: createForm.value.avatar || undefined,
@@ -381,7 +381,12 @@ async function handleCreate() {
     ElMessage.success('组织创建成功')
     showCreateDialog.value = false
     createForm.value = { name: '', description: '', avatar: '', avatarPreview: '', selectedDefault: '', phone: '', email: '' }
+    await authStore.fetchCurrentUser()
     await authStore.fetchOrganizations()
+    const orgId = (result as any)?.organization?.id
+    if (orgId) {
+      authStore.setCurrentOrg(orgId)
+    }
   } catch (error: any) {
     ElMessage.error(error?.message || '创建失败')
   } finally {
@@ -397,11 +402,16 @@ async function handleJoin() {
 
   joinLoading.value = true
   try {
-    await joinByInviteCodeApi({ code: joinForm.value.code.trim() })
+    const result = await joinByInviteCodeApi({ code: joinForm.value.code.trim() })
     ElMessage.success('加入组织成功')
     showJoinDialog.value = false
     joinForm.value = { code: '' }
+    await authStore.fetchCurrentUser()
     await authStore.fetchOrganizations()
+    const orgId = (result as any)?.organization_id
+    if (orgId) {
+      authStore.setCurrentOrg(orgId)
+    }
   } catch (error: any) {
     ElMessage.error(error?.message || '加入失败')
   } finally {

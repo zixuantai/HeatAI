@@ -21,6 +21,10 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const currentMemberRole = computed(() => {
+    if (currentOrgId.value) {
+      const orgWithRole = organizations.value.find(o => o.id === currentOrgId.value)
+      if (orgWithRole?.my_role) return orgWithRole.my_role
+    }
     if (!user.value?.organizations) return null
     const membership = user.value.organizations.find(
       (m: any) => m.organization_id === currentOrgId.value
@@ -38,8 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isOrgEditor = computed(() => {
-    const role = currentMemberRole.value
-    return role === 'owner' || role === 'admin'
+    return currentMemberRole.value === 'owner'
   })
 
   function setTokens(access: string, refresh: string) {
@@ -92,6 +95,9 @@ export const useAuthStore = defineStore('auth', () => {
       organizations.value = orgs
       if (currentOrgId.value && !orgs.find(o => o.id === currentOrgId.value)) {
         setCurrentOrg(null)
+      }
+      if (!currentOrgId.value && orgs.length > 0) {
+        setCurrentOrg(orgs[0].id)
       }
     } catch {
       organizations.value = []

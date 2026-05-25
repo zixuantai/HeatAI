@@ -70,18 +70,31 @@ class OrganizationService:
         )
         invite = result.scalar_one_or_none()
 
-        if not invite:
+        org_id_from_invite: str | None = None
+
+        if invite:
+            if invite.expires_at and invite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+                raise ValueError("邀请码已过期")
+
+            if invite.max_uses is not None and invite.use_count >= invite.max_uses:
+                raise ValueError("邀请码已达到最大使用次数")
+
+            org_id_from_invite = invite.organization_id
+        else:
+            org_result = await db.execute(
+                select(Organization).where(Organization.invite_code == code)
+            )
+            org = org_result.scalar_one_or_none()
+            if org:
+                org_id_from_invite = org.id
+                invite = None
+
+        if not org_id_from_invite:
             raise ValueError("邀请码无效或已停用")
-
-        if invite.expires_at and invite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
-            raise ValueError("邀请码已过期")
-
-        if invite.max_uses is not None and invite.use_count >= invite.max_uses:
-            raise ValueError("邀请码已达到最大使用次数")
 
         existing_member = await db.execute(
             select(OrganizationMember).where(
-                OrganizationMember.organization_id == invite.organization_id,
+                OrganizationMember.organization_id == org_id_from_invite,
                 OrganizationMember.user_id == user_id
             )
         )
@@ -89,20 +102,22 @@ class OrganizationService:
             raise ValueError("您已经是该组织的成员")
 
         org_result = await db.execute(
-            select(Organization).where(Organization.id == invite.organization_id)
+            select(Organization).where(Organization.id == org_id_from_invite)
         )
         org = org_result.scalar_one_or_none()
         if not org:
             raise ValueError("组织不存在")
 
         member = OrganizationMember(
-            organization_id=invite.organization_id,
+            organization_id=org_id_from_invite,
             user_id=user_id,
             role="admin"
         )
         db.add(member)
 
-        invite.use_count += 1
+        if invite:
+            invite.use_count += 1
+
         await db.commit()
         await db.refresh(org)
         await db.refresh(member)

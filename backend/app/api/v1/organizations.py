@@ -81,6 +81,7 @@ async def list_my_organizations(
     organizations = []
     for row in rows:
         org = row[0]
+        member = row[1]
         member_count_result = await db.execute(
             select(func.count(OrganizationMember.id))
             .where(OrganizationMember.organization_id == org.id)
@@ -98,7 +99,8 @@ async def list_my_organizations(
                 invite_code=org.invite_code,
                 created_by=org.created_by,
                 created_at=org.created_at.isoformat() if org.created_at else "",
-                member_count=member_count
+                member_count=member_count,
+                my_role=member.role
             ).model_dump(mode="json")
         )
     

@@ -66,17 +66,23 @@ export function uploadDocumentApi(file: File): Promise<DocumentInfo> {
   formData.append('file', file)
 
   const token = localStorage.getItem('access_token')
+  const orgId = localStorage.getItem('current_org_id')
   const controller = new AbortController()
   const uploadTimeout = 180000
 
   const timeoutId = setTimeout(() => controller.abort(), uploadTimeout)
 
+  const headers: Record<string, string> = {
+    'Authorization': token ? `Bearer ${token}` : ''
+  }
+  if (orgId) {
+    headers['X-Organization-Id'] = orgId
+  }
+
   return new Promise((resolve, reject) => {
     fetch('/api/documents/upload', {
       method: 'POST',
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : ''
-      },
+      headers,
       body: formData,
       signal: controller.signal
     }).then(async (response) => {
