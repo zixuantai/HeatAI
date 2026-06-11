@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="documents-page">
     <!-- ── 页面头部 ────────────────────────────── -->
     <div class="page-header">
@@ -66,12 +66,12 @@
               <text x="80" y="94" text-anchor="middle" class="donut-center-label">文档总数</text>
             </svg>
             <div class="donut-legend">
-              <div v-for="item in statsData.by_file_type" :key="item.type" class="legend-item">
-                <span class="legend-dot" :style="{ background: getFileTypeColor(item.type) }"></span>
-                <span class="legend-name">{{ formatFileTypeLabel(item.type) }}</span>
+              <div v-for="item in mergedFileType" :key="item.type" class="legend-item">
+                <span class="legend-dot" :style="{ background: item.color }"></span>
+                <span class="legend-name">{{ item.type }}</span>
                 <span class="legend-count">{{ item.count }}</span>
               </div>
-              <div v-if="statsData.by_file_type.length === 0" class="legend-empty">暂无数据</div>
+              <div v-if="mergedFileType.length === 0" class="legend-empty">暂无数据</div>
             </div>
           </div>
         </div>
@@ -594,13 +594,29 @@ function buildSegments(items: { count: number }[], colorGetter: (i: number) => s
   })
 }
 
-const fileTypeSegments = computed(() => {
-  if (!statsData.value) return []
-  return buildSegments(statsData.value.by_file_type, (i) =>
-    getFileTypeColor(statsData.value!.by_file_type[i].type)
-  )
+const mergedFileType = computed(() => {
+  if (!statsData.value) return [] as { type: string; count: number; color: string }[]
+  const map = new Map<string, number>()
+  for (const item of statsData.value.by_file_type) {
+    const label = formatFileTypeLabel(item.type)
+    map.set(label, (map.get(label) || 0) + item.count)
+  }
+  const seen = new Set<string>()
+  const result: { type: string; count: number; color: string }[] = []
+  for (const item of statsData.value.by_file_type) {
+    const label = formatFileTypeLabel(item.type)
+    if (seen.has(label)) continue
+    seen.add(label)
+    result.push({ type: label, count: map.get(label)!, color: getFileTypeColor(item.type) })
+  }
+  return result.sort((a, b) => b.count - a.count)
 })
 
+const fileTypeSegments = computed(() => {
+  if (!mergedFileType.value.length) return []
+  return buildSegments(mergedFileType.value, (i) => mergedFileType.value[i].color)
+
+})
 const categorySegments = computed(() => {
   if (!statsData.value) return []
   return buildSegments(statsData.value.by_category, (i) =>

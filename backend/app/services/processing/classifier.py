@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import logging
 
@@ -45,8 +45,9 @@ class DocumentClassifier:
     async def classify(self, title: str, content: str) -> dict:
         from app.core.config import settings
 
-        if not settings.DASHSCOPE_API_KEY:
-            logger.warning("[文档分类] DashScope API Key 未配置，跳过分类")
+        api_key = settings.LLM_API_KEY or settings.DASHSCOPE_API_KEY
+        if not api_key:
+            logger.warning("[文档分类] LLM API Key 未配置，跳过分类")
             return {"category": None, "confidence": "low", "reason": "API Key 未配置"}
 
         category_list = "\n".join(f"- {c}" for c in DOCUMENT_CATEGORIES)
@@ -56,27 +57,24 @@ class DocumentClassifier:
 
         user_message = f"标题：{title}\n\n内容（前2000字）：\n{content_sample}"
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
-
         try:
-            from dashscope import Generation
+            from openai import OpenAI
+
+            base_url = settings.LLM_BASE_URL or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            client = OpenAI(api_key=api_key, base_url=base_url)
+            model_name = self.model or settings.MEMORY_LLM_MODEL
 
             response = await asyncio.to_thread(
-                Generation.call,
-                model=self.model or settings.MEMORY_LLM_MODEL,
-                messages=messages,
-                result_format="message",
-                api_key=settings.DASHSCOPE_API_KEY,
+                client.chat.completions.create,
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
+                temperature=0.0,
             )
 
-            if response.status_code != 200:
-                logger.warning(f"[文档分类] LLM 调用失败: {response.message}")
-                return {"category": None, "confidence": "low", "reason": f"LLM 返回错误: {response.message}"}
-
-            content_result = response.output.choices[0].message.content
+            content_result = response.choices[0].message.content or ""
             parsed = self._parse_response(content_result)
             return parsed
 

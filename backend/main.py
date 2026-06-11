@@ -82,13 +82,22 @@ def _startup_init():
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT"))
-        await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS category VARCHAR(50)"))
-        await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS minhash_sig TEXT"))
-        await conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS organization_id UUID"))
-        await conn.execute(text("ALTER TABLE conversation_sessions ADD COLUMN IF NOT EXISTS knowledge_base_id UUID"))
-        await conn.execute(text("ALTER TABLE conversation_sessions ADD COLUMN IF NOT EXISTS knowledge_base_name VARCHAR(100)"))
         await conn.commit()
+
+    for ddl in [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT",
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS category VARCHAR(50)",
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS minhash_sig TEXT",
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS organization_id UUID",
+        "ALTER TABLE conversation_sessions ADD COLUMN IF NOT EXISTS knowledge_base_id UUID",
+        "ALTER TABLE conversation_sessions ADD COLUMN IF NOT EXISTS knowledge_base_name VARCHAR(100)",
+    ]:
+        try:
+            async with engine.begin() as ddl_conn:
+                await ddl_conn.execute(text("SET LOCAL statement_timeout = '10000'"))
+                await ddl_conn.execute(text(ddl))
+        except Exception as exc:
+            logger.warning(f"DDL 跳过 (列已存在或锁超时): {exc}")
 
     await asyncio.get_running_loop().run_in_executor(None, _startup_init)
 
